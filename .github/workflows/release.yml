@@ -22,6 +22,16 @@ jobs:
           npm install
           npm run build
 
+      # 必要なファイルを ZIP にまとめる
+      - name: Create ZIP of assets
+        run: |
+          mkdir obsidian-mutex-plugin
+          cp ./dist/main.js ./obsidian-mutex-plugin/
+          cp ./manifest.json ./obsidian-mutex-plugin/
+          cp ./styles.css ./obsidian-mutex-plugin/
+          zip -r obsidian-mutex-plugin.zip obsidian-mutex-plugin/
+
+
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
