@@ -26,9 +26,9 @@ jobs:
       - name: Create ZIP of assets
         run: |
           mkdir obsidian-mutex-plugin
-          cp ./dist/main.js ./obsidian-mutex-plugin/
-          cp ./manifest.json ./obsidian-mutex-plugin/
-          cp ./styles.css ./obsidian-mutex-plugin/
+          cp main.js ./obsidian-mutex-plugin/
+          cp manifest.json ./obsidian-mutex-plugin/
+          cp styles.css ./obsidian-mutex-plugin/
           zip -r obsidian-mutex-plugin.zip obsidian-mutex-plugin/
 
 
