@@ -26,9 +26,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
+          # タグ名の取得
+          tag="${GITHUB_REF##*/}"
 
+          # リリース作成
           gh release create "$tag" \
-            --title="$tag" \
+            --title="Release $tag" \
             --draft \
-            main.js manifest.json styles.css
+            ./dist/main.js ./manifest.json ./styles.css
