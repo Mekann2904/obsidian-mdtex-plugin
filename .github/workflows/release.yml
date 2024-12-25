@@ -43,4 +43,4 @@ jobs:
           gh release create "$tag" \
             --title="Release $tag" \
             --draft \
-            main.js manifest.json styles.css
+            main.js manifest.json styles.css obsidian-mutex-plugin.zip
