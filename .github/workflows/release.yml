@@ -25,11 +25,11 @@ jobs:
       # 必要なファイルを ZIP にまとめる
       - name: Create ZIP of assets
         run: |
-          mkdir obsidian-mutex-plugin
-          cp main.js ./obsidian-mutex-plugin/
-          cp manifest.json ./obsidian-mutex-plugin/
-          cp styles.css ./obsidian-mutex-plugin/
-          zip -r obsidian-mdtex-plugin.zip obsidian-mutex-plugin/
+          mkdir obsidian-mdtex-plugin
+          cp main.js ./obsidian-mdtex-plugin/
+          cp manifest.json ./obsidian-mdtex-plugin/
+          cp styles.css ./obsidian-mdtex-plugin/
+          zip -r obsidian-mdtex-plugin.zip obsidian-mdtex-plugin/
 
 
       - name: Create release
