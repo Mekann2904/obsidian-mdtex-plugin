@@ -18,14 +18,35 @@ header-includes:
   - |
     \\usepackage{listings}
     \\usepackage{color}
+    \\usepackage{setspace}
+    
     \\lstset{
-      basicstyle=\\ttfamily\\fontsize{7pt}{8pt}\\selectfont,
-      frame=single,
-      breaklines=true,
-      keepspaces=true,
+    frame=single,                  
+    framesep=3pt,                  
+    backgroundcolor=\\color{lightgray!20}, 
+    basicstyle=\\ttfamily\\scriptsize,    
+    keywordstyle=\\color{blue}\\bfseries, 
+    commentstyle=\\color{green!50!black}, 
+    stringstyle=\\color{red},       
+    breaklines=true,               
+    numbers=left,                  
+    numberstyle=\\tiny\\color{gray},
+    stepnumber=1,                  
+    tabsize=4                      
+    }
+
+    % zshをサポートするカスタム定義
+    \\lstdefinelanguage{zsh}{
+      morekeywords={ls, cd, pwd, echo, export, alias, unalias, function},
+      sensitive=true,
+      morecomment=[l]{\\#},
+      morestring=[b]",
+      morestring=[b]'
     }
 ---
 `;
+
+
 
 const DEFAULT_SETTINGS: PandocPluginSettings = {
     pandocPath: "pandoc",
@@ -95,35 +116,44 @@ export default class PandocPlugin extends Plugin {
                 content = this.settings.headerIncludes + "\n" + content;
             }
 
-			// 3. 画像リンク・コードブロックの置換
-			// replace のコールバックを同期的にし、ファイル検索も同期で行う
-			content = content.replace(
-				/!\[\[([^\]]+)\]\](?:\{#([^\}]+)\})?(?:\[(.*?)\])?|\`\`\`([a-zA-Z0-9:\-.]*)\n([\s\S]*?)\`\`\`/g,
-				(match: string, linkText: string, label: string, caption: string, lang: string, code: string, filename: string, codeLabel: string,) => {
-					if (linkText) {
-						// 同期的にファイル探索
-						const foundPath = this.findFileSync(linkText, this.settings.searchDirectory);
+            // 3. 画像リンク・コードブロックの置換
+            content = content.replace(
+                /!\[\[([^\]]+)\]\](?:\{#([^\}]+)\})?(?:\[(.*?)\])?|```([a-zA-Z0-9.\-]+)(?:\:([^\n]+))?\n([\s\S]*?)```/g,
+                (
+                    match: string,
+                    linkText: string,
+                    label: string,
+                    caption: string,
+                    lang: string,
+                    blockCaption: string,
+                    code: string
+                ) => {
+                    if (linkText) {
+                        // 画像リンクの処理
+                        const foundPath = this.findFileSync(linkText, this.settings.searchDirectory);
+            
+                        if (foundPath) {
+                            const resolvedPath = path.resolve(foundPath);
+                            if (caption && label) {
+                                return `![${caption}](${resolvedPath}){#${label}}`;
+                            } else if (caption) {
+                                return `![${caption}](${resolvedPath})`;
+                            } else if (label) {
+                                return `![](${resolvedPath}){#${label}}`;
+                            }
+                            return `![](${resolvedPath})`;
+                        }
+                        return match; // ファイルが見つからない場合はそのまま
+                    } else if (lang && code) {
+                        // コードブロックの処理
+                        const formattedCaption = blockCaption ? `,caption={${blockCaption}}` : "";
+                        return `\\begin{lstlisting}[language=${lang}${formattedCaption}]\n${code}\n\\end{lstlisting}`;
+                    }
+                    return match;
+                }
+            );
+            
 
-						if (foundPath) {
-							const resolvedPath = path.resolve(foundPath);
-							// キャプションとラベルの有無に応じて構築
-							if (caption && label) {
-								return `![${caption}](${resolvedPath}){#${label}}`;
-							} else if (caption) {
-								return `![${caption}](${resolvedPath})`;
-							} else if (label) {
-								return `![Image caption.](${resolvedPath}){#${label}}`;
-							}
-							return `![](${resolvedPath})`;
-						}
-						return match; // ファイルが見つからない場合、元のマッチを保持
-					} else if (lang && code) {
-						// コードブロックの処理
-						return `\\begin{lstlisting}[caption=${lang || "code"}]\n${code}\n\\end{lstlisting}`;
-					}
-					return match;
-				}
-			);
 
             // 4. 中間ファイルとして保存
             await fs.writeFile(intermediateFilename, content, "utf8");
@@ -135,24 +165,52 @@ export default class PandocPlugin extends Plugin {
                 intermediateFilename,
                 "-o",
                 outputFilename,
-				"-F", 
-				"pandoc-crossref",
-				"--pdf-engine=lualatex",
-                "-V",
-                "documentclass=ltjsarticle",
-                "--verbose",
-            ];
+                "--pdf-engine=lualatex",   // 必須
+                "-F", "pandoc-crossref",
+                "-V", "geometry:margin=1in", // PDFのマージン設定
+                "-V", "fontsize=12pt",      // フォントサイズの設定
+                "--highlight-style=tango",   // シンタックスハイライトスタイル
+                "-V", "documentclass=ltjsarticle", // 日本語用ドキュメントクラス
+            ];            
 			
 
+            // const pandocProcess = spawn(command, args, {
+            //     stdio: "inherit",
+            //     shell: true,
+            //     env: {
+            //         ...process.env,
+            //         // LaTeX環境のPATH
+            //         PATH: "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+            //     },
+            // });
+
+
             const pandocProcess = spawn(command, args, {
-                stdio: "inherit",
+                stdio: ["pipe", "pipe", "pipe"], // 標準入出力をpipeに設定
                 shell: true,
                 env: {
                     ...process.env,
-                    // LaTeX環境のPATH
-                    PATH: "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+                    PATH: "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", // LaTeX環境のPATH
                 },
             });
+            
+            // 標準エラー出力をキャプチャ
+            if (pandocProcess.stderr) {
+                pandocProcess.stderr.on("data", (data) => {
+                    const errorMessage = data.toString();
+                    console.error(`Pandoc error: ${errorMessage}`);
+                    new Notice(`Pandoc error: ${errorMessage}`);
+                });
+            }
+            
+            // 標準出力をキャプチャ（オプション：デバッグ用）
+            if (pandocProcess.stdout) {
+                pandocProcess.stdout.on("data", (data) => {
+                    const outputMessage = data.toString();
+                    console.log(`Pandoc output: ${outputMessage}`);
+                });
+            }
+            
 
             // 終了時の処理
             pandocProcess.on("close", async (code) => {
