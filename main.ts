@@ -23,7 +23,6 @@ header-includes:
     \\lstset{
     frame=single,                  
     framesep=3pt,                  
-    backgroundcolor=\\color{lightgray!20}, 
     basicstyle=\\ttfamily\\scriptsize,    
     keywordstyle=\\color{blue}\\bfseries, 
     commentstyle=\\color{green!50!black}, 
@@ -118,7 +117,7 @@ export default class PandocPlugin extends Plugin {
 
             // 3. 画像リンク・コードブロックの置換
             content = content.replace(
-                /!\[\[([^\]]+)\]\](?:\{#([^\}]+)\})?(?:\[(.*?)\])?|```([a-zA-Z0-9.\-]+)(?:\:([^\n]+))?\n([\s\S]*?)```/g,
+                /!\[\[([^\]]+)\]\](?:\{#([^\}]+)\})?(?:\[(.*?)\])?|```([a-zA-Z0-9.\-]*)(?:\:([^\n]+))?\n([\s\S]*?)```/g,
                 (
                     match: string,
                     linkText: string,
@@ -131,7 +130,7 @@ export default class PandocPlugin extends Plugin {
                     if (linkText) {
                         // 画像リンクの処理
                         const foundPath = this.findFileSync(linkText, this.settings.searchDirectory);
-            
+
                         if (foundPath) {
                             const resolvedPath = path.resolve(foundPath);
                             if (caption && label) {
@@ -144,14 +143,16 @@ export default class PandocPlugin extends Plugin {
                             return `![](${resolvedPath})`;
                         }
                         return match; // ファイルが見つからない場合はそのまま
-                    } else if (lang && code) {
+                    } else if (code) {
                         // コードブロックの処理
-                        const formattedCaption = blockCaption ? `,caption={${blockCaption}}` : "";
-                        return `\\begin{lstlisting}[language=${lang}${formattedCaption}]\n${code}\n\\end{lstlisting}`;
+                        const resolvedLang = lang || "zsh"; // 言語が指定されていない場合はデフォルト値 "text"
+                        const formattedCaption = blockCaption ? `,caption={${blockCaption}}` : ""; // キャプションがない場合は空文字
+                        return `\\begin{lstlisting}[language=${resolvedLang}${formattedCaption}]\n${code}\n\\end{lstlisting}`;
                     }
                     return match;
                 }
             );
+
             
 
 
