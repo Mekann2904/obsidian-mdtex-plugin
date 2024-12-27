@@ -34,7 +34,6 @@ header-includes:
     tabsize=4                      
     }
 
-    % zshをサポートするカスタム定義
     \\lstdefinelanguage{zsh}{
       morekeywords={ls, cd, pwd, echo, export, alias, unalias, function},
       sensitive=true,
