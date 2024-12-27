@@ -31,7 +31,6 @@ jobs:
           cp styles.css ./obsidian-mdtex-plugin/
           zip -r obsidian-mdtex-plugin.zip obsidian-mdtex-plugin/
 
-
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -43,4 +42,4 @@ jobs:
           gh release create "$tag" \
             --title="Release $tag" \
             --draft \
-            main.js manifest.json styles.css obsidian-mutex-plugin.zip
+            obsidian-mdtex-plugin.zip
