@@ -6,7 +6,7 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 
 ## 特徴
 - MarkdownファイルをPandocとLuaLaTeXを使用してPDFに変換。
-- カスタムLaTeXヘッダーを使用してPDFのフォーマットを柔軟に調整可能。
+- カスタムLaTeXヘッダーを使用してPDFのフォーマットを調整可能。
 
 ---
 
@@ -32,11 +32,95 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 
 ---
 
-## 必須要件
-- **Pandoc**  
-  Pandocをシステムにインストールしてください。インストール方法は [公式サイト](https://pandoc.org/) を参照してください。
-- **LuaLaTeX**  
-  LuaLaTeXが必要です。通常、[TeX Live](https://www.tug.org/texlive/) や [MikTeX](https://miktex.org/) に含まれています。
+# 依存関係一覧
+
+## 1. Pandoc  
+PandocはMarkdownをPDFや他の形式に変換するために必要です。以下の手順でインストールしてください。
+
+- **インストール方法**:
+  - macOS:
+    ```bash
+    brew install pandoc
+    ```
+  - Ubuntu/Debian:
+    ```bash
+    sudo apt install pandoc
+    ```
+  - その他の詳細: [Pandoc公式サイト](https://pandoc.org/)
+
+---
+
+## 2. LuaLaTeX  
+LuaLaTeXはPDF生成用のエンジンとして使用されます。通常、TeX LiveまたはMikTeXに含まれています。
+
+- **インストール方法**:
+  - **TeX Live**（推奨）
+    - ダウンロード: [TeX Live公式サイト](https://www.tug.org/texlive/)
+    - macOSの場合:
+      ```bash
+      brew install --cask mactex
+      ```
+  - **MikTeX**（Windows向け）
+    - ダウンロード: [MikTeX公式サイト](https://miktex.org/)
+
+- **LuaLaTeX確認方法**:
+  ```bash
+  lualatex --version
+  ```
+
+---
+
+## 3. pandoc-crossref  
+Pandocでクロスリファレンスを解決するためのフィルターです。
+
+- **インストール方法**:
+  ```bash
+  pip install pandoc-crossref
+  ```
+
+- **インストール確認**:
+  ```bash
+  pandoc --filter pandoc-crossref --version
+  ```
+
+---
+
+## 4. LaTeXパッケージ  
+Markdownから正確にPDFを生成するためには以下のLaTeXパッケージが必要です。
+
+| パッケージ      | 用途                       |
+|-----------------|----------------------------|
+| `listings`      | コードブロックのレンダリング |
+| `setspace`      | 行間設定                   |
+| `geometry`      | PDFのマージン設定          |
+| `fontspec`      | フォント設定               |
+| `hyperref`      | クロスリファレンス対応      |
+| `xcolor`        | 色設定                     |
+| `ltjsarticle`   | 日本語対応（LuaLaTeX用）    |
+
+- **インストール方法（TeX Liveの場合）**:
+  ```bash
+  tlmgr install listings setspace geometry fontspec hyperref xcolor
+  ```
+
+---
+
+## 5. その他
+- **PATH設定**:
+  PandocやLuaLaTeXをシステムのPATHに追加する必要があります。
+  ```bash
+  export PATH=$PATH:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+  ```
+
+- **Node.jsとその組み込みモジュール**:
+  - Node.jsが必要です。
+    ```bash
+    brew install node # macOS
+    sudo apt install nodejs # Ubuntu/Debian
+    ```
+  - 必須モジュール:
+    - `fs/promises`: ファイル操作用
+    - `child_process`: コマンドの実行
 
 ---
 
@@ -47,15 +131,18 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
    画像などのリンクされたファイルを検索するディレクトリを設定します。
 3. **ヘッダーのカスタマイズ**  
    LaTeXのヘッダーをカスタマイズしてPDFのフォーマットを調整できます。
+
+   Markdownで記述されたコードブロックは\usepackage{listings}で処理できるように、latexコードに変換しています。Pandoc変換前の状態である中間ファイルを見ると分かりやすいと思います。
 4. **出力ディレクトリ**  
    生成されたPDFを保存するディレクトリを指定します。
 5. **中間ファイルの削除**  
-   PDF生成後に中間ファイルを自動的に削除するかどうかを設定します。
+   PDF生成後に中間ファイルを自動的に削除するかどうかを設定します。(使い方を理解したあとは、この機能をオフにすることを推奨します)
 
 ---
 
 ## 既知の問題
 - 複雑なLaTeX設定には追加パッケージが必要になる場合があります。
+- **pandoc-crossref**は画像のクロスリファレンスは可能ですが、表及びコードブロックは未実装です。(今後のアップデートで改善する予定)
 
 ---
 
