@@ -102,8 +102,11 @@ export default class PandocPlugin extends Plugin {
             return;
         }
 
-        const intermediateFilename = path.join(outputDir, `${baseName}.temp.md`);
-        const outputFilename = path.join(outputDir, `${baseName}.pdf`);
+        // 中間ファイル名と出力ファイル名の生成
+        const intermediateFilename = path.join(outputDir, `${baseName.replace(/\s/g, "_")}.temp.md`);
+        const outputFilename = path.join(outputDir, `${baseName.replace(/\s/g, "_")}.pdf`);
+
+
 
         try {
             // 1. Markdownファイル読み込み
@@ -162,9 +165,9 @@ export default class PandocPlugin extends Plugin {
             const pandocPath = this.settings.pandocPath;
             const command = `"${pandocPath}"`;
             const args = [
-                intermediateFilename,
+                `"${intermediateFilename}"`,
                 "-o",
-                outputFilename,
+                `"${outputFilename}"`,
                 "--pdf-engine=lualatex",   // 必須
                 "-F", "pandoc-crossref",
                 "-V", "geometry:margin=1in", // PDFのマージン設定
