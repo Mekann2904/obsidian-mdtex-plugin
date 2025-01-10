@@ -161,6 +161,7 @@ Markdownから正確にPDFを生成するためには以下のLaTeXパッケー�
 - [Pandoc](https://pandoc.org/): 汎用的なドキュメントコンバーター。
 - [LuaLaTeX](https://www.latex-project.org/): 多言語組版に対応した強力なTeXエンジン。
 - [Obsidian](https://obsidian.md/): ローカルのMarkdownファイルを使用するナレッジベースツール。
+- [Pandoc-crossref](https://github.com/lierdakil/pandoc-crossref): 図、方程式、 表とその相互参照を実現するためのフィルター。
 
 ---
 
