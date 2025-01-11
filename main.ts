@@ -23,6 +23,10 @@ interface PandocPluginSettings {
     fontSize: string;              // フォントサイズ
     outputFormat: string;          // デフォルト出力形式（pdf, latex, docxなど）
     latexEngine: string;           // LaTeXエンジン（lualatex, xelatex, platexなど）
+    figureLabel: string;           // 図のラベル
+    tableLabel: string;            // 表のラベル
+    codeLabel: string;             // コードのラベル
+    equationLabel: string;         // 数式のラベル
 }
 
 /**
@@ -54,6 +58,13 @@ header-includes:
       stepnumber=1,
       tabsize=4
     }
+    \\lstdefinelanguage{zsh}{
+      morekeywords={ls, cd, pwd, echo, export, alias, unalias, function},
+      sensitive=true,
+      morecomment=[l]{\\#},
+      morestring=[b]",
+      morestring=[b]'
+    }
 ---
 `;
 
@@ -71,6 +82,10 @@ const DEFAULT_SETTINGS: PandocPluginSettings = {
     fontSize: "12pt",
     outputFormat: "pdf",
     latexEngine: "lualatex",
+    figureLabel: "Figure",  // デフォルト: 英語
+    tableLabel: "Table",    // デフォルト: 英語
+    codeLabel: "Code",      // デフォルト: 英語
+    equationLabel: "Equation", // デフォルト: 英語
 };
 
 /**
@@ -116,12 +131,12 @@ export default class PandocPlugin extends Plugin {
         }
 
         // **追加: 直前の編集を保存**
-        // アクティブなエディタがMarkdownViewなら、手動保存を行う
-        const leaf = this.app.workspace.activeLeaf; // 修正: activeLeaf を使用
-        if (leaf && leaf.view instanceof MarkdownView) { // MarkdownView に型チェック
-            const markdownView = leaf.view as MarkdownView; // 明示的に型アサーション
-            if (markdownView.file && markdownView.file.path === activeFile.path) { // file プロパティのチェック
-                await markdownView.save(); // save メソッドの呼び出し
+        // obsidianの保存にタイムラグがあるため、直前の編集内容を保存する
+        const leaf = this.app.workspace.activeLeaf; 
+        if (leaf && leaf.view instanceof MarkdownView) { 
+            const markdownView = leaf.view as MarkdownView; 
+            if (markdownView.file && markdownView.file.path === activeFile.path) { 
+                await markdownView.save(); 
             }
         }
 
@@ -240,8 +255,10 @@ export default class PandocPlugin extends Plugin {
                 }
 
                 // --- コードブロック ---
+                // 言語が対応していない場合は、zshをデフォルトとする
+                // 詳しくはhttps://ja.overleaf.com/learn/latex/Code_listing#Supported_languages
                 if (codeBody) {
-                    const resolvedLang = codeLang || "text";
+                    const resolvedLang = codeLang || "zsh";
                     const formattedCaption = codeCaption
                         ? `,caption={${codeCaption}}`
                         : "";
@@ -282,9 +299,18 @@ export default class PandocPlugin extends Plugin {
                 args.push("-t", "latex");
             }
 
+            // --listings を追加
+            // (コードブロックをpandoc-crossrefで処理した場合にスタイルを適用させるため)
+            args.push("--listings");
+
             // pandoc-crossref
             const crossrefFilter = this.settings.pandocCrossrefPath.trim() || "pandoc-crossref";
             args.push("-F", `"${crossrefFilter}"`);
+            args.push("-M", "listings=true");//同様にlistingsを有効するのに必要
+            args.push("-M", `figTitle=${this.settings.figureLabel}`);
+            args.push("-M", `tblTitle=${this.settings.tableLabel}`);
+            args.push("-M", `codeTitle=${this.settings.codeLabel}`);
+            args.push("-M", `eqTitle=${this.settings.equationLabel}`); 
 
             // PDFオプションなど
             args.push("-V", `geometry:margin=${this.settings.marginSize}`);
@@ -462,6 +488,22 @@ class PandocPluginSettingTab extends PluginSettingTab {
                 en: "Path to pandoc-crossref (blank = from PATH).",
                 jp: "pandoc-crossrefのパス（空欄=PATHから検索）。",
             },
+            figureLabel: {
+                en: "Label for figures (e.g. Figure).",
+                jp: "図のラベル（例：図）。",
+            },
+            tableLabel: {
+                en: "Label for tables (e.g. Table).",
+                jp: "表のラベル（例：表）。",
+            },
+            codeLabel: {
+                en: "Label for code blocks (e.g. Code).",
+                jp: "コードブロックのラベル（例：コード）。",
+            },
+            equationLabel: {
+                en: "Label for equations (e.g. Equation).",
+                jp: "数式のラベル（例：式）。",
+            },
             imageScale: {
                 en: "Default image scale (e.g. width=0.8\\linewidth).",
                 jp: "画像のデフォルトスケール（例：width=0.8\\linewidth）。",
@@ -579,6 +621,55 @@ class PandocPluginSettingTab extends PluginSettingTab {
                     .setValue(this.plugin.settings.pandocCrossrefPath)
                     .onChange(async (value) => {
                         this.plugin.settings.pandocCrossrefPath = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        // ラベル設定(図、表、コード、数式)
+        new Setting(containerEl)
+            .setName(this.language === "jp" ? "図のラベル" : "Figure Label")
+            .setDesc(t("figureLabel"))
+            .addText((text) =>
+                text
+                    .setValue(this.plugin.settings.figureLabel)
+                    .onChange(async (value) => {
+                        this.plugin.settings.figureLabel = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName(this.language === "jp" ? "表のラベル" : "Table Label")
+            .setDesc(t("tableLabel"))
+            .addText((text) =>
+                text
+                    .setValue(this.plugin.settings.tableLabel)
+                    .onChange(async (value) => {
+                        this.plugin.settings.tableLabel = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName(this.language === "jp" ? "コードのラベル" : "Code Label")
+            .setDesc(t("codeLabel"))
+            .addText((text) =>
+                text
+                    .setValue(this.plugin.settings.codeLabel)
+                    .onChange(async (value) => {
+                        this.plugin.settings.codeLabel = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        new Setting(containerEl)
+            .setName(this.language === "jp" ? "数式のラベル" : "Equation Label")
+            .setDesc(t("equationLabel"))
+            .addText((text) =>
+                text
+                    .setValue(this.plugin.settings.equationLabel)
+                    .onChange(async (value) => {
+                        this.plugin.settings.equationLabel = value.trim();
                         await this.plugin.saveSettings();
                     })
             );
