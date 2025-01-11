@@ -24,9 +24,13 @@ interface PandocPluginSettings {
     outputFormat: string;          // デフォルト出力形式（pdf, latex, docxなど）
     latexEngine: string;           // LaTeXエンジン（lualatex, xelatex, platexなど）
     figureLabel: string;           // 図のラベル
+    figPrefix: string;             // 図のプレフィックス
     tableLabel: string;            // 表のラベル
+    tblPrefix: string;             // 表のプレフィックス
     codeLabel: string;             // コードのラベル
+    lstPrefix: string;             // コードのプレフィックス
     equationLabel: string;         // 数式のラベル
+    eqnPrefix: string;             // 数式のプレフィックス
 }
 
 /**
@@ -35,15 +39,21 @@ interface PandocPluginSettings {
 const DEFAULT_HEADER_INCLUDES = `---
 header-includes:
   - |
+    \\usepackage{luatexja}  % 日本語対応
+    \\usepackage{luatexja-fontspec} % フォント設定
+    \\usepackage{microtype}
+    \\usepackage{parskip}
     \\usepackage{listings}
     \\usepackage{color}
     \\usepackage{setspace}
     \\usepackage{booktabs} % 表の強化
     \\usepackage{amsmath,amssymb} % 数式強化
+    \\usepackage{mathtools} % 数式強化
+    \\usepackage{hyperref} % ハイパーリンク
+    \\usepackage{cleveref} % 参照の自動化
+    \\usepackage{autonum} % 数式番号の自動化
     \\usepackage{graphicx} % 画像拡張
     \\usepackage{caption} % キャプション制御
-    \\usepackage{hyperref}
-    \\usepackage{cleveref}
     % pandoc-crossref用の設定はフロントマターや -Vオプションでも指定可能
     \\lstset{
       frame=single,
@@ -82,11 +92,15 @@ const DEFAULT_SETTINGS: PandocPluginSettings = {
     fontSize: "12pt",
     outputFormat: "pdf",
     latexEngine: "lualatex",
-    figureLabel: "Figure",  // デフォルト: 英語
-    tableLabel: "Table",    // デフォルト: 英語
-    codeLabel: "Code",      // デフォルト: 英語
-    equationLabel: "Equation", // デフォルト: 英語
-};
+    figureLabel: "Figure",      // 図のラベル (デフォルト: 英語)
+    figPrefix: "Figure",        // 図のプレフィックス (デフォルト: 英語)
+    tableLabel: "Table",        // 表のラベル (デフォルト: 英語)
+    tblPrefix: "Table",         // 表のプレフィックス (デフォルト: 英語)
+    codeLabel: "Code",          // コードのラベル (デフォルト: 英語)
+    lstPrefix: "Code",          // コードのプレフィックス (デフォルト: 英語)
+    equationLabel: "Equation",  // 数式のラベル (デフォルト: 英語)
+    eqnPrefix: "Eq.",           // 数式のプレフィックス (デフォルト: 英語)
+  };
 
 /**
  * メインプラグインクラス
@@ -307,10 +321,14 @@ export default class PandocPlugin extends Plugin {
             const crossrefFilter = this.settings.pandocCrossrefPath.trim() || "pandoc-crossref";
             args.push("-F", `"${crossrefFilter}"`);
             args.push("-M", "listings=true");//同様にlistingsを有効するのに必要
-            args.push("-M", `figTitle=${this.settings.figureLabel}`);
-            args.push("-M", `tblTitle=${this.settings.tableLabel}`);
-            args.push("-M", `codeTitle=${this.settings.codeLabel}`);
-            args.push("-M", `eqTitle=${this.settings.equationLabel}`); 
+            args.push("-M", `figureTitle=${this.settings.figureLabel}`); // 図のタイトル
+            args.push("-M", `figPrefix=${this.settings.figPrefix}`); // 図のプレフィックス
+            args.push("-M", `tableTitle=${this.settings.tableLabel}`); // 表のタイトル
+            args.push("-M", `tblPrefix=${this.settings.tblPrefix}`); // 表のプレフィックス
+            args.push("-M", `listingTitle=${this.settings.codeLabel}`); // コードのタイトル
+            args.push("-M", `lstPrefix=${this.settings.lstPrefix}`); // コードのプレフィックス
+            args.push("-M", `eqnPrefix=${this.settings.eqnPrefix}`); // 式のプレフィックス
+            
 
             // PDFオプションなど
             args.push("-V", `geometry:margin=${this.settings.marginSize}`);
@@ -492,17 +510,33 @@ class PandocPluginSettingTab extends PluginSettingTab {
                 en: "Label for figures (e.g. Figure).",
                 jp: "図のラベル（例：図）。",
             },
+            figPrefix: {
+                en: "Prefix for figures (e.g. Fig.).",
+                jp: "図のプレフィックス（例：図）。",
+            },
             tableLabel: {
                 en: "Label for tables (e.g. Table).",
                 jp: "表のラベル（例：表）。",
+            },
+            tblPrefix: {
+                en: "Prefix for tables (e.g. Tbl.).",
+                jp: "表のプレフィックス（例：表）。",
             },
             codeLabel: {
                 en: "Label for code blocks (e.g. Code).",
                 jp: "コードブロックのラベル（例：コード）。",
             },
+            lstPrefix: {
+                en: "Prefix for code blocks (e.g. Code).",
+                jp: "コードブロックのプレフィックス（例：コード）。",
+            },
             equationLabel: {
                 en: "Label for equations (e.g. Equation).",
                 jp: "数式のラベル（例：式）。",
+            },
+            eqnPrefix: {
+                en: "Prefix for equations (e.g. Eq.).",
+                jp: "数式のプレフィックス（例：式）。",
             },
             imageScale: {
                 en: "Default image scale (e.g. width=0.8\\linewidth).",
@@ -625,7 +659,7 @@ class PandocPluginSettingTab extends PluginSettingTab {
                     })
             );
 
-        // ラベル設定(図、表、コード、数式)
+        // 図のラベルとプレフィックス設定
         new Setting(containerEl)
             .setName(this.language === "jp" ? "図のラベル" : "Figure Label")
             .setDesc(t("figureLabel"))
@@ -639,6 +673,19 @@ class PandocPluginSettingTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
+            .setName(this.language === "jp" ? "図のプレフィックス" : "Figure Prefix")
+            .setDesc(t("figPrefix"))
+            .addText((text) =>
+                text
+                    .setValue(this.plugin.settings.figPrefix)
+                    .onChange(async (value) => {
+                        this.plugin.settings.figPrefix = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        // 表のラベルとプレフィックス設定
+        new Setting(containerEl)
             .setName(this.language === "jp" ? "表のラベル" : "Table Label")
             .setDesc(t("tableLabel"))
             .addText((text) =>
@@ -650,6 +697,19 @@ class PandocPluginSettingTab extends PluginSettingTab {
                     })
             );
 
+        new Setting(containerEl)
+            .setName(this.language === "jp" ? "表のプレフィックス" : "Table Prefix")
+            .setDesc(t("tblPrefix"))
+            .addText((text) =>
+                text
+                    .setValue(this.plugin.settings.tblPrefix)
+                    .onChange(async (value) => {
+                        this.plugin.settings.tblPrefix = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        // コードのラベルとプレフィックス設定
         new Setting(containerEl)
             .setName(this.language === "jp" ? "コードのラベル" : "Code Label")
             .setDesc(t("codeLabel"))
@@ -663,6 +723,19 @@ class PandocPluginSettingTab extends PluginSettingTab {
             );
 
         new Setting(containerEl)
+            .setName(this.language === "jp" ? "コードのプレフィックス" : "Code Prefix")
+            .setDesc(t("lstPrefix"))
+            .addText((text) =>
+                text
+                    .setValue(this.plugin.settings.lstPrefix)
+                    .onChange(async (value) => {
+                        this.plugin.settings.lstPrefix = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
+        // 数式のラベルとプレフィックス設定
+        new Setting(containerEl)
             .setName(this.language === "jp" ? "数式のラベル" : "Equation Label")
             .setDesc(t("equationLabel"))
             .addText((text) =>
@@ -673,6 +746,19 @@ class PandocPluginSettingTab extends PluginSettingTab {
                         await this.plugin.saveSettings();
                     })
             );
+
+        new Setting(containerEl)
+            .setName(this.language === "jp" ? "数式のプレフィックス" : "Equation Prefix")
+            .setDesc(t("eqnPrefix"))
+            .addText((text) =>
+                text
+                    .setValue(this.plugin.settings.eqnPrefix)
+                    .onChange(async (value) => {
+                        this.plugin.settings.eqnPrefix = value.trim();
+                        await this.plugin.saveSettings();
+                    })
+            );
+
 
         new Setting(containerEl)
             .setName(this.language === "jp" ? "画像スケール" : "Image Scale")
