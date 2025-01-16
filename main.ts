@@ -39,22 +39,22 @@ interface PandocPluginSettings {
 const DEFAULT_HEADER_INCLUDES = `---
 header-includes:
   - |
-    \\usepackage{luatexja}  % 日本語対応
-    \\usepackage{luatexja-fontspec} % フォント設定
+    \\usepackage{luatexja}
+    \\usepackage{luatexja-fontspec} 
     \\usepackage{microtype}
     \\usepackage{parskip}
     \\usepackage{listings}
     \\usepackage{color}
     \\usepackage{setspace}
-    \\usepackage{booktabs} % 表の強化
-    \\usepackage{amsmath,amssymb} % 数式強化
-    \\usepackage{mathtools} % 数式強化
-    \\usepackage{hyperref} % ハイパーリンク
-    \\usepackage{cleveref} % 参照の自動化
-    \\usepackage{autonum} % 数式番号の自動化
-    \\usepackage{graphicx} % 画像拡張
-    \\usepackage{caption} % キャプション制御
-    % pandoc-crossref用の設定はフロントマターや -Vオプションでも指定可能
+    \\usepackage{booktabs}
+    \\usepackage{amsmath,amssymb}
+    \\usepackage{mathtools}
+    \\usepackage{hyperref}
+    \\usepackage{cleveref}
+    \\usepackage{autonum}
+    \\usepackage{graphicx}
+    \\usepackage{caption}
+    
     \\lstset{
       frame=single,
       framesep=3pt,
