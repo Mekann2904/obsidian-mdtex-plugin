@@ -16,9 +16,14 @@
       "ES5",
       "ES6",
       "ES7"
-    ]
+    ],
+    "rootDir": "./src",
+    "outDir": "./dist"
   },
   "include": [
-    "**/*.ts"
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
   ]
 }
