@@ -1,7 +1,7 @@
 {
 	"id": "mdtex-plugin",
 	"name": "mdtex plugin",
-	"version": "1.0.0",
+	"version": "1.1.1",
 	"minAppVersion": "0.0.0",
 	"description": "MdTex is a tool that converts Markdown to PDF using Pandoc and LuaLaTeX. It is characterized by its stable support for Japanese output.",
 	"author": "Mekann",
