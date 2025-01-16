@@ -1,4 +1,4 @@
-// PandocPluginSettingTab.ts
+// MdTexPluginSettingTab.ts
 
 import { PluginSettingTab, Setting } from "obsidian";
 import { PandocPluginSettings } from "./MdTexPluginSettings";

@@ -1,4 +1,4 @@
-// PandocPluginSettings.ts
+// MdTexPluginSettings.ts
 
 /**
  * プラグイン設定インタフェース

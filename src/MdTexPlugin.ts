@@ -1,6 +1,4 @@
-// PandocPlugin.ts
-
-import { Plugin, Notice, MarkdownView } from "obsidian";
+import { App, Plugin, Notice, MarkdownView } from "obsidian";
 import { spawn } from "child_process";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
@@ -10,17 +8,25 @@ import { FileSystemAdapter } from "obsidian";
 import { PandocPluginSettings, DEFAULT_SETTINGS } from "./MdTexPluginSettings";
 import { PandocPluginSettingTab } from "./MdTexPluginSettingTab";
 
+
+import {MyLabelEditorSuggest,MyLabelSuggest } from "./AutoComplete";
+
 /**
  * メインプラグインクラス
  */
 export default class PandocPlugin extends Plugin {
   settings: PandocPluginSettings;
 
+  /**
+   * プラグイン読み込み時の処理
+   */
   async onload() {
+    console.log("PandocPlugin loaded!");
+
     // 設定をロード
     await this.loadSettings();
 
-    // 設定画面を追加
+    // 設定画面タブを追加
     this.addSettingTab(new PandocPluginSettingTab(this.app, this));
 
     // リボンアイコン（PDF変換）
@@ -41,6 +47,21 @@ export default class PandocPlugin extends Plugin {
       name: "Convert current file to LaTeX",
       callback: () => this.convertCurrentPage("latex"),
     });
+
+    // ★ EditorSuggest を使ったオートコンプリートを登録
+    console.log("[PandocPlugin] Registering AutoComplete (EditorSuggest)...");
+    this.registerEditorSuggest(new MyLabelEditorSuggest(this.app));
+
+    console.log("EditorSuggest: onload finished.");
+
+    // スタイルシートをロード
+    this.loadExternalStylesheet();
+
+  console.log("MdTexPlugin: Stylesheet added.");
+
+    // MyLabelSuggest
+    this.registerEditorSuggest(new MyLabelSuggest(this.app));
+    console.log("MyLabelSuggest: onload finished.");
   }
 
   /**
@@ -78,7 +99,6 @@ export default class PandocPlugin extends Plugin {
     // 出力ディレクトリ
     const outputDir = this.settings.outputDirectory || fileAdapter.getBasePath();
     try {
-      // ディレクトリが存在するか確認
       await fs.access(outputDir);
     } catch (err) {
       new Notice(`Output directory does not exist: ${outputDir}`);
@@ -121,8 +141,12 @@ export default class PandocPlugin extends Plugin {
 
       // (6) 成功 & 中間ファイル削除（設定がtrueの場合）
       if (success && this.settings.deleteIntermediateFiles) {
-        await fs.unlink(intermediateFilename);
-        console.log(`Intermediate file deleted: ${intermediateFilename}`);
+        try {
+          await fs.unlink(intermediateFilename);
+          console.log(`Intermediate file deleted: ${intermediateFilename}`);
+        } catch (err) {
+          console.warn(`Failed to delete intermediate file: ${intermediateFilename}`, err);
+        }
       }
     } catch (error: any) {
       console.error("Error generating output:", error?.message || error);
@@ -136,9 +160,7 @@ export default class PandocPlugin extends Plugin {
    */
   private escapeSpecialCharacters(code: string): string {
     return code
-      // バックスラッシュは最初にまとめて置換
       .replace(/\\/g, "\\textbackslash{}")
-      // 以下、LaTeX で特別な意味を持つ文字をすべてエスケープ
       .replace(/\$/g, "\\$")
       .replace(/%/g, "\\%")
       .replace(/#/g, "\\#")
@@ -151,16 +173,11 @@ export default class PandocPlugin extends Plugin {
   }
 
   /**
-   * 画像リンク・コードブロックなどの置換処理
+   * Wikiリンクやコードブロックを置換
    * 安定性を重視し、極力簡潔に実装する。
-   *
-   * ※ 特にコードブロックで `{#lst:XXX caption="YYY"}` のような記法を検出し、
-   *    listings 用に label={lst:XXX}, caption={YYY} を注入するようにした。
    */
   replaceWikiLinksAndCode(markdown: string): string {
     return markdown.replace(
-      // Wikiリンク画像 or コードブロックを検出する正規表現
-      // 例: ```python {#lst:label caption="example"} ... ```
       /!\[\[([^\]]+)\]\](?:\{#([^}]+)\})?(?:\[(.*?)\])?|```(\w+)(?:\s*\{([^}]*)\})?\n([\s\S]*?)```/g,
       (
         match: string,
@@ -168,21 +185,21 @@ export default class PandocPlugin extends Plugin {
         imageLabel: string,
         imageCaption: string,
         codeLang: string,
-        codeAttrs: string, // {#lst:foo caption="bar"}
+        codeAttrs: string,
         codeBody: string
       ) => {
-        // --- 画像リンク ---
+        // 画像リンク処理
         if (imageLink) {
           const foundPath = this.findFileSync(
             imageLink,
             this.settings.searchDirectory
           );
           if (!foundPath) {
-            // 見つからない場合はオリジナルをそのまま返す
+            // 見つからない場合はオリジナルを返す
             return match;
           }
-
           const resolvedPath = path.resolve(foundPath);
+
           let labelPart = "";
           let captionPart = imageCaption || "";
 
@@ -200,48 +217,37 @@ export default class PandocPlugin extends Plugin {
             ? ` ${this.settings.imageScale}`
             : "";
 
-          // 画像の最終形
           return `![${captionPart}](${resolvedPath}){${labelPart}${scalePart}}`;
         }
 
-        // --- コードブロック ---
+        // コードブロック処理
         if (codeBody) {
-          // 特殊文字をすべてエスケープ
+          // エスケープ
           const escapedCode = this.escapeSpecialCharacters(codeBody);
-          // コードブロックの言語設定がない場合はデフォルト zsh
+          // 言語の指定が無い場合は zsh
           const resolvedLang = codeLang || "zsh";
 
-          // 追加属性 (e.g. #lst:label caption="例" )
+          // 追加属性
           let labelOption = "";
           let captionOption = "";
 
           if (codeAttrs) {
-            // 1) label={lst:xxx} を抽出
-            // 2) caption={...} を抽出
-            // 例: #lst:la caption="コード例"
-            //     -> label={lst:la}, caption={コード例}
-
-            // labelを正規表現で探す (#lst:xxx)
             const labelMatch = codeAttrs.match(/#lst:([\w-]+)/);
             if (labelMatch) {
               labelOption = `,label={lst:${labelMatch[1]}}`;
             }
 
-            // captionを正規表現で探す (caption="...")
             const captionMatch = codeAttrs.match(/caption\s*=\s*"(.*?)"/);
             if (captionMatch) {
-              // 中身をエスケープ
               const c = this.escapeSpecialCharacters(captionMatch[1]);
               captionOption = `,caption={${c}}`;
             }
           }
 
-          // listings パッケージ用の lstlisting 環境を出力
-          // label=..., caption=... をオプションに付加する
           return `\\begin{lstlisting}[language=${resolvedLang}${labelOption}${captionOption}]\n${escapedCode}\n\\end{lstlisting}`;
         }
 
-        // 該当しなければ元の文字列をそのまま返す
+        // なにも該当しなければそのまま
         return match;
       }
     );
@@ -249,10 +255,6 @@ export default class PandocPlugin extends Plugin {
 
   /**
    * Pandocを非同期で実行
-   * @param inputFile  - 中間ファイル(.temp.md)へのパス
-   * @param outputFile - 出力ファイル(.pdf, .tex, .docx等)へのパス
-   * @param format     - 出力形式(pdf, latex等)
-   * @returns 成功したかどうか（boolean）
    */
   async runPandoc(
     inputFile: string,
@@ -260,33 +262,23 @@ export default class PandocPlugin extends Plugin {
     format: string
   ): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
-      // pandocパス（設定から取得、未設定時は "pandoc"）
       const pandocPath = this.settings.pandocPath.trim() || "pandoc";
       const command = `"${pandocPath}"`;
 
-      // 引数をまとめる
-      const args = [
-        `"${inputFile}"`,
-        "-o",
-        `"${outputFile}"`,
-      ];
+      const args = [`"${inputFile}"`, "-o", `"${outputFile}"`];
 
-      // フォーマットに応じたオプション
       if (format === "pdf") {
         args.push(`--pdf-engine=${this.settings.latexEngine}`);
       } else if (format === "latex") {
         args.push("-t", "latex");
       }
 
-      // --listings を追加（listings パッケージ利用）
       args.push("--listings");
 
-      // pandoc-crossref をフィルタとして呼び出す
       const crossrefFilter =
         this.settings.pandocCrossrefPath.trim() || "pandoc-crossref";
       args.push("-F", `"${crossrefFilter}"`);
 
-      // pandoc-crossref オプション
       args.push("-M", "listings=true");
       args.push("-M", `figureTitle=${this.settings.figureLabel}`);
       args.push("-M", `figPrefix=${this.settings.figPrefix}`);
@@ -296,7 +288,6 @@ export default class PandocPlugin extends Plugin {
       args.push("-M", `lstPrefix=${this.settings.lstPrefix}`);
       args.push("-M", `eqnPrefix=${this.settings.eqnPrefix}`);
 
-      // PDFオプション等
       args.push("-V", `geometry:margin=${this.settings.marginSize}`);
       if (!this.settings.usePageNumber) {
         args.push("-V", "pagestyle=empty");
@@ -305,7 +296,6 @@ export default class PandocPlugin extends Plugin {
       args.push("-V", "documentclass=ltjsarticle");
       args.push("--highlight-style=tango");
 
-      // その他の追加オプションがあれば
       if (this.settings.pandocExtraArgs.trim() !== "") {
         const extra = this.settings.pandocExtraArgs.split(/\s+/);
         args.push(...extra);
@@ -313,26 +303,25 @@ export default class PandocPlugin extends Plugin {
 
       console.log("Running pandoc with args:", args);
 
-      // spawn で Pandoc を実行
       const pandocProcess = spawn(command, args, {
         stdio: ["pipe", "pipe", "pipe"],
         shell: true,
         env: { ...process.env, PATH: process.env.PATH ?? "" },
       });
 
-      // stderr
+      // 標準エラー
       pandocProcess.stderr?.on("data", (data) => {
         const errorMessage = data.toString().trim();
         console.error(`Pandoc error: ${errorMessage}`);
         new Notice(`Pandoc error: ${errorMessage}`);
       });
 
-      // stdout (デバッグ用)
+      // 標準出力
       pandocProcess.stdout?.on("data", (data) => {
         console.log(`Pandoc output: ${data.toString()}`);
       });
 
-      // close イベント
+      // プロセス完了時の処理
       pandocProcess.on("close", (code) => {
         if (code === 0) {
           new Notice(`Successfully generated: ${outputFile}`);
@@ -341,13 +330,11 @@ export default class PandocPlugin extends Plugin {
           console.error(`Pandoc process exited with code ${code}`);
           if (code === 83) {
             new Notice(
-              `Error: Pandoc exited with code 83.\n` +
-              `Check if "${crossrefFilter}" is installed and in PATH or set correctly.`
+              `Error: Pandoc exited with code 83.\nCheck if "${crossrefFilter}" is installed.`
             );
           } else if (code === 127) {
             new Notice(
-              `Error: Pandoc exited with code 127.\n` +
-              `Check if pandoc or filters are in PATH.`
+              `Error: Pandoc exited with code 127.\nCheck if pandoc/crossref are in PATH.`
             );
           } else {
             new Notice(`Error: Pandoc process exited with code ${code}`);
@@ -356,7 +343,6 @@ export default class PandocPlugin extends Plugin {
         }
       });
 
-      // プロセス起動エラー
       pandocProcess.on("error", (err) => {
         console.error("Error launching Pandoc:", err);
         new Notice(`Error launching Pandoc: ${err.message}`);
@@ -373,12 +359,10 @@ export default class PandocPlugin extends Plugin {
       const entries = fsSync.readdirSync(searchDirectory, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = path.join(searchDirectory, entry.name);
-
         if (entry.isDirectory()) {
           const result = this.findFileSync(filename, fullPath);
           if (result) return result;
         } else {
-          // 大文字小文字を無視して一致するかを判定
           if (entry.name.toLowerCase() === filename.toLowerCase()) {
             return fullPath;
           }
@@ -414,5 +398,18 @@ export default class PandocPlugin extends Plugin {
       console.error("Error saving settings:", err);
       new Notice("Error saving settings. Check console for details.");
     }
+  }
+
+
+  /**
+   * 外部CSSファイルをロードするメソッド
+   */
+  private loadExternalStylesheet() {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.type = "text/css";
+    link.href = "styles.css"; // 必要に応じてパスを調整
+    document.head.appendChild(link);
+    console.log("MdTexPlugin: External stylesheet loaded.");
   }
 }
