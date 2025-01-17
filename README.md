@@ -2,6 +2,8 @@
 
 MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-project.org/) を使用してMarkdownをPDFに変換するObsidian用プラグインです。特に日本語テキストの処理を得意としており、多言語ドキュメントを扱うユーザーに適しています。
 
+サンプルPDFを入手できます : [note記事:Obsidian用プラグインMdTexの導入方法、使い方について](https://note.com/mekann/n/nd837b0beaf60?sub_rt=share_pw)
+
 ---
 
 ## 特徴
