@@ -71,7 +71,8 @@ export interface PandocPluginSettings {
         morestring=[b]",
         morestring=[b]'
       }
-  ---
+
+---
   `;
   
   /**
