@@ -1,3 +1,20 @@
+// AutoComplete.ts
+
+// 2つのクラスを定義
+// 1. MyLabelEditorSuggest
+//    - {#fig:} のようなラベルの補完を提供
+// 2. MyLabelSuggest
+//    - [@lst:label] のようなラベルの補完を提供
+
+// 共通の処理方法
+// - onTrigger:
+//   補完を開始する条件を定義
+//   例: 特定の文字列が入力された場合など
+// - getSuggestions:
+//   補完候補を提供
+//   候補リストは、入力文字列に基づいてフィルタリングされる
+
+
 import {
   EditorSuggest,
   EditorPosition,

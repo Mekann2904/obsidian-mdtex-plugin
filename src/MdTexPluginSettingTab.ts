@@ -1,5 +1,10 @@
 // MdTexPluginSettingTab.ts
 
+// PandocPluginSettinクラスが実装
+// SettingTabを通じてユーザが入力・変更するUIを作成
+// 関連:MdTexPluginSettings.ts, MdTexPlugin.ts
+
+
 import { PluginSettingTab, Setting } from "obsidian";
 import { PandocPluginSettings } from "./MdTexPluginSettings";
 import type PandocPlugin from "./MdTexPlugin";

@@ -1,3 +1,8 @@
+// MdTexPlugin.ts
+
+// PandocPluginクラスは、markdownファイルをpandocを用いて、PDF(lualatex)に変換するプラグインです。
+
+
 import { App, Plugin, Notice, MarkdownView } from "obsidian";
 import { spawn } from "child_process";
 import * as fs from "fs/promises";

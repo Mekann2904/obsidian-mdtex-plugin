@@ -1,4 +1,7 @@
+// main.ts
+
+// Description: Obsidian プラグインのエントリポイント
+
 import PandocPlugin from "./MdTexPlugin";
 
-// Obsidian のプラグインエントリポイント
 export default PandocPlugin;

@@ -1,5 +1,6 @@
 // MdTexPluginSettings.ts
 
+
 /**
  * プラグイン設定インタフェース
  */
@@ -29,6 +30,7 @@ export interface PandocPluginSettings {
   
   /**
    * デフォルトのヘッダIncludes
+   * DEFAULT_HEADER_INCLUDESはユーザが変更可能。
    */
   export const DEFAULT_HEADER_INCLUDES = `---
   header-includes:
@@ -74,6 +76,7 @@ export interface PandocPluginSettings {
   
   /**
    * デフォルト設定
+   * 英語のラベルをデフォルトとし、日本語の場合は設定で変更可能
    */
   export const DEFAULT_SETTINGS: PandocPluginSettings = {
     pandocPath: "pandoc",
