@@ -26,6 +26,7 @@ export interface PandocPluginSettings {
     lstPrefix: string;             // コードのプレフィックス
     equationLabel: string;         // 数式のラベル
     eqnPrefix: string;             // 数式のプレフィックス
+    documentClass: string;         // ドキュメントクラス
   }
   
   /**
@@ -101,5 +102,6 @@ export interface PandocPluginSettings {
     lstPrefix: "Code",          // コードのプレフィックス (デフォルト: 英語)
     equationLabel: "Equation",  // 数式のラベル (デフォルト: 英語)
     eqnPrefix: "Eq.",           // 数式のプレフィックス (デフォルト: 英語)
+    documentClass: "ltjarticle",
   };
   

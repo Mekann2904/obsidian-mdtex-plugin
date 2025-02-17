@@ -80,7 +80,7 @@ export default class PandocPlugin extends Plugin {
       return;
     }
 
-    // 直前の編集を保存
+    // 直前の編集を保存(Obsidian自体に自動保存はあるが、これがないと変更が反映されないことがある)
     const leaf = this.app.workspace.activeLeaf;
     if (leaf && leaf.view instanceof MarkdownView) {
       const markdownView = leaf.view as MarkdownView;
@@ -89,7 +89,7 @@ export default class PandocPlugin extends Plugin {
       }
     }
 
-    // Markdown以外は対象外
+    // Markdown以外は対象外(変換するファイルかどうかを確かめる)
     if (!activeFile.path.endsWith(".md")) {
       new Notice("The active file is not a Markdown file.");
       return;
@@ -101,7 +101,7 @@ export default class PandocPlugin extends Plugin {
     const inputFilePath = fileAdapter.getFullPath(activeFile.path);
     const baseName = path.basename(inputFilePath, ".md");
 
-    // 出力ディレクトリ
+    // 出力ディレクトリ(.pdfなど)
     const outputDir = this.settings.outputDirectory || fileAdapter.getBasePath();
     try {
       await fs.access(outputDir);
@@ -298,7 +298,7 @@ export default class PandocPlugin extends Plugin {
         args.push("-V", "pagestyle=empty");
       }
       args.push("-V", `fontsize=${this.settings.fontSize}`);
-      args.push("-V", "documentclass=ltjsarticle");
+      args.push("-V", `documentclass=${this.settings.documentClass}`);
       args.push("--highlight-style=tango");
 
       if (this.settings.pandocExtraArgs.trim() !== "") {

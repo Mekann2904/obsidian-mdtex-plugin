@@ -22,7 +22,7 @@ import {
   Editor,
   TFile,
   App,
-  EventRef, // 追加
+  EventRef,
 } from "obsidian";
 
 /**

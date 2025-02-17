@@ -4,9 +4,8 @@
 // SettingTabを通じてユーザが入力・変更するUIを作成
 // 関連:MdTexPluginSettings.ts, MdTexPlugin.ts
 
-
+//import { PandocPluginSettings } from "./MdTexPluginSettings";
 import { PluginSettingTab, Setting } from "obsidian";
-import { PandocPluginSettings } from "./MdTexPluginSettings";
 import type PandocPlugin from "./MdTexPlugin";
 
 /**
@@ -119,6 +118,10 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       fontSize: {
         en: "Font size (e.g. 12pt).",
         jp: "フォントサイズ（例：12pt）。",
+      },
+      documentClass: {
+        en: "Document class for LaTeX output.ltjsarticle, ltjsreport, ltjsbook",
+        jp: "LaTeX出力のドキュメントクラス。例:ltjsarticle, ltjsreport, ltjsbook",
       },
       outputFormat: {
         en: "Default output format (pdf, latex, docx...).",
@@ -361,6 +364,19 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.marginSize)
           .onChange(async (value) => {
             this.plugin.settings.marginSize = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+      // ドキュメントクラス
+      new Setting(containerEl)
+      .setName(this.language === "jp" ? "ドキュメントクラス" : "Document Class")
+      .setDesc(t("documentClass"))
+      .addText((text) =>
+        text
+          .setValue(this.plugin.settings.documentClass)
+          .onChange(async (value) => {
+            this.plugin.settings.documentClass = value.trim();
             await this.plugin.saveSettings();
           })
       );
