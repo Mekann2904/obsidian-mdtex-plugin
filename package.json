@@ -23,6 +23,9 @@
 	},
 	"dependencies": {
 		"codemirror": "^5.65.18",
-		"lodash": "^4.17.21"
+		"eslint": "^9.20.1",
+		"glob": "^11.0.1",
+		"lodash": "^4.17.21",
+		"rimraf": "^6.0.1"
 	}
 }
