@@ -88,7 +88,7 @@ export interface PandocPluginSettings {
     outputDirectory: "",
     deleteIntermediateFiles: false,
     pandocCrossrefPath: "",
-    imageScale: "width=0.8\\linewidth",
+    imageScale: "width=0.8\\textwidth",
     usePageNumber: true,
     marginSize: "1in",
     fontSize: "12pt",
