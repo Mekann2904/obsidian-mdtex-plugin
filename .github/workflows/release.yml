@@ -17,9 +17,13 @@ jobs:
         with:
           node-version: "18.x"
 
+      - name: Fix dependencies
+        run: |
+          npm install eslint@8 --save-dev
+          npm install --legacy-peer-deps
+
       - name: Build plugin
         run: |
-          npm install --legacy-peer-deps
           npm run build
 
       - name: Create ZIP of assets
