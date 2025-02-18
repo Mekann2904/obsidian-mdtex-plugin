@@ -17,14 +17,17 @@ jobs:
         with:
           node-version: "18.x"
 
-      - name: Fix dependencies
+      - name: Clear npm cache
+        run: npm cache clean --force
+
+      - name: Install dependencies
         run: |
+          rm -rf node_modules package-lock.json
           npm install eslint@8 --save-dev
-          npm install --legacy-peer-deps
+          npm ci
 
       - name: Build plugin
-        run: |
-          npm run build
+        run: npm run build
 
       - name: Create ZIP of assets
         run: |
