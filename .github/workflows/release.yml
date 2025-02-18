@@ -19,10 +19,9 @@ jobs:
 
       - name: Build plugin
         run: |
-          npm install
+          npm install --legacy-peer-deps
           npm run build
 
-      # 必要なファイルを ZIP にまとめる
       - name: Create ZIP of assets
         run: |
           mkdir obsidian-mdtex-plugin
@@ -35,10 +34,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # タグ名の取得
           tag="${GITHUB_REF##*/}"
-
-          # リリース作成
           gh release create "$tag" \
             --title="Release $tag" \
             --draft \
