@@ -1,8 +1,5 @@
 // MdTexPlugin.ts
 
-// PandocPluginクラスは、markdownファイルをpandocを用いて、PDF(lualatex)に変換するプラグインです。
-
-
 import { App, Plugin, Notice, MarkdownView } from "obsidian";
 import { spawn } from "child_process";
 import * as fs from "fs/promises";
@@ -13,14 +10,15 @@ import { FileSystemAdapter } from "obsidian";
 import { PandocPluginSettings, DEFAULT_SETTINGS } from "./MdTexPluginSettings";
 import { PandocPluginSettingTab } from "./MdTexPluginSettingTab";
 
-
-import {MyLabelEditorSuggest,MyLabelSuggest } from "./AutoComplete";
+import { MyLabelEditorSuggest, MyLabelSuggest } from "./AutoComplete";
 
 /**
  * メインプラグインクラス
  */
 export default class PandocPlugin extends Plugin {
   settings: PandocPluginSettings;
+  // New: keep track of all converted SVG PDFs
+  convertedSvgPdfs: string[] = [];
 
   /**
    * プラグイン読み込み時の処理
@@ -56,13 +54,7 @@ export default class PandocPlugin extends Plugin {
     // ★ EditorSuggest を使ったオートコンプリートを登録
     console.log("[PandocPlugin] Registering AutoComplete (EditorSuggest)...");
     this.registerEditorSuggest(new MyLabelEditorSuggest(this.app));
-
     console.log("EditorSuggest: onload finished.");
-
-    // スタイルシートをロード
-    this.loadExternalStylesheet();
-
-  console.log("MdTexPlugin: Stylesheet added.");
 
     // MyLabelSuggest
     this.registerEditorSuggest(new MyLabelSuggest(this.app));
@@ -80,7 +72,7 @@ export default class PandocPlugin extends Plugin {
       return;
     }
 
-    // 直前の編集を保存(Obsidian自体に自動保存はあるが、これがないと変更が反映されないことがある)
+    // 直前の編集を保存
     const leaf = this.app.workspace.activeLeaf;
     if (leaf && leaf.view instanceof MarkdownView) {
       const markdownView = leaf.view as MarkdownView;
@@ -89,7 +81,7 @@ export default class PandocPlugin extends Plugin {
       }
     }
 
-    // Markdown以外は対象外(変換するファイルかどうかを確かめる)
+    // Markdown以外は対象外
     if (!activeFile.path.endsWith(".md")) {
       new Notice("The active file is not a Markdown file.");
       return;
@@ -98,11 +90,11 @@ export default class PandocPlugin extends Plugin {
     new Notice(`Converting to ${format.toUpperCase()}...`);
 
     const fileAdapter = this.app.vault.adapter as FileSystemAdapter;
-    const inputFilePath = fileAdapter.getFullPath(activeFile.path);
-    const baseName = path.basename(inputFilePath, ".md");
+    // 出力ディレクトリ: ユーザ設定が無ければObsidianのベースパスを利用
+    const fallbackBasePath = fileAdapter.getBasePath();
+    const outputDir = this.settings.outputDirectory?.trim() || fallbackBasePath;
 
-    // 出力ディレクトリ(.pdfなど)
-    const outputDir = this.settings.outputDirectory || fileAdapter.getBasePath();
+    // 出力ディレクトリが存在するか確認
     try {
       await fs.access(outputDir);
     } catch (err) {
@@ -111,11 +103,14 @@ export default class PandocPlugin extends Plugin {
       return;
     }
 
-    // 中間ファイル（.temp.md）
+    const inputFilePath = fileAdapter.getFullPath(activeFile.path);
+    const baseName = path.basename(inputFilePath, ".md");
+
+    // 中間ファイル (.temp.md)
     const tempFileName = `${baseName.replace(/\s/g, "_")}.temp.md`;
     const intermediateFilename = path.join(outputDir, tempFileName);
 
-    // 出力ファイル
+    // 出力ファイル (.pdf, .tex, etc.)
     const ext = format === "latex" ? ".tex" : `.${format}`;
     const outputFilename = path.join(
       outputDir,
@@ -126,13 +121,16 @@ export default class PandocPlugin extends Plugin {
       // (1) Markdown読み込み
       let content = await fs.readFile(inputFilePath, "utf8");
 
-      // (2) LaTeXヘッダなどを先頭に挿入
+      // (2) ヘッダ挿入 (必要なLaTeXコードなど)
       if (this.settings.headerIncludes) {
         content = this.settings.headerIncludes + "\n" + content;
       }
 
-      // (3) 画像リンク・コードブロック置換（自動エスケープ含む）
+      // (3) Wikiリンク→標準リンク、コードブロック置換
       content = this.replaceWikiLinksAndCode(content);
+
+      // (3.5) SVG画像をInkscapeでベクターPDFに変換し、リンクを置換する
+      content = await this.processSvgImagesWithInkscape(content, outputDir);
 
       // (4) 中間ファイル書き込み
       await fs.writeFile(intermediateFilename, content, "utf8");
@@ -144,14 +142,28 @@ export default class PandocPlugin extends Plugin {
         format
       );
 
-      // (6) 成功 & 中間ファイル削除（設定がtrueの場合）
+      // (6) 成功時、設定により中間ファイルと変換したSVG PDFを削除
       if (success && this.settings.deleteIntermediateFiles) {
         try {
           await fs.unlink(intermediateFilename);
           console.log(`Intermediate file deleted: ${intermediateFilename}`);
         } catch (err) {
-          console.warn(`Failed to delete intermediate file: ${intermediateFilename}`, err);
+          console.warn(
+            `Failed to delete intermediate file: ${intermediateFilename}`,
+            err
+          );
         }
+        // Also delete all converted SVG PDF files
+        for (const pdf of this.convertedSvgPdfs) {
+          try {
+            await fs.unlink(pdf);
+            console.log(`Converted SVG PDF deleted: ${pdf}`);
+          } catch (err) {
+            console.warn(`Failed to delete converted SVG PDF: ${pdf}`, err);
+          }
+        }
+        // Clear the list after deletion
+        this.convertedSvgPdfs = [];
       }
     } catch (error: any) {
       console.error("Error generating output:", error?.message || error);
@@ -161,7 +173,7 @@ export default class PandocPlugin extends Plugin {
 
   /**
    * 特殊文字をエスケープする関数
-   * LaTeX のコンパイルが通るように、よく問題を起こす文字を置換する。
+   * LaTeXのコンパイルが通るように、問題を起こしやすい文字を置換する。
    */
   private escapeSpecialCharacters(code: string): string {
     return code
@@ -178,8 +190,8 @@ export default class PandocPlugin extends Plugin {
   }
 
   /**
-   * Wikiリンクやコードブロックを置換
-   * 安定性を重視し、極力簡潔に実装する。
+   * Wikiリンクやコードブロックを置換する
+   * 安定性を重視し、できるだけシンプルに実装。
    */
   replaceWikiLinksAndCode(markdown: string): string {
     return markdown.replace(
@@ -193,21 +205,18 @@ export default class PandocPlugin extends Plugin {
         codeAttrs: string,
         codeBody: string
       ) => {
-        // 画像リンク処理
+        // 画像リンク処理: ![[image.svg]]{#fig:label}[caption]
         if (imageLink) {
           const foundPath = this.findFileSync(
             imageLink,
             this.settings.searchDirectory
           );
           if (!foundPath) {
-            // 見つからない場合はオリジナルを返す
             return match;
           }
           const resolvedPath = path.resolve(foundPath);
-
           let labelPart = "";
           let captionPart = imageCaption || "";
-
           if (imageLabel) {
             if (!imageLabel.startsWith("fig:")) {
               imageLabel = "fig:" + imageLabel;
@@ -217,49 +226,118 @@ export default class PandocPlugin extends Plugin {
               captionPart = " ";
             }
           }
-
           const scalePart = this.settings.imageScale
             ? ` ${this.settings.imageScale}`
             : "";
-
           return `![${captionPart}](${resolvedPath}){${labelPart}${scalePart}}`;
         }
 
         // コードブロック処理
         if (codeBody) {
-          // エスケープ
           const escapedCode = this.escapeSpecialCharacters(codeBody);
-          // 言語の指定が無い場合は zsh
           const resolvedLang = codeLang || "zsh";
-
-          // 追加属性
           let labelOption = "";
           let captionOption = "";
-
           if (codeAttrs) {
             const labelMatch = codeAttrs.match(/#lst:([\w-]+)/);
             if (labelMatch) {
               labelOption = `,label={lst:${labelMatch[1]}}`;
             }
-
             const captionMatch = codeAttrs.match(/caption\s*=\s*"(.*?)"/);
             if (captionMatch) {
               const c = this.escapeSpecialCharacters(captionMatch[1]);
               captionOption = `,caption={${c}}`;
             }
           }
-
           return `\\begin{lstlisting}[language=${resolvedLang}${labelOption}${captionOption}]\n${escapedCode}\n\\end{lstlisting}`;
         }
-
-        // なにも該当しなければそのまま
         return match;
       }
     );
   }
 
   /**
-   * Pandocを非同期で実行
+   * Markdown内のSVG画像リンクを検出し、InkscapeでベクターPDFに変換してリンクを置換する
+   * @param outputDir 出力先ディレクトリ
+   */
+  async processSvgImagesWithInkscape(
+    markdown: string,
+    outputDir: string
+  ): Promise<string> {
+    const regex = /!\[([^\]]*)\]\(([^)]+\.svg)\)(\{[^}]+\})?/gi;
+    let match: RegExpExecArray | null;
+    let newMarkdown = markdown;
+    while ((match = regex.exec(markdown)) !== null) {
+      const altText = match[1];
+      const svgPath = match[2];
+      try {
+        // Convert the SVG to a vector PDF
+        const pdfPath = await this.convertSvgToPdfWithInkscape(svgPath, outputDir);
+        // Track the converted file so we can delete it later if needed
+        this.convertedSvgPdfs.push(pdfPath);
+        // Replace the original link with the PDF link
+        const newImageMarkdown = `![${altText}](${pdfPath})`;
+        newMarkdown = newMarkdown.replace(match[0], newImageMarkdown);
+      } catch (err) {
+        console.error("Error converting SVG with Inkscape:", err);
+        newMarkdown = newMarkdown.replace(match[0], "");
+        new Notice(`Failed to convert SVG ${svgPath}; link removed.`);
+      }
+    }
+    return newMarkdown;
+  }
+
+  /**
+   * Inkscapeを使ってSVGファイルをPDF (ベクター形式) に変換する関数
+   * ※設定されたInkscapeパスが空の場合は変換をスキップし、元のSVGパスを返します。
+   * 出力先はoutputDir (またはfallback) を使用します。
+   */
+  async convertSvgToPdfWithInkscape(
+    inputSvg: string,
+    outputDir: string
+  ): Promise<string> {
+    const absInputSvg = path.resolve(inputSvg);
+    const dirToUse = outputDir.trim() || path.dirname(absInputSvg);
+    const baseName = path.basename(absInputSvg, path.extname(absInputSvg));
+    const outputPdf = path.join(dirToUse, baseName + ".pdf");
+
+    return new Promise<string>((resolve, reject) => {
+      const inkscapePathSetting = this.settings.inkscapePath?.trim();
+      if (!inkscapePathSetting) {
+        console.log("Inkscape path is empty. Skipping conversion for:", inputSvg);
+        resolve(inputSvg); // Return original path if no Inkscape
+        return;
+      }
+      // Export to PDF (vector) with Inkscape:
+      // e.g. inkscape input.svg --export-type=pdf --export-filename=output.pdf
+      const args = [absInputSvg, "--export-type=pdf", "--export-filename", outputPdf];
+      console.log("Running Inkscape with args:", args);
+
+      const proc = spawn(inkscapePathSetting, args, {
+        shell: false,
+        env: process.env,
+      });
+
+      proc.on("error", (err) => {
+        console.error("Error running Inkscape:", err);
+        reject(err);
+      });
+      proc.stderr.on("data", (data) => {
+        console.error("Inkscape stderr:", data.toString());
+      });
+      proc.on("close", (code) => {
+        if (code === 0) {
+          console.log("Inkscape conversion successful:", outputPdf);
+          resolve(outputPdf);
+        } else {
+          reject(new Error("Inkscape process exited with code " + code));
+        }
+      });
+    });
+  }
+
+  /**
+   * Pandocを非同期で実行する
    */
   async runPandoc(
     inputFile: string,
@@ -269,21 +347,15 @@ export default class PandocPlugin extends Plugin {
     return new Promise<boolean>((resolve) => {
       const pandocPath = this.settings.pandocPath.trim() || "pandoc";
       const command = `"${pandocPath}"`;
-
       const args = [`"${inputFile}"`, "-o", `"${outputFile}"`];
-
       if (format === "pdf") {
         args.push(`--pdf-engine=${this.settings.latexEngine}`);
       } else if (format === "latex") {
         args.push("-t", "latex");
       }
-
       args.push("--listings");
-
-      const crossrefFilter =
-        this.settings.pandocCrossrefPath.trim() || "pandoc-crossref";
+      const crossrefFilter = this.settings.pandocCrossrefPath.trim() || "pandoc-crossref";
       args.push("-F", `"${crossrefFilter}"`);
-
       args.push("-M", "listings=true");
       args.push("-M", `figureTitle=${this.settings.figureLabel}`);
       args.push("-M", `figPrefix=${this.settings.figPrefix}`);
@@ -292,7 +364,6 @@ export default class PandocPlugin extends Plugin {
       args.push("-M", `listingTitle=${this.settings.codeLabel}`);
       args.push("-M", `lstPrefix=${this.settings.lstPrefix}`);
       args.push("-M", `eqnPrefix=${this.settings.eqnPrefix}`);
-
       args.push("-V", `geometry:margin=${this.settings.marginSize}`);
       if (!this.settings.usePageNumber) {
         args.push("-V", "pagestyle=empty");
@@ -300,7 +371,6 @@ export default class PandocPlugin extends Plugin {
       args.push("-V", `fontsize=${this.settings.fontSize}`);
       args.push("-V", `documentclass=${this.settings.documentClass}`);
       args.push("--highlight-style=tango");
-
       if (this.settings.pandocExtraArgs.trim() !== "") {
         const extra = this.settings.pandocExtraArgs.split(/\s+/);
         args.push(...extra);
@@ -314,19 +384,14 @@ export default class PandocPlugin extends Plugin {
         env: { ...process.env, PATH: process.env.PATH ?? "" },
       });
 
-      // 標準エラー
       pandocProcess.stderr?.on("data", (data) => {
         const errorMessage = data.toString().trim();
         console.error(`Pandoc error: ${errorMessage}`);
         new Notice(`Pandoc error: ${errorMessage}`);
       });
-
-      // 標準出力
       pandocProcess.stdout?.on("data", (data) => {
         console.log(`Pandoc output: ${data.toString()}`);
       });
-
-      // プロセス完了時の処理
       pandocProcess.on("close", (code) => {
         if (code === 0) {
           new Notice(`Successfully generated: ${outputFile}`);
@@ -347,7 +412,6 @@ export default class PandocPlugin extends Plugin {
           resolve(false);
         }
       });
-
       pandocProcess.on("error", (err) => {
         console.error("Error launching Pandoc:", err);
         new Notice(`Error launching Pandoc: ${err.message}`);
@@ -357,7 +421,7 @@ export default class PandocPlugin extends Plugin {
   }
 
   /**
-   * 同期的に searchDirectory を探索し、ファイル名が合致したらフルパスを返す
+   * 同期的にsearchDirectoryを探索し、ファイル名が合致したらフルパスを返す
    */
   findFileSync(filename: string, searchDirectory: string): string | null {
     try {
@@ -380,7 +444,7 @@ export default class PandocPlugin extends Plugin {
   }
 
   /**
-   * 設定をロード
+   * 設定をロードする
    */
   async loadSettings() {
     try {
@@ -388,13 +452,12 @@ export default class PandocPlugin extends Plugin {
       this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
     } catch (err) {
       console.error("Error loading settings:", err);
-      // ロードに失敗した場合、デフォルト設定を使用
       this.settings = { ...DEFAULT_SETTINGS };
     }
   }
 
   /**
-   * 設定をセーブ
+   * 設定をセーブする
    */
   async saveSettings() {
     try {
@@ -403,18 +466,5 @@ export default class PandocPlugin extends Plugin {
       console.error("Error saving settings:", err);
       new Notice("Error saving settings. Check console for details.");
     }
-  }
-
-
-  /**
-   * 外部CSSファイルをロードするメソッド
-   */
-  private loadExternalStylesheet() {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.type = "text/css";
-    link.href = "styles.css"; // 必要に応じてパスを調整
-    document.head.appendChild(link);
-    console.log("MdTexPlugin: External stylesheet loaded.");
   }
 }

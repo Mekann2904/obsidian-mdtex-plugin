@@ -131,6 +131,10 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         en: "LaTeX engine (lualatex, xelatex...).",
         jp: "LaTeXエンジン（lualatex, xelatexなど）。",
       },
+      inkscapePath: {
+        en: "Path to Inkscape (for SVG conversion).",
+        jp: "Inkscapeのパス（SVG変換用）。",
+      },
     };
 
     // 辞書のキーから翻訳を取得するヘルパー
@@ -419,6 +423,19 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.latexEngine)
           .onChange(async (value) => {
             this.plugin.settings.latexEngine = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // Inkscapeパス
+    new Setting(containerEl)
+      .setName(this.language === "jp" ? "Inkscapeパス" : "Inkscape Path")
+      .setDesc(t("inkscapePath"))
+      .addText((text) =>
+        text
+          .setValue(this.plugin.settings.inkscapePath)
+          .onChange(async (value) => {
+            this.plugin.settings.inkscapePath = value.trim();
             await this.plugin.saveSettings();
           })
       );
