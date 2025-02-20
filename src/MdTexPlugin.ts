@@ -270,13 +270,14 @@ export default class PandocPlugin extends Plugin {
     while ((match = regex.exec(markdown)) !== null) {
       const altText = match[1];
       const svgPath = match[2];
+      const attributes = match[3] || ""; // 属性部分をそのまま保持
       try {
-        // Convert the SVG to a vector PDF
+        // SVGをベクターPDFに変換
         const pdfPath = await this.convertSvgToPdfWithInkscape(svgPath, outputDir);
-        // Track the converted file so we can delete it later if needed
+        // 後で削除できるように変換したPDFを記録
         this.convertedSvgPdfs.push(pdfPath);
-        // Replace the original link with the PDF link
-        const newImageMarkdown = `![${altText}](${pdfPath})`;
+        // 元のリンクをPDFリンクに置換（属性も再利用）
+        const newImageMarkdown = `![${altText}](${pdfPath})${attributes}`;
         newMarkdown = newMarkdown.replace(match[0], newImageMarkdown);
       } catch (err) {
         console.error("Error converting SVG with Inkscape:", err);
@@ -286,6 +287,7 @@ export default class PandocPlugin extends Plugin {
     }
     return newMarkdown;
   }
+  
 
   /**
    * Inkscapeを使ってSVGファイルをPDF (ベクター形式) に変換する関数
