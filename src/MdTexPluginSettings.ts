@@ -27,6 +27,8 @@ export interface PandocPluginSettings {
   equationLabel: string;         // 数式のラベル
   eqnPrefix: string;             // 数式のプレフィックス
   documentClass: string;         // ドキュメントクラス
+  inkscapePath: string;          // Inkscapeの実行ファイルパス
+  mermaidCliPath: string;        // MermaidのCLIパス
 }
 
 /**
@@ -103,4 +105,6 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
   equationLabel: "Equation",  // 数式のラベル (デフォルト: 英語)
   eqnPrefix: "Eq.",           // 数式のプレフィックス (デフォルト: 英語)
   documentClass: "ltjarticle",
+  inkscapePath: "",
+  mermaidCliPath: ""
 };

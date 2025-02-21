@@ -135,6 +135,10 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         en: "Path to Inkscape (for SVG conversion).",
         jp: "Inkscapeのパス（SVG変換用）。",
       },
+      mermaidCliPath: {
+        en: "Path to Mermaid CLI (for SVG conversion).",
+        jp: "Mermaid CLIのパス（SVG変換用）。",
+      },
     };
 
     // 辞書のキーから翻訳を取得するヘルパー
@@ -436,6 +440,19 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.inkscapePath)
           .onChange(async (value) => {
             this.plugin.settings.inkscapePath = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // Mermaid CLIパス
+    new Setting(containerEl)
+      .setName(this.language === "jp" ? "Mermaid CLIパス" : "Mermaid CLI Path")
+      .setDesc(t("mermaidCliPath"))
+      .addText((text) =>  
+        text
+          .setValue(this.plugin.settings.mermaidCliPath)
+          .onChange(async (value) => {
+            this.plugin.settings.mermaidCliPath = value.trim();
             await this.plugin.saveSettings();
           })
       );

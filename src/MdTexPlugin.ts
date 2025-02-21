@@ -12,17 +12,20 @@ import { PandocPluginSettingTab } from "./MdTexPluginSettingTab";
 
 import { MyLabelEditorSuggest, MyLabelSuggest } from "./AutoComplete";
 
+// ※ ここでは、replaceMermaidDiagrams 関数が返り値として
+// { content: string, generatedPdfs: string[] } を返すことを想定しています。
+import { replaceMermaidDiagrams } from "./Mermaid-PDF";
+
 /**
  * メインプラグインクラス
  */
 export default class PandocPlugin extends Plugin {
   settings: PandocPluginSettings;
-  // New: keep track of all converted SVG PDFs
+  // 変換後のPDF（またはSVG）ファイルのパスを記録
   convertedSvgPdfs: string[] = [];
+  // 追加: Mermaidで生成されたPDFのパスを記録
+  convertedMermaidPdfs: string[] = [];
 
-  /**
-   * プラグイン読み込み時の処理
-   */
   async onload() {
     console.log("PandocPlugin loaded!");
 
@@ -56,15 +59,10 @@ export default class PandocPlugin extends Plugin {
     this.registerEditorSuggest(new MyLabelEditorSuggest(this.app));
     console.log("EditorSuggest: onload finished.");
 
-    // MyLabelSuggest
     this.registerEditorSuggest(new MyLabelSuggest(this.app));
     console.log("MyLabelSuggest: onload finished.");
   }
 
-  /**
-   * 現在アクティブなMarkdownファイルを指定フォーマットへ変換
-   * @param format "pdf"|"latex"|"docx"など
-   */
   async convertCurrentPage(format: string) {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) {
@@ -87,14 +85,22 @@ export default class PandocPlugin extends Plugin {
       return;
     }
 
+    // mermaidCliPath が設定されている場合、念のため PATH に追加
+    if (this.settings.mermaidCliPath && typeof this.settings.mermaidCliPath === "string") {
+      const mermaidDir = path.dirname(this.settings.mermaidCliPath);
+      const currentPath = process.env.PATH ?? "";
+      if (!currentPath.includes(mermaidDir)) {
+        process.env.PATH = mermaidDir + ":" + currentPath;
+        console.log("Updated PATH to include mermaidCliPath directory:", mermaidDir);
+      }
+    }
+
     new Notice(`Converting to ${format.toUpperCase()}...`);
 
     const fileAdapter = this.app.vault.adapter as FileSystemAdapter;
-    // 出力ディレクトリ: ユーザ設定が無ければObsidianのベースパスを利用
     const fallbackBasePath = fileAdapter.getBasePath();
     const outputDir = this.settings.outputDirectory?.trim() || fallbackBasePath;
 
-    // 出力ディレクトリが存在するか確認
     try {
       await fs.access(outputDir);
     } catch (err) {
@@ -106,11 +112,9 @@ export default class PandocPlugin extends Plugin {
     const inputFilePath = fileAdapter.getFullPath(activeFile.path);
     const baseName = path.basename(inputFilePath, ".md");
 
-    // 中間ファイル (.temp.md)
     const tempFileName = `${baseName.replace(/\s/g, "_")}.temp.md`;
     const intermediateFilename = path.join(outputDir, tempFileName);
 
-    // 出力ファイル (.pdf, .tex, etc.)
     const ext = format === "latex" ? ".tex" : `.${format}`;
     const outputFilename = path.join(
       outputDir,
@@ -121,15 +125,21 @@ export default class PandocPlugin extends Plugin {
       // (1) Markdown読み込み
       let content = await fs.readFile(inputFilePath, "utf8");
 
-      // (2) ヘッダ挿入 (必要なLaTeXコードなど)
+      // (2) ヘッダ挿入
       if (this.settings.headerIncludes) {
         content = this.settings.headerIncludes + "\n" + content;
       }
 
+      // (2.5) MermaidブロックをPDFに変換（--pdfFit）
+      // ※ replaceMermaidDiagrams を修正して、返り値に generatedPdfs を含めるようにしてください。
+      const mermaidResult = await replaceMermaidDiagrams(content, outputDir, this.settings.mermaidCliPath);
+      content = mermaidResult.content;
+      this.convertedMermaidPdfs = mermaidResult.generatedPdfs || [];
+
       // (3) Wikiリンク→標準リンク、コードブロック置換
       content = this.replaceWikiLinksAndCode(content);
 
-      // (3.5) SVG画像をInkscapeでベクターPDFに変換し、リンクを置換する
+      // (3.5) SVG画像をInkscapeでベクターPDFに変換
       content = await this.processSvgImagesWithInkscape(content, outputDir);
 
       // (4) 中間ファイル書き込み
@@ -142,18 +152,14 @@ export default class PandocPlugin extends Plugin {
         format
       );
 
-      // (6) 成功時、設定により中間ファイルと変換したSVG PDFを削除
+      // (6) 不要ファイルを削除
       if (success && this.settings.deleteIntermediateFiles) {
         try {
           await fs.unlink(intermediateFilename);
           console.log(`Intermediate file deleted: ${intermediateFilename}`);
         } catch (err) {
-          console.warn(
-            `Failed to delete intermediate file: ${intermediateFilename}`,
-            err
-          );
+          console.warn(`Failed to delete intermediate file: ${intermediateFilename}`, err);
         }
-        // Also delete all converted SVG PDF files
         for (const pdf of this.convertedSvgPdfs) {
           try {
             await fs.unlink(pdf);
@@ -162,8 +168,16 @@ export default class PandocPlugin extends Plugin {
             console.warn(`Failed to delete converted SVG PDF: ${pdf}`, err);
           }
         }
-        // Clear the list after deletion
+        for (const pdf of this.convertedMermaidPdfs) {
+          try {
+            await fs.unlink(pdf);
+            console.log(`Converted Mermaid PDF deleted: ${pdf}`);
+          } catch (err) {
+            console.warn(`Failed to delete converted Mermaid PDF: ${pdf}`, err);
+          }
+        }
         this.convertedSvgPdfs = [];
+        this.convertedMermaidPdfs = [];
       }
     } catch (error: any) {
       console.error("Error generating output:", error?.message || error);
@@ -171,10 +185,6 @@ export default class PandocPlugin extends Plugin {
     }
   }
 
-  /**
-   * 特殊文字をエスケープする関数
-   * LaTeXのコンパイルが通るように、問題を起こしやすい文字を置換する。
-   */
   private escapeSpecialCharacters(code: string): string {
     return code
       .replace(/\\/g, "\\textbackslash{}")
@@ -189,10 +199,6 @@ export default class PandocPlugin extends Plugin {
       .replace(/&/g, "\\&");
   }
 
-  /**
-   * Wikiリンクやコードブロックを置換する
-   * 安定性を重視し、できるだけシンプルに実装。
-   */
   replaceWikiLinksAndCode(markdown: string): string {
     return markdown.replace(
       /!\[\[([^\]]+)\]\](?:\{#([^}]+)\})?(?:\[(.*?)\])?|```(\w+)(?:\s*\{([^}]*)\})?\n([\s\S]*?)```/g,
@@ -205,7 +211,7 @@ export default class PandocPlugin extends Plugin {
         codeAttrs: string,
         codeBody: string
       ) => {
-        // 画像リンク処理: ![[image.svg]]{#fig:label}[caption]
+        // 画像リンク
         if (imageLink) {
           const foundPath = this.findFileSync(
             imageLink,
@@ -232,8 +238,12 @@ export default class PandocPlugin extends Plugin {
           return `![${captionPart}](${resolvedPath}){${labelPart}${scalePart}}`;
         }
 
-        // コードブロック処理
+        // コードブロック
         if (codeBody) {
+          if (codeLang && codeLang.toLowerCase() === "mermaid") {
+            // Mermaid は PDF に変換済み
+            return "";
+          }
           const escapedCode = this.escapeSpecialCharacters(codeBody);
           const resolvedLang = codeLang || "zsh";
           let labelOption = "";
@@ -251,15 +261,12 @@ export default class PandocPlugin extends Plugin {
           }
           return `\\begin{lstlisting}[language=${resolvedLang}${labelOption}${captionOption}]\n${escapedCode}\n\\end{lstlisting}`;
         }
+
         return match;
       }
     );
   }
 
-  /**
-   * Markdown内のSVG画像リンクを検出し、InkscapeでベクターPDFに変換してリンクを置換する
-   * @param outputDir 出力先ディレクトリ
-   */
   async processSvgImagesWithInkscape(
     markdown: string,
     outputDir: string
@@ -270,13 +277,10 @@ export default class PandocPlugin extends Plugin {
     while ((match = regex.exec(markdown)) !== null) {
       const altText = match[1];
       const svgPath = match[2];
-      const attributes = match[3] || ""; // 属性部分をそのまま保持
+      const attributes = match[3] || "";
       try {
-        // SVGをベクターPDFに変換
         const pdfPath = await this.convertSvgToPdfWithInkscape(svgPath, outputDir);
-        // 後で削除できるように変換したPDFを記録
         this.convertedSvgPdfs.push(pdfPath);
-        // 元のリンクをPDFリンクに置換（属性も再利用）
         const newImageMarkdown = `![${altText}](${pdfPath})${attributes}`;
         newMarkdown = newMarkdown.replace(match[0], newImageMarkdown);
       } catch (err) {
@@ -287,13 +291,7 @@ export default class PandocPlugin extends Plugin {
     }
     return newMarkdown;
   }
-  
 
-  /**
-   * Inkscapeを使ってSVGファイルをPDF (ベクター形式) に変換する関数
-   * ※設定されたInkscapeパスが空の場合は変換をスキップし、元のSVGパスを返します。
-   * 出力先はoutputDir (またはfallback) を使用します。
-   */
   async convertSvgToPdfWithInkscape(
     inputSvg: string,
     outputDir: string
@@ -307,11 +305,9 @@ export default class PandocPlugin extends Plugin {
       const inkscapePathSetting = this.settings.inkscapePath?.trim();
       if (!inkscapePathSetting) {
         console.log("Inkscape path is empty. Skipping conversion for:", inputSvg);
-        resolve(inputSvg); // Return original path if no Inkscape
+        resolve(inputSvg);
         return;
       }
-      // Export to PDF (vector) with Inkscape:
-      // e.g. inkscape input.svg --export-type=pdf --export-filename=output.pdf
       const args = [absInputSvg, "--export-type=pdf", "--export-filename", outputPdf];
       console.log("Running Inkscape with args:", args);
 
@@ -338,9 +334,6 @@ export default class PandocPlugin extends Plugin {
     });
   }
 
-  /**
-   * Pandocを非同期で実行する
-   */
   async runPandoc(
     inputFile: string,
     outputFile: string,
@@ -422,9 +415,6 @@ export default class PandocPlugin extends Plugin {
     });
   }
 
-  /**
-   * 同期的にsearchDirectoryを探索し、ファイル名が合致したらフルパスを返す
-   */
   findFileSync(filename: string, searchDirectory: string): string | null {
     try {
       const entries = fsSync.readdirSync(searchDirectory, { withFileTypes: true });
@@ -445,9 +435,6 @@ export default class PandocPlugin extends Plugin {
     return null;
   }
 
-  /**
-   * 設定をロードする
-   */
   async loadSettings() {
     try {
       const loaded = await this.loadData();
@@ -458,9 +445,6 @@ export default class PandocPlugin extends Plugin {
     }
   }
 
-  /**
-   * 設定をセーブする
-   */
   async saveSettings() {
     try {
       await this.saveData(this.settings);
