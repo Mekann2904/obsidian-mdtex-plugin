@@ -228,3 +228,4 @@ Markdownから正確にPDFを生成するためには以下のLaTeXパッケー�
 ### 開発者情報
 開発者: **Mekann**  
 GitHub: [Mekann2904](https://github.com/Mekann2904)# obsidian-mdtex-plugin
+
