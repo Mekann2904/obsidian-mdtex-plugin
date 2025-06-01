@@ -33,6 +33,79 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 3. **出力をカスタマイズ**  
    プラグイン設定でLaTeXヘッダーをカスタマイズし、PDFのフォーマットを変更できます。
 
+4. **beamerを使用する**
+   プラグイン設定で`documentClass`を`beamer`に設定すると、beamerを使用してPDFを生成できます。
+   beamerのサンプルは[こちら](./sample-beamer.md)です。
+   beamerは競合が起こりやすいため、エラーが出る場合は以下のように設定してください。
+
+    4.1 LaTeXヘッダーの設定は以下のようになります。
+
+    ```yaml
+    ---
+    header-includes:
+      - |
+        \usepackage{microtype}
+        \usepackage{luatexja}
+
+        \usepackage[noto-otf]{luatexja-preset}
+
+        \usepackage{luatexja-fontspec} 
+        \setmainfont{Noto Sans CJK JP}
+        \setsansfont{Noto Sans CJK JP}
+        \setmonofont{Ricty Diminished}
+
+    ---
+
+    ```
+
+    4,2 pandoc-crossref, 余白サイズを無効にする。
+
+    ![image.png](./Pasted%20image%2020250601145408.png)
+
+    4.3 最終的なdata.jsonは以下のようになります。あくまで一例ですが...
+
+    ```json
+    {
+      "activeProfile": "スライド",
+      "profilesArray": [
+        {
+          "name": "スライド",
+          "pandocPath": "/opt/homebrew/bin/pandoc",
+          "pandocExtraArgs": "",
+          "searchDirectory": "",
+          "headerIncludes": "---\\nheader-includes:\\n  - |\\n    \\\\usepackage{microtype}\\n    \\\\usepackage{luatexja}\\n\\n    \\\\usepackage[noto-otf]{luatexja-preset}\\n\\n    \\\\usepackage{luatexja-fontspec} \\n    \\\\setmainfont{Noto Sans CJK JP}\\n    \\\\setsansfont{Noto Sans CJK JP}\\n    \\\\setmonofont{Ricty Diminished}\\n\\n---",
+          "outputDirectory": "",
+          "deleteIntermediateFiles": false,
+          "pandocCrossrefPath": "/opt/homebrew/bin/pandoc-crossref",
+          "usePandocCrossref": false,
+          "imageScale": "width=0.8\\textwidth",
+          "usePageNumber": false,
+          "marginSize": "1in",
+          "useMarginSize": false,
+          "fontSize": "8pt",
+          "outputFormat": "pdf",
+          "latexEngine": "/Library/TeX/texbin/lualatex",
+          "figureLabel": "Figure",
+          "figPrefix": "Figure",
+          "tableLabel": "Table",
+          "tblPrefix": "Table",
+          "codeLabel": "Code",
+          "lstPrefix": "Code",
+          "equationLabel": "Equation",
+          "eqnPrefix": "Eq.",
+          "documentClass": "beamer",
+          "documentClassOptions": "",
+          "useStandalone": true
+        }
+      ]
+    }
+    ```
+
+5. **設定のプロファイル管理について**
+   プラグイン設定で複数の設定を管理できるようになりました。
+   新しいプロファイルを作成すると、デフォルト値で新しいプロファイルが作成されます。
+   入力が大変なので@でのサジェスト機能を追加しました。pandocPath, pandocCrossrefPath, latexEngineなど各項目の設定を@でサジェストすることが可能です。有効活用してください。
+
 ---
 
 # 依存関係一覧
