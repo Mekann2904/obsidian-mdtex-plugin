@@ -229,6 +229,19 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           })
       );
 
+    // pandoc-crossref使用有無
+    new Setting(containerEl)
+      .setName(this.language === "jp" ? "pandoc-crossrefを使う" : "Use pandoc-crossref")
+      .setDesc(this.language === "jp" ? "pandoc-crossrefフィルタを有効にするかどうか。" : "Enable pandoc-crossref filter.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.usePandocCrossref)
+          .onChange(async (value) => {
+            this.plugin.settings.usePandocCrossref = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
     // 図のラベルとプレフィックス
     new Setting(containerEl)
       .setName(this.language === "jp" ? "図のラベル" : "Figure Label")
@@ -368,8 +381,21 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           })
       );
 
-      // ドキュメントクラス
-      new Setting(containerEl)
+    // 余白サイズ有効/無効
+    new Setting(containerEl)
+      .setName(this.language === "jp" ? "余白サイズを有効にする" : "Enable Margin Size")
+      .setDesc(this.language === "jp" ? "余白サイズ（geometry:margin）オプションを有効にするかどうか。" : "Enable geometry:margin option for margin size.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.useMarginSize)
+          .onChange(async (value) => {
+            this.plugin.settings.useMarginSize = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // ドキュメントクラス
+    new Setting(containerEl)
       .setName(this.language === "jp" ? "ドキュメントクラス" : "Document Class")
       .setDesc(t("documentClass"))
       .addText((text) =>
@@ -377,6 +403,19 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.documentClass)
           .onChange(async (value) => {
             this.plugin.settings.documentClass = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // ドキュメントクラスのオプション
+    new Setting(containerEl)
+      .setName(this.language === "jp" ? "ドキュメントクラスのオプション" : "Document Class Options")
+      .setDesc(this.language === "jp" ? "例: dvipdfmx,12pt など。空欄の場合はオプションなし。" : "e.g. dvipdfmx,12pt. Leave blank for none.")
+      .addText((text) =>
+        text
+          .setValue(this.plugin.settings.documentClassOptions)
+          .onChange(async (value) => {
+            this.plugin.settings.documentClassOptions = value.trim();
             await this.plugin.saveSettings();
           })
       );
@@ -419,6 +458,19 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.latexEngine)
           .onChange(async (value) => {
             this.plugin.settings.latexEngine = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // --standalone使用有無
+    new Setting(containerEl)
+      .setName(this.language === "jp" ? "--standaloneを使う" : "Use --standalone")
+      .setDesc(this.language === "jp" ? "pandocに--standaloneオプションを渡すかどうか。" : "Pass --standalone option to pandoc.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.useStandalone)
+          .onChange(async (value) => {
+            this.plugin.settings.useStandalone = value;
             await this.plugin.saveSettings();
           })
       );

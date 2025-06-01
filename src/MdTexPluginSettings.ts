@@ -12,9 +12,11 @@ export interface PandocPluginSettings {
     outputDirectory: string;       // 出力先ディレクトリ（空欄の場合はVaultルート）
     deleteIntermediateFiles: boolean;  // PDF変換時に作成する中間ファイルを削除するか
     pandocCrossrefPath: string;    // pandoc-crossrefの実行ファイルパス
+    usePandocCrossref: boolean;   // pandoc-crossrefを使うかどうか
     imageScale: string;            // 画像のデフォルトスケール設定
     usePageNumber: boolean;        // PDF出力時にページ番号を付けるか
     marginSize: string;            // ページ余白サイズ
+    useMarginSize: boolean;        // ページ余白サイズを有効にするか
     fontSize: string;              // フォントサイズ
     outputFormat: string;          // デフォルト出力形式（pdf, latex, docxなど）
     latexEngine: string;           // LaTeXエンジン（lualatex, xelatex, platexなど）
@@ -27,6 +29,8 @@ export interface PandocPluginSettings {
     equationLabel: string;         // 数式のラベル
     eqnPrefix: string;             // 数式のプレフィックス
     documentClass: string;         // ドキュメントクラス
+    documentClassOptions: string; // ドキュメントクラスのオプション（追加）
+    useStandalone: boolean;      // --standaloneを使うかどうか（追加）
   }
   
   /**
@@ -88,9 +92,11 @@ export interface PandocPluginSettings {
     outputDirectory: "",
     deleteIntermediateFiles: false,
     pandocCrossrefPath: "",
+    usePandocCrossref: true,
     imageScale: "width=0.8\\textwidth",
     usePageNumber: true,
     marginSize: "1in",
+    useMarginSize: true,
     fontSize: "12pt",
     outputFormat: "pdf",
     latexEngine: "lualatex",
@@ -103,5 +109,7 @@ export interface PandocPluginSettings {
     equationLabel: "Equation",  // 数式のラベル (デフォルト: 英語)
     eqnPrefix: "Eq.",           // 数式のプレフィックス (デフォルト: 英語)
     documentClass: "ltjarticle",
+    documentClassOptions: "",
+    useStandalone: true,
   };
   
