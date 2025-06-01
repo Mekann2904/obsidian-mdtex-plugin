@@ -1,25 +1,57 @@
 // MdTexPluginSettingTab.ts
 
-// PandocPluginSettinクラスが実装
-// SettingTabを通じてユーザが入力・変更するUIを作成
-// 関連:MdTexPluginSettings.ts, MdTexPlugin.ts
-
-//import { PandocPluginSettings } from "./MdTexPluginSettings";
-import { PluginSettingTab, Setting } from "obsidian";
+import { App, PluginSettingTab, Setting, Modal, Notice } from "obsidian";
 import type PandocPlugin from "./MdTexPlugin";
+import { DEFAULT_PROFILE, ProfileSettings } from "./MdTexPluginSettings";
+
+/**
+ * プロファイル名を入力するためのモーダル
+ */
+class ProfileNameModal extends Modal {
+  result: string;
+  onSubmit: (result: string) => void;
+
+  constructor(app: App, onSubmit: (result: string) => void, public currentName: string = "") {
+    super(app);
+    this.onSubmit = onSubmit;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.createEl("h2", { text: "Profile Name" });
+    const text = contentEl.createEl("input", { type: "text", value: this.currentName });
+    text.style.width = "100%";
+    
+    const buttonContainer = contentEl.createDiv();
+    buttonContainer.style.textAlign = "right";
+    buttonContainer.style.marginTop = "1rem";
+    
+    const saveButton = buttonContainer.createEl("button", { text: "Save" });
+    saveButton.onclick = () => {
+      this.result = text.value.trim();
+      if (this.result) {
+        this.close();
+        this.onSubmit(this.result);
+      }
+    };
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
 
 /**
  * 設定タブクラス
- * SettingTabを通じてユーザが入力・変更するUIを作成
  */
 export class PandocPluginSettingTab extends PluginSettingTab {
   plugin: PandocPlugin;
   language: "en" | "jp";
 
-  constructor(app: any, plugin: PandocPlugin) {
+  constructor(app: App, plugin: PandocPlugin) {
     super(app, plugin);
     this.plugin = plugin;
-    this.language = "jp"; // デフォルトは日本語
+    this.language = "jp";
   }
 
   display(): void {
@@ -28,7 +60,70 @@ export class PandocPluginSettingTab extends PluginSettingTab {
 
     containerEl.createEl("h2", { text: "Pandoc Plugin Settings" });
 
-    // 言語トグル
+    // --- Profile Management UI ---
+    containerEl.createEl("h3", { text: "Profiles / プロファイル" });
+
+    new Setting(containerEl)
+      .setName("Active Profile / アクティブなプロファイル")
+      .setDesc("Select the setting profile to use. / 使用する設定プロファイルを選択します。")
+      .addDropdown(dropdown => {
+        const profiles = this.plugin.settings.profiles;
+        Object.keys(profiles).forEach(name => {
+          dropdown.addOption(name, name);
+        });
+        dropdown
+          .setValue(this.plugin.settings.activeProfile)
+          .onChange(async (value) => {
+            this.plugin.settings.activeProfile = value;
+            await this.plugin.saveSettings();
+            this.display(); // Refresh the settings tab
+          });
+      });
+
+    new Setting(containerEl)
+        .setName("Manage Profiles / プロファイル管理")
+        .addButton(btn => btn.setButtonText("New / 新規作成").onClick(() => {
+            new ProfileNameModal(this.app, async (name) => {
+                if (this.plugin.settings.profiles[name]) {
+                    new Notice(`Profile "${name}" already exists.`);
+                    return;
+                }
+                this.plugin.settings.profiles[name] = JSON.parse(JSON.stringify(DEFAULT_PROFILE)); // Deep copy
+                this.plugin.settings.activeProfile = name;
+                await this.plugin.saveSettings();
+                this.display();
+            }).open();
+        }))
+        .addButton(btn => btn.setButtonText("Rename / 名前変更").onClick(() => {
+            const oldName = this.plugin.settings.activeProfile;
+            new ProfileNameModal(this.app, async (newName) => {
+                if (this.plugin.settings.profiles[newName]) {
+                    new Notice(`Profile "${newName}" already exists.`);
+                    return;
+                }
+                this.plugin.settings.profiles[newName] = this.plugin.settings.profiles[oldName];
+                delete this.plugin.settings.profiles[oldName];
+                this.plugin.settings.activeProfile = newName;
+                await this.plugin.saveSettings();
+                this.display();
+            }, oldName).open();
+        }))
+        .addButton(btn => btn.setButtonText("Delete / 削除").setIcon("trash").onClick(async () => {
+            if (Object.keys(this.plugin.settings.profiles).length <= 1) {
+                new Notice("Cannot delete the last profile.");
+                return;
+            }
+            const nameToDelete = this.plugin.settings.activeProfile;
+            delete this.plugin.settings.profiles[nameToDelete];
+            this.plugin.settings.activeProfile = Object.keys(this.plugin.settings.profiles)[0];
+            await this.plugin.saveSettings();
+            this.display();
+        }));
+
+
+    // --- General Settings UI ---
+    containerEl.createEl("h3", { text: "Active Profile Settings / アクティブなプロファイル設定" });
+    
     new Setting(containerEl)
       .setName("Language / 言語")
       .setDesc("Switch between English and Japanese. / 英語と日本語を切り替えます。")
@@ -40,447 +135,78 @@ export class PandocPluginSettingTab extends PluginSettingTab {
             this.display();
           })
       );
-
-    // 字句（日本語/英語）の切り替えのための辞書
-    const desc = {
-      pandocPath: {
-        en: "Path to the Pandoc executable.",
-        jp: "Pandoc実行ファイルのパスを指定します。",
-      },
-      pandocExtraArgs: {
-        en: "Extra arguments for Pandoc (space-separated).",
-        jp: "Pandocに渡す追加オプション（スペース区切り）。",
-      },
-      searchDirectory: {
-        en: "Root directory for searching images/files.",
-        jp: "画像等を検索するルートディレクトリ。",
-      },
-      headerIncludes: {
-        en: "Custom LaTeX header includes (YAML).",
-        jp: "カスタムLaTeXヘッダ（YAML形式）。",
-      },
-      outputDirectory: {
-        en: "Directory for generated files (blank = vault root).",
-        jp: "生成ファイルを保存するディレクトリ（空欄=Vaultルート）。",
-      },
-      deleteIntermediateFiles: {
-        en: "Delete .temp.md after conversion.",
-        jp: "変換後に一時Markdownファイルを削除。",
-      },
-      pandocCrossrefPath: {
-        en: "Path to pandoc-crossref (blank = from PATH).",
-        jp: "pandoc-crossrefのパス（空欄=PATHから検索）。",
-      },
-      figureLabel: {
-        en: "Label for figures (e.g. Figure).",
-        jp: "図のラベル（例：図）。",
-      },
-      figPrefix: {
-        en: "Prefix for figures (e.g. Fig.).",
-        jp: "図のプレフィックス（例：図）。",
-      },
-      tableLabel: {
-        en: "Label for tables (e.g. Table).",
-        jp: "表のラベル（例：表）。",
-      },
-      tblPrefix: {
-        en: "Prefix for tables (e.g. Tbl.).",
-        jp: "表のプレフィックス（例：表）。",
-      },
-      codeLabel: {
-        en: "Label for code blocks (e.g. Code).",
-        jp: "コードブロックのラベル（例：コード）。",
-      },
-      lstPrefix: {
-        en: "Prefix for code blocks (e.g. Code).",
-        jp: "コードブロックのプレフィックス（例：コード）。",
-      },
-      equationLabel: {
-        en: "Label for equations (e.g. Equation).",
-        jp: "数式のラベル（例：式）。",
-      },
-      eqnPrefix: {
-        en: "Prefix for equations (e.g. Eq.).",
-        jp: "数式のプレフィックス（例：式）。",
-      },
-      imageScale: {
-        en: "Default image scale (e.g. width=0.8\\linewidth).",
-        jp: "画像のデフォルトスケール（例：width=0.8\\linewidth）。",
-      },
-      usePageNumber: {
-        en: "Enable page numbering in PDF.",
-        jp: "PDFにページ番号を付ける。",
-      },
-      marginSize: {
-        en: "Margin size (e.g. 1in, 20mm).",
-        jp: "余白サイズ（例：1in、20mm）。",
-      },
-      fontSize: {
-        en: "Font size (e.g. 12pt).",
-        jp: "フォントサイズ（例：12pt）。",
-      },
-      documentClass: {
-        en: "Document class for LaTeX output.ltjsarticle, ltjsreport, ltjsbook",
-        jp: "LaTeX出力のドキュメントクラス。例:ltjsarticle, ltjsreport, ltjsbook",
-      },
-      outputFormat: {
-        en: "Default output format (pdf, latex, docx...).",
-        jp: "デフォルト出力形式（pdf, latex, docxなど）。",
-      },
-      latexEngine: {
-        en: "LaTeX engine (lualatex, xelatex...).",
-        jp: "LaTeXエンジン（lualatex, xelatexなど）。",
-      },
-      inkscapePath: {
-        en: "Path to Inkscape (for SVG conversion).",
-        jp: "Inkscapeのパス（SVG変換用）。",
-      },
-      mermaidCliPath: {
-        en: "Path to Mermaid CLI (for SVG conversion).",
-        jp: "Mermaid CLIのパス（SVG変換用）。",
-      },
-    };
-
-    // 辞書のキーから翻訳を取得するヘルパー
-    const t = (key: keyof typeof desc) => desc[key][this.language];
-
-    // 各種設定項目を追加していく
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "Pandocパス" : "Pandoc Path")
-      .setDesc(t("pandocPath"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.pandocPath)
-          .onChange(async (value) => {
-            this.plugin.settings.pandocPath = value.trim();
+    
+    // 現在アクティブなプロファイルの設定を取得
+    const activeSettings = this.plugin.getActiveProfileSettings();
+    if (!activeSettings) {
+        containerEl.createEl('p', {text: 'Error: Active profile not found. Please create a new profile.'});
+        return;
+    }
+    
+    const createSetting = (key: keyof ProfileSettings, name: {en: string, jp: string}, desc: {en: string, jp: string}, type: 'text' | 'textarea' | 'toggle' | 'dropdown', options?: any) => {
+        const setting = new Setting(containerEl)
+            .setName(this.language === 'jp' ? name.jp : name.en)
+            .setDesc(this.language === 'jp' ? desc.jp : desc.en);
+        
+        const changeHandler = async (value: any) => {
+            (activeSettings[key] as any) = typeof value === 'string' ? value.trim() : value;
             await this.plugin.saveSettings();
-          })
-      );
+        };
 
-    new Setting(containerEl)
-      .setName(
-        this.language === "jp" ? "Pandoc追加オプション" : "Pandoc Extra Args"
-      )
-      .setDesc(t("pandocExtraArgs"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.pandocExtraArgs)
-          .onChange(async (value) => {
-            this.plugin.settings.pandocExtraArgs = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
+        switch (type) {
+            case 'textarea':
+                setting.addTextArea(tc => tc.setValue(activeSettings[key] as string).onChange(changeHandler));
+                break;
+            case 'toggle':
+                setting.addToggle(tg => tg.setValue(activeSettings[key] as boolean).onChange(changeHandler));
+                break;
+            case 'dropdown':
+                 setting.addDropdown(dd => {
+                     options.forEach((opt: [string, string]) => dd.addOption(opt[0], opt[1]));
+                     dd.setValue(activeSettings[key] as string).onChange(changeHandler);
+                 });
+                 break;
+            default: // text
+                setting.addText(txt => txt.setValue(activeSettings[key] as string).onChange(changeHandler));
+                break;
+        }
+    }
 
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "検索ディレクトリ" : "Search Directory")
-      .setDesc(t("searchDirectory"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.searchDirectory)
-          .onChange(async (value) => {
-            this.plugin.settings.searchDirectory = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
+    // 各種設定項目
+    createSetting('pandocPath', { en: 'Pandoc Path', jp: 'Pandocパス' }, { en: 'Path to Pandoc executable.', jp: 'Pandoc実行ファイルのパス。' }, 'text');
+    createSetting('pandocExtraArgs', { en: 'Pandoc Extra Args', jp: 'Pandoc追加オプション' }, { en: 'Extra arguments for Pandoc (space-separated).', jp: 'Pandoc追加オプション（スペース区切り）。' }, 'text');
+    createSetting('pandocCrossrefPath', { en: 'pandoc-crossref Path', jp: 'pandoc-crossrefパス' }, { en: 'Path to pandoc-crossref executable.', jp: 'pandoc-crossref実行ファイルのパス。' }, 'text');
+    createSetting('searchDirectory', { en: 'Search Directory', jp: '検索ディレクトリ' }, { en: 'Root directory for searching images.', jp: '画像を検索するルートディレクトリ。' }, 'text');
+    createSetting('outputDirectory', { en: 'Output Directory', jp: '出力ディレクトリ' }, { en: 'Directory for generated files (blank = vault root).', jp: '生成ファイルの保存先（空欄=Vaultルート）。' }, 'text');
+    createSetting('latexEngine', { en: 'LaTeX Engine', jp: 'LaTeXエンジン' }, { en: 'e.g., lualatex, xelatex', jp: '例: lualatex, xelatex' }, 'text');
+    createSetting('documentClass', { en: 'Document Class', jp: 'ドキュメントクラス' }, { en: 'e.g., ltjarticle, beamer', jp: '例: ltjarticle, beamer' }, 'text');
+    createSetting('documentClassOptions', { en: 'Document Class Options', jp: 'ドキュメントクラスオプション' }, { en: 'e.g., dvipdfmx,12pt', jp: '例: dvipdfmx,12pt' }, 'text');
+    createSetting('fontSize', { en: 'Font Size', jp: 'フォントサイズ' }, { en: 'e.g., 12pt', jp: '例: 12pt' }, 'text');
+    createSetting('marginSize', { en: 'Margin Size', jp: '余白サイズ' }, { en: 'e.g., 25mm', jp: '例: 25mm' }, 'text');
+    createSetting('imageScale', { en: 'Image Scale', jp: '画像スケール' }, { en: 'e.g., width=0.8\\textwidth', jp: '例: width=0.8\\textwidth' }, 'text');
 
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "ヘッダIncludes" : "Header Includes")
-      .setDesc(t("headerIncludes"))
-      .addTextArea((textArea) =>
-        textArea
-          .setValue(this.plugin.settings.headerIncludes)
-          .onChange(async (value) => {
-            this.plugin.settings.headerIncludes = value;
-            await this.plugin.saveSettings();
-          })
-      );
+    createSetting('outputFormat', {en: 'Default Output Format', jp: 'デフォルト出力形式'}, {en: 'Default format for ribbon icon.', jp: 'リボンアイコンのデフォルト形式。'}, 'dropdown', [['pdf', 'pdf'], ['latex', 'latex'], ['docx', 'docx']]);
+    
+    // Toggles
+    createSetting('useStandalone', { en: 'Use --standalone', jp: '--standaloneを使う' }, { en: 'Pass --standalone option to pandoc.', jp: 'pandocに--standaloneオプションを渡す。' }, 'toggle');
+    createSetting('usePandocCrossref', { en: 'Use pandoc-crossref', jp: 'pandoc-crossrefを使う' }, { en: 'Enable pandoc-crossref filter.', jp: 'pandoc-crossrefフィルタを有効にする。' }, 'toggle');
+    createSetting('usePageNumber', { en: 'Enable Page Numbering', jp: 'ページ番号を付ける' }, { en: 'Enable page numbering in PDF.', jp: 'PDFにページ番号を付ける。' }, 'toggle');
+    createSetting('useMarginSize', { en: 'Enable Margin Size', jp: '余白サイズを有効にする' }, { en: 'Enable geometry:margin option.', jp: 'geometry:marginオプションを有効にする。' }, 'toggle');
+    createSetting('deleteIntermediateFiles', { en: 'Delete Intermediate Files', jp: '中間ファイルを削除' }, { en: '.temp.md after conversion.', jp: '変換後に.temp.mdを削除。' }, 'toggle');
 
-    new Setting(containerEl)
-      .setName(
-        this.language === "jp" ? "出力ディレクトリ" : "Output Directory"
-      )
-      .setDesc(t("outputDirectory"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.outputDirectory)
-          .onChange(async (value) => {
-            this.plugin.settings.outputDirectory = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
+    // Labels and Prefixes
+    containerEl.createEl("h4", { text: "Labels & Prefixes / ラベルとプレフィックス" });
+    createSetting('figureLabel', { en: 'Figure Label', jp: '図のラベル' }, { en: 'e.g., Figure', jp: '例: 図' }, 'text');
+    createSetting('figPrefix', { en: 'Figure Prefix', jp: '図のプレフィックス' }, { en: 'e.g., Fig.', jp: '例: 図' }, 'text');
+    createSetting('tableLabel', { en: 'Table Label', jp: '表のラベル' }, { en: 'e.g., Table', jp: '例: 表' }, 'text');
+    createSetting('tblPrefix', { en: 'Table Prefix', jp: '表のプレフィックス' }, { en: 'e.g., Table', jp: '例: 表' }, 'text');
+    createSetting('codeLabel', { en: 'Code Label', jp: 'コードのラベル' }, { en: 'e.g., Code', jp: '例: コード' }, 'text');
+    createSetting('lstPrefix', { en: 'Code Prefix', jp: 'コードのプレフィックス' }, { en: 'e.g., Code', jp: '例: コード' }, 'text');
+    createSetting('equationLabel', { en: 'Equation Label', jp: '数式のラベル' }, { en: 'e.g., Equation', jp: '例: 式' }, 'text');
+    createSetting('eqnPrefix', { en: 'Equation Prefix', jp: '数式のプレフィックス' }, { en: 'e.g., Eq.', jp: '例: 式' }, 'text');
 
-    new Setting(containerEl)
-      .setName(
-        this.language === "jp" ? "中間ファイルを削除" : "Delete Intermediate Files"
-      )
-      .setDesc(t("deleteIntermediateFiles"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.deleteIntermediateFiles)
-          .onChange(async (value) => {
-            this.plugin.settings.deleteIntermediateFiles = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(
-        this.language === "jp" ? "pandoc-crossrefパス" : "pandoc-crossref Path"
-      )
-      .setDesc(t("pandocCrossrefPath"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.pandocCrossrefPath)
-          .onChange(async (value) => {
-            this.plugin.settings.pandocCrossrefPath = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // pandoc-crossref使用有無
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "pandoc-crossrefを使う" : "Use pandoc-crossref")
-      .setDesc(this.language === "jp" ? "pandoc-crossrefフィルタを有効にするかどうか。" : "Enable pandoc-crossref filter.")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.usePandocCrossref)
-          .onChange(async (value) => {
-            this.plugin.settings.usePandocCrossref = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // 図のラベルとプレフィックス
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "図のラベル" : "Figure Label")
-      .setDesc(t("figureLabel"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.figureLabel)
-          .onChange(async (value) => {
-            this.plugin.settings.figureLabel = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "図のプレフィックス" : "Figure Prefix")
-      .setDesc(t("figPrefix"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.figPrefix)
-          .onChange(async (value) => {
-            this.plugin.settings.figPrefix = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // 表のラベルとプレフィックス
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "表のラベル" : "Table Label")
-      .setDesc(t("tableLabel"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.tableLabel)
-          .onChange(async (value) => {
-            this.plugin.settings.tableLabel = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "表のプレフィックス" : "Table Prefix")
-      .setDesc(t("tblPrefix"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.tblPrefix)
-          .onChange(async (value) => {
-            this.plugin.settings.tblPrefix = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // コードのラベルとプレフィックス
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "コードのラベル" : "Code Label")
-      .setDesc(t("codeLabel"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.codeLabel)
-          .onChange(async (value) => {
-            this.plugin.settings.codeLabel = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "コードのプレフィックス" : "Code Prefix")
-      .setDesc(t("lstPrefix"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.lstPrefix)
-          .onChange(async (value) => {
-            this.plugin.settings.lstPrefix = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // 数式のラベルとプレフィックス
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "数式のラベル" : "Equation Label")
-      .setDesc(t("equationLabel"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.equationLabel)
-          .onChange(async (value) => {
-            this.plugin.settings.equationLabel = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "数式のプレフィックス" : "Equation Prefix")
-      .setDesc(t("eqnPrefix"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.eqnPrefix)
-          .onChange(async (value) => {
-            this.plugin.settings.eqnPrefix = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // 画像スケール
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "画像スケール" : "Image Scale")
-      .setDesc(t("imageScale"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.imageScale)
-          .onChange(async (value) => {
-            this.plugin.settings.imageScale = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // ページ番号
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "ページ番号" : "Enable Page Numbering")
-      .setDesc(t("usePageNumber"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.usePageNumber)
-          .onChange(async (value) => {
-            this.plugin.settings.usePageNumber = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // 余白サイズ
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "余白サイズ" : "Margin Size")
-      .setDesc(t("marginSize"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.marginSize)
-          .onChange(async (value) => {
-            this.plugin.settings.marginSize = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // 余白サイズ有効/無効
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "余白サイズを有効にする" : "Enable Margin Size")
-      .setDesc(this.language === "jp" ? "余白サイズ（geometry:margin）オプションを有効にするかどうか。" : "Enable geometry:margin option for margin size.")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.useMarginSize)
-          .onChange(async (value) => {
-            this.plugin.settings.useMarginSize = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // ドキュメントクラス
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "ドキュメントクラス" : "Document Class")
-      .setDesc(t("documentClass"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.documentClass)
-          .onChange(async (value) => {
-            this.plugin.settings.documentClass = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // ドキュメントクラスのオプション
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "ドキュメントクラスのオプション" : "Document Class Options")
-      .setDesc(this.language === "jp" ? "例: dvipdfmx,12pt など。空欄の場合はオプションなし。" : "e.g. dvipdfmx,12pt. Leave blank for none.")
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.documentClassOptions)
-          .onChange(async (value) => {
-            this.plugin.settings.documentClassOptions = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // フォントサイズ
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "フォントサイズ" : "Font Size")
-      .setDesc(t("fontSize"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.fontSize)
-          .onChange(async (value) => {
-            this.plugin.settings.fontSize = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // 出力形式
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "出力形式" : "Output Format")
-      .setDesc(t("outputFormat"))
-      .addDropdown((drop) =>
-        drop
-          .addOption("pdf", "pdf")
-          .addOption("latex", "latex")
-          .addOption("docx", "docx")
-          .setValue(this.plugin.settings.outputFormat)
-          .onChange(async (value) => {
-            this.plugin.settings.outputFormat = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // LaTeXエンジン
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "LaTeXエンジン" : "LaTeX Engine")
-      .setDesc(t("latexEngine"))
-      .addText((text) =>
-        text
-          .setValue(this.plugin.settings.latexEngine)
-          .onChange(async (value) => {
-            this.plugin.settings.latexEngine = value.trim();
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // --standalone使用有無
-    new Setting(containerEl)
-      .setName(this.language === "jp" ? "--standaloneを使う" : "Use --standalone")
-      .setDesc(this.language === "jp" ? "pandocに--standaloneオプションを渡すかどうか。" : "Pass --standalone option to pandoc.")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.useStandalone)
-          .onChange(async (value) => {
-            this.plugin.settings.useStandalone = value;
-            await this.plugin.saveSettings();
-          })
-      );
+    // Header Includes
+    containerEl.createEl("h4", { text: "Header Includes" });
+    createSetting('headerIncludes', { en: 'Header Includes', jp: 'ヘッダIncludes' }, { en: 'Custom LaTeX header includes (YAML).', jp: 'カスタムLaTeXヘッダ（YAML形式）。' }, 'textarea');
   }
 }
