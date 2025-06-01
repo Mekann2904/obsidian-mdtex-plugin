@@ -1,6 +1,6 @@
 // MdTexPluginSettingTab.ts
 
-import { App, PluginSettingTab, Setting, Modal, Notice } from "obsidian";
+import { App, PluginSettingTab, Setting, Modal, Notice, Menu, TextComponent, TextAreaComponent } from "obsidian";
 import type PandocPlugin from "./MdTexPlugin";
 import { DEFAULT_PROFILE, ProfileSettings } from "./MdTexPluginSettings";
 
@@ -153,10 +153,57 @@ export class PandocPluginSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
         };
 
+        // 他プロファイルの値を取得
+        const otherProfiles = Object.entries(this.plugin.settings.profiles)
+            .filter(([profileName]) => profileName !== this.plugin.settings.activeProfile);
+        const otherProfileValues = otherProfiles
+            .map(([_, profile]) => profile[key])
+            .filter((v, i, arr) => typeof v === 'string' && v && arr.indexOf(v) === i) as string[];
+        const shouldShowSuggestButton = otherProfiles.length > 0;
+
         switch (type) {
-            case 'textarea':
-                setting.addTextArea(tc => tc.setValue(activeSettings[key] as string).onChange(changeHandler));
+            case 'textarea': {
+                let textAreaComponent: TextAreaComponent;
+                setting.addTextArea((tc: TextAreaComponent) => {
+                    textAreaComponent = tc;
+                    tc.setValue(activeSettings[key] as string).onChange(changeHandler);
+                    tc.inputEl.addEventListener('input', (e) => {
+                        const value = tc.inputEl.value;
+                        if (value.endsWith('@') && shouldShowSuggestButton && otherProfileValues.length > 0) {
+                            const menu = new Menu();
+                            otherProfileValues.forEach(val => {
+                                menu.addItem((item: any) => item.setTitle(val).onClick(() => {
+                                    tc.setValue(val);
+                                    changeHandler(val);
+                                }));
+                            });
+                            const rect = tc.inputEl.getBoundingClientRect();
+                            const event = new MouseEvent('click', {clientX: rect.left, clientY: rect.bottom});
+                            menu.showAtMouseEvent(event);
+                        }
+                    });
+                });
+                if (shouldShowSuggestButton) {
+                    setting.addExtraButton(btn => {
+                        btn.setIcon('down-chevron')
+                           .setTooltip(this.language === 'jp' ? '他プロファイルから選択' : 'Select from other profiles')
+                           .onClick(() => {
+                               const menu = new Menu();
+                               otherProfileValues.forEach(val => {
+                                   menu.addItem((item: any) => item.setTitle(val).onClick(() => {
+                                       textAreaComponent.inputEl.value = val;
+                                       textAreaComponent.inputEl.dispatchEvent(new Event('input'));
+                                       changeHandler(val);
+                                   }));
+                               });
+                               const rect = btn.extraSettingsEl.getBoundingClientRect();
+                               const event = new MouseEvent('click', {clientX: rect.left, clientY: rect.bottom});
+                               menu.showAtMouseEvent(event);
+                           });
+                    });
+                }
                 break;
+            }
             case 'toggle':
                 setting.addToggle(tg => tg.setValue(activeSettings[key] as boolean).onChange(changeHandler));
                 break;
@@ -166,9 +213,48 @@ export class PandocPluginSettingTab extends PluginSettingTab {
                      dd.setValue(activeSettings[key] as string).onChange(changeHandler);
                  });
                  break;
-            default: // text
-                setting.addText(txt => txt.setValue(activeSettings[key] as string).onChange(changeHandler));
+            default: { // text
+                let textComponent: TextComponent;
+                setting.addText((txt: TextComponent) => {
+                    textComponent = txt;
+                    txt.setValue(activeSettings[key] as string).onChange(changeHandler);
+                    txt.inputEl.addEventListener('input', (e) => {
+                        const value = txt.inputEl.value;
+                        if (value.endsWith('@') && shouldShowSuggestButton && otherProfileValues.length > 0) {
+                            const menu = new Menu();
+                            otherProfileValues.forEach(val => {
+                                menu.addItem((item: any) => item.setTitle(val).onClick(() => {
+                                    txt.setValue(val);
+                                    changeHandler(val);
+                                }));
+                            });
+                            const rect = txt.inputEl.getBoundingClientRect();
+                            const event = new MouseEvent('click', {clientX: rect.left, clientY: rect.bottom});
+                            menu.showAtMouseEvent(event);
+                        }
+                    });
+                });
+                if (shouldShowSuggestButton) {
+                    setting.addExtraButton(btn => {
+                        btn.setIcon('down-chevron')
+                           .setTooltip(this.language === 'jp' ? '他プロファイルから選択' : 'Select from other profiles')
+                           .onClick(() => {
+                               const menu = new Menu();
+                               otherProfileValues.forEach(val => {
+                                   menu.addItem((item: any) => item.setTitle(val).onClick(() => {
+                                       textComponent.inputEl.value = val;
+                                       textComponent.inputEl.dispatchEvent(new Event('input'));
+                                       changeHandler(val);
+                                   }));
+                               });
+                               const rect = btn.extraSettingsEl.getBoundingClientRect();
+                               const event = new MouseEvent('click', {clientX: rect.left, clientY: rect.bottom});
+                               menu.showAtMouseEvent(event);
+                           });
+                    });
+                }
                 break;
+            }
         }
     }
 
