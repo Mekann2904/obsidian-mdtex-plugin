@@ -213,7 +213,11 @@ export default class PandocPlugin extends Plugin {
 
       const pandocProcess = spawn(command, args, { stdio: "pipe", shell: true, env: { ...process.env, PATH: process.env.PATH ?? "" } });
 
-      pandocProcess.stderr?.on("data", (data) => new Notice(`Pandoc error: ${data.toString().trim()}`));
+      pandocProcess.stderr?.on("data", (data) => {
+        const msg = data.toString().trim();
+        new Notice(`Pandoc error: ${msg}`);
+        console.error(`Pandoc error: ${msg}`);
+      });
       pandocProcess.stdout?.on("data", (data) => console.log(`Pandoc output: ${data.toString()}`));
       pandocProcess.on("close", (code) => {
         if (code === 0) {
