@@ -251,8 +251,30 @@ export default class PandocPlugin extends Plugin {
 
   async loadSettings() {
     let loadedData = await this.loadData();
-    // 旧バージョンからの移行処理
-    if (loadedData && !loadedData.profiles) {
+    // profilesArrayがあればそれを優先
+    if (loadedData && Array.isArray(loadedData.profilesArray)) {
+      const profilesObj: { [key: string]: ProfileSettings } = {};
+      for (const p of loadedData.profilesArray) {
+        const name = p.name || 'Default';
+        profilesObj[name] = { ...DEFAULT_PROFILE, ...p };
+      }
+      loadedData = {
+        profiles: profilesObj,
+        activeProfile: loadedData.currentProfileName || loadedData.activeProfile || Object.keys(profilesObj)[0] || 'Default',
+      };
+    } else if (loadedData && Array.isArray(loadedData.profiles)) {
+      // profiles: [{name: 'xxx', ...}, ...] → { name: ProfileSettings, ... }
+      const profilesObj: { [key: string]: ProfileSettings } = {};
+      for (const p of loadedData.profiles) {
+        const name = p.name || 'Default';
+        profilesObj[name] = { ...DEFAULT_PROFILE, ...p };
+      }
+      loadedData = {
+        profiles: profilesObj,
+        activeProfile: loadedData.currentProfileName || loadedData.activeProfile || Object.keys(profilesObj)[0] || 'Default',
+      };
+    } else if (loadedData && !loadedData.profiles) {
+      // 旧バージョンからの移行処理
       console.log("Migrating settings to new profile format.");
       const oldSettings = loadedData;
       loadedData = {
@@ -264,7 +286,14 @@ export default class PandocPlugin extends Plugin {
   }
 
   async saveSettings() {
-    await this.saveData(this.settings);
+    // 連想配列→配列
+    const profilesArray = Object.entries(this.settings.profiles).map(([name, data]) => ({ name, ...data }));
+    // 保存用データ
+    const saveData = {
+      ...this.settings,
+      profilesArray,
+    };
+    await this.saveData(saveData);
   }
 
   private loadExternalStylesheet() {
