@@ -345,12 +345,23 @@ export default class PandocPlugin extends Plugin {
       const args = [`"${inputFile}"`, "-o", `"${outputFile}"`];
       if (format === "pdf") {
         args.push(`--pdf-engine=${this.settings.latexEngine}`);
+        if (this.settings.documentClass === "beamer") {
+          args.push("-t", "beamer");
+        }
       } else if (format === "latex") {
         args.push("-t", "latex");
+        if (this.settings.documentClass === "beamer") {
+          args.push("-t", "beamer");
+        }
       }
       args.push("--listings");
-      const crossrefFilter = this.settings.pandocCrossrefPath.trim() || "pandoc-crossref";
-      args.push("-F", `"${crossrefFilter}"`);
+
+      if (this.settings.usePandocCrossref) {
+        const crossrefFilter =
+          this.settings.pandocCrossrefPath.trim() || "pandoc-crossref";
+        args.push("-F", `"${crossrefFilter}"`);
+      }
+
       args.push("-M", "listings=true");
       args.push("-M", `figureTitle=${this.settings.figureLabel}`);
       args.push("-M", `figPrefix=${this.settings.figPrefix}`);
@@ -359,16 +370,26 @@ export default class PandocPlugin extends Plugin {
       args.push("-M", `listingTitle=${this.settings.codeLabel}`);
       args.push("-M", `lstPrefix=${this.settings.lstPrefix}`);
       args.push("-M", `eqnPrefix=${this.settings.eqnPrefix}`);
-      args.push("-V", `geometry:margin=${this.settings.marginSize}`);
+
+      if (this.settings.useMarginSize) {
+        args.push("-V", `geometry:margin=${this.settings.marginSize}`);
+      }
       if (!this.settings.usePageNumber) {
         args.push("-V", "pagestyle=empty");
       }
       args.push("-V", `fontsize=${this.settings.fontSize}`);
       args.push("-V", `documentclass=${this.settings.documentClass}`);
+      if (this.settings.documentClassOptions && this.settings.documentClassOptions.trim() !== "") {
+        args.push("-V", `classoption=${this.settings.documentClassOptions}`);
+      }
       args.push("--highlight-style=tango");
       if (this.settings.pandocExtraArgs.trim() !== "") {
         const extra = this.settings.pandocExtraArgs.split(/\s+/);
         args.push(...extra);
+      }
+
+      if (this.settings.useStandalone) {
+        args.push("--standalone");
       }
 
       console.log("Running pandoc with args:", args);
@@ -395,11 +416,11 @@ export default class PandocPlugin extends Plugin {
           console.error(`Pandoc process exited with code ${code}`);
           if (code === 83) {
             new Notice(
-              `Error: Pandoc exited with code 83.\nCheck if "${crossrefFilter}" is installed.`
+              `Error: Pandoc exited with code 83.\nCheck if pandoc-crossref isインストールされているか確認してください。`
             );
           } else if (code === 127) {
             new Notice(
-              `Error: Pandoc exited with code 127.\nCheck if pandoc/crossref are in PATH.`
+              `Error: Pandoc exited with code 127.\nPandocやpandoc-crossrefがPATHにあるか確認してください。`
             );
           } else {
             new Notice(`Error: Pandoc process exited with code ${code}`);
