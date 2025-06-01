@@ -9,9 +9,7 @@ import * as path from "path";
 import { PandocPluginSettings, ProfileSettings, DEFAULT_SETTINGS, DEFAULT_PROFILE } from "./MdTexPluginSettings";
 import { PandocPluginSettingTab } from "./MdTexPluginSettingTab";
 
-// ※ ここでは、replaceMermaidDiagrams 関数が返り値として
-// { content: string, generatedPdfs: string[] } を返すことを想定しています。
-import { replaceMermaidDiagrams } from "./Mermaid-PDF";
+import {MyLabelEditorSuggest,MyLabelSuggest } from "./AutoComplete";
 
 /**
  * メインプラグインクラス
@@ -27,6 +25,9 @@ export default class PandocPlugin extends Plugin {
     return this.settings.profiles[activeProfileName];
   }
 
+  /**
+   * プラグイン読み込み時の処理
+   */
   async onload() {
     console.log("PandocPlugin loaded!");
     await this.loadSettings();
@@ -55,6 +56,10 @@ export default class PandocPlugin extends Plugin {
     console.log("MdTexPlugin: onload finished.");
   }
 
+  /**
+   * 現在アクティブなMarkdownファイルを指定フォーマットへ変換
+   * @param format "pdf"|"latex"|"docx"など
+   */
   async convertCurrentPage(format: string) {
     const activeFile = this.app.workspace.getActiveFile();
     if (!activeFile) {
@@ -75,22 +80,12 @@ export default class PandocPlugin extends Plugin {
       return;
     }
 
-    // mermaidCliPath が設定されている場合、念のため PATH に追加
-    if (this.settings.mermaidCliPath && typeof this.settings.mermaidCliPath === "string") {
-      const mermaidDir = path.dirname(this.settings.mermaidCliPath);
-      const currentPath = process.env.PATH ?? "";
-      if (!currentPath.includes(mermaidDir)) {
-        process.env.PATH = mermaidDir + ":" + currentPath;
-        console.log("Updated PATH to include mermaidCliPath directory:", mermaidDir);
-      }
-    }
-
     new Notice(`Converting to ${format.toUpperCase()}...`);
 
     const activeProfile = this.getActiveProfileSettings();
     const fileAdapter = this.app.vault.adapter as FileSystemAdapter;
-    const fallbackBasePath = fileAdapter.getBasePath();
-    const outputDir = this.settings.outputDirectory?.trim() || fallbackBasePath;
+    const inputFilePath = fileAdapter.getFullPath(activeFile.path);
+    const baseName = path.basename(inputFilePath, ".md");
 
     const outputDir = activeProfile.outputDirectory || fileAdapter.getBasePath();
     try {
@@ -122,24 +117,6 @@ export default class PandocPlugin extends Plugin {
         } catch (err) {
           console.warn(`Failed to delete intermediate file: ${intermediateFilename}`, err);
         }
-        for (const pdf of this.convertedSvgPdfs) {
-          try {
-            await fs.unlink(pdf);
-            console.log(`Converted SVG PDF deleted: ${pdf}`);
-          } catch (err) {
-            console.warn(`Failed to delete converted SVG PDF: ${pdf}`, err);
-          }
-        }
-        for (const pdf of this.convertedMermaidPdfs) {
-          try {
-            await fs.unlink(pdf);
-            console.log(`Converted Mermaid PDF deleted: ${pdf}`);
-          } catch (err) {
-            console.warn(`Failed to delete converted Mermaid PDF: ${pdf}`, err);
-          }
-        }
-        this.convertedSvgPdfs = [];
-        this.convertedMermaidPdfs = [];
       }
     } catch (error: any) {
       new Notice(`Error generating output: ${error?.message || error}`);
@@ -195,7 +172,9 @@ export default class PandocPlugin extends Plugin {
       const activeProfile = this.getActiveProfileSettings();
       const pandocPath = activeProfile.pandocPath.trim() || "pandoc";
       const command = `"${pandocPath}"`;
+
       const args = [`"${inputFile}"`, "-o", `"${outputFile}"`];
+
       if (format === "pdf") {
         args.push(`--pdf-engine=${activeProfile.latexEngine}`);
         if (activeProfile.documentClass === "beamer") args.push("-t", "beamer");
