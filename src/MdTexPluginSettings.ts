@@ -39,6 +39,7 @@ export interface ProfileSettings {
 export interface PandocPluginSettings {
   profiles: { [key: string]: ProfileSettings };
   activeProfile: string;
+  suppressDeveloperLogs: boolean;
 }
 
 /**
@@ -126,5 +127,6 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
   profiles: {
       'Default': DEFAULT_PROFILE
   },
-  activeProfile: 'Default'
+  activeProfile: 'Default',
+  suppressDeveloperLogs: true,
 };

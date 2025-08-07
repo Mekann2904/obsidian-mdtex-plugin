@@ -29,7 +29,9 @@ export default class PandocPlugin extends Plugin {
    * プラグイン読み込み時の処理
    */
   async onload() {
-    console.log("PandocPlugin loaded!");
+    if (!this.settings?.suppressDeveloperLogs) {
+      console.log("PandocPlugin loaded!");
+    }
     await this.loadSettings();
     this.addSettingTab(new PandocPluginSettingTab(this.app, this));
 
@@ -50,10 +52,12 @@ export default class PandocPlugin extends Plugin {
       callback: () => this.convertCurrentPage("latex"),
     });
 
-    this.registerEditorSuggest(new MyLabelEditorSuggest(this.app));
+    this.registerEditorSuggest(new MyLabelEditorSuggest(this.app, this));
     this.loadExternalStylesheet();
-    this.registerEditorSuggest(new MyLabelSuggest(this.app));
-    console.log("MdTexPlugin: onload finished.");
+    this.registerEditorSuggest(new MyLabelSuggest(this.app, this));
+    if (!this.settings.suppressDeveloperLogs) {
+      console.log("MdTexPlugin: onload finished.");
+    }
   }
 
   /**
@@ -209,7 +213,9 @@ export default class PandocPlugin extends Plugin {
       if (activeProfile.pandocExtraArgs.trim()) args.push(...activeProfile.pandocExtraArgs.split(/\s+/));
       if (activeProfile.useStandalone) args.push("--standalone");
 
-      console.log("Running pandoc with args:", args);
+      if (!this.settings.suppressDeveloperLogs) {
+        console.log("Running pandoc with args:", args);
+      }
 
       const pandocProcess = spawn(command, args, { stdio: "pipe", shell: true, env: { ...process.env, PATH: process.env.PATH ?? "" } });
 
@@ -218,7 +224,11 @@ export default class PandocPlugin extends Plugin {
         new Notice(`Pandoc error: ${msg}`);
         console.error(`Pandoc error: ${msg}`);
       });
-      pandocProcess.stdout?.on("data", (data) => console.log(`Pandoc output: ${data.toString()}`));
+      pandocProcess.stdout?.on("data", (data) => {
+        if (!this.settings.suppressDeveloperLogs) {
+          console.log(`Pandoc output: ${data.toString()}`);
+        }
+      });
       pandocProcess.on("close", (code) => {
         if (code === 0) {
           new Notice(`Successfully generated: ${outputFile}`);

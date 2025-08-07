@@ -294,5 +294,17 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // Header Includes
     containerEl.createEl("h4", { text: "Header Includes" });
     createSetting('headerIncludes', { en: 'Header Includes', jp: 'ヘッダIncludes' }, { en: 'Custom LaTeX header includes (YAML).', jp: 'カスタムLaTeXヘッダ（YAML形式）。' }, 'textarea');
+
+    // Global Settings
+    containerEl.createEl("h4", { text: "Global Settings / グローバル設定" });
+    new Setting(containerEl)
+      .setName("Suppress Developer Logs / 開発者ログを抑制")
+      .setDesc("Suppress console.log messages (errors will still be shown in console). / console.logメッセージを抑制（エラーは引き続きコンソールに表示）。")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.suppressDeveloperLogs)
+        .onChange(async (value) => {
+          this.plugin.settings.suppressDeveloperLogs = value;
+          await this.plugin.saveSettings();
+        }));
   }
 }

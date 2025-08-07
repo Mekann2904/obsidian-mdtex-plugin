@@ -25,6 +25,14 @@ import {
   EventRef,
 } from "obsidian";
 
+// プラグインインスタンスの型を定義
+interface PandocPlugin {
+  getActiveProfileSettings(): any;
+  settings: {
+    suppressDeveloperLogs: boolean;
+  };
+}
+
 /**
  * 補完候補の型
  */
@@ -40,11 +48,22 @@ interface MyCompletion {
 export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
   public app: App;
   private suppressNextTrigger: boolean = false; // 再度補完を抑制するフラグ
+  private plugin: PandocPlugin | null = null;
 
-  constructor(app: App) {
+  constructor(app: App, plugin?: PandocPlugin) {
     super(app);
     this.app = app;
-    console.log("MyLabelEditorSuggest initialized.");
+    this.plugin = plugin || null;
+    if (!this.shouldSuppressLogs()) {
+      console.log("MyLabelEditorSuggest initialized.");
+    }
+  }
+
+  /**
+   * ログを抑制すべきかどうかを判定
+   */
+  private shouldSuppressLogs(): boolean {
+    return this.plugin?.settings?.suppressDeveloperLogs || false;
   }
 
   /**
@@ -56,23 +75,31 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
     file: TFile
   ): EditorSuggestContext | null {
     if (this.suppressNextTrigger) {
-      console.log("[MyLabelEditorSuggest:onTrigger] Trigger suppressed.");
+      if (!this.shouldSuppressLogs()) {
+        console.log("[MyLabelEditorSuggest:onTrigger] Trigger suppressed.");
+      }
       this.suppressNextTrigger = false; // 次回は通常動作に戻す
       return null;
     }
 
     const line = editor.getLine(cursor.line);
-    console.log("[MyLabelEditorSuggest:onTrigger] Current line:", line);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelEditorSuggest:onTrigger] Current line:", line);
+    }
 
     // `{#` または `{#}` に一致する正規表現
     const match = line.match(/(\{#[a-zA-Z0-9:]*\}?)/);
     if (!match || !match[0]) {
-      console.log("[MyLabelEditorSuggest:onTrigger] No valid match found.");
+      if (!this.shouldSuppressLogs()) {
+        console.log("[MyLabelEditorSuggest:onTrigger] No valid match found.");
+      }
       return null;
     }
 
     const foundText = match[0];
-    console.log("[MyLabelEditorSuggest:onTrigger] Match found:", foundText);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelEditorSuggest:onTrigger] Match found:", foundText);
+    }
 
     const startCh = line.indexOf(foundText);
     const endCh = startCh + foundText.length;
@@ -82,21 +109,27 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
       const nextChar = line[endCh];
       // 補完直後が英数字の場合は抑制
       if (nextChar?.match(/[\w]/)) {
-        console.log(
-          "[MyLabelEditorSuggest:onTrigger] Suppress: Alphanumeric after label."
-        );
+        if (!this.shouldSuppressLogs()) {
+          console.log(
+            "[MyLabelEditorSuggest:onTrigger] Suppress: Alphanumeric after label."
+          );
+        }
         return null;
       }
       // 補完直後がその他の非英数字の場合も抑制
       if (nextChar?.match(/[^a-zA-Z0-9]/)) {
-        console.log(
-          "[MyLabelEditorSuggest:onTrigger] Suppress: Non-alphanumeric after label."
-        );
+        if (!this.shouldSuppressLogs()) {
+          console.log(
+            "[MyLabelEditorSuggest:onTrigger] Suppress: Non-alphanumeric after label."
+          );
+        }
         return null;
       }
     }
 
-    console.log("[MyLabelEditorSuggest:onTrigger] Triggering suggestion.");
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelEditorSuggest:onTrigger] Triggering suggestion.");
+    }
     return {
       editor,
       file,
@@ -110,7 +143,9 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
    * 補完候補を提供
    */
   getSuggestions(context: EditorSuggestContext): MyCompletion[] {
-    console.log("[MyLabelEditorSuggest:getSuggestions] query:", context.query);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelEditorSuggest:getSuggestions] query:", context.query);
+    }
     const allSuggestions: MyCompletion[] = [
       { label: "{#fig:}", detail: "Figure Label" },
       { label: "{#tbl:}", detail: "Table Label" },
@@ -125,7 +160,9 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
       item.label.startsWith(queryWithoutCurly)
     );
 
-    console.log("[MyLabelEditorSuggest:getSuggestions] filtered:", filtered);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelEditorSuggest:getSuggestions] filtered:", filtered);
+    }
     return filtered;
   }
 
@@ -133,7 +170,9 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
    * 補完候補の表示
    */
   renderSuggestion(suggestion: MyCompletion, el: HTMLElement): void {
-    console.log("[MyLabelEditorSuggest:renderSuggestion]", suggestion.label);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelEditorSuggest:renderSuggestion]", suggestion.label);
+    }
 
     const labelEl = el.createDiv({ cls: "autocomplete-label" });
     labelEl.setText(suggestion.label);
@@ -157,7 +196,9 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
       return;
     }
 
-    console.log("[MyLabelEditorSuggest:selectSuggestion] Insert:", suggestion.label);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelEditorSuggest:selectSuggestion] Insert:", suggestion.label);
+    }
     editor.replaceRange(suggestion.label, start, end);
 
     // カーソルを `:` の後ろに移動
@@ -168,19 +209,25 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
         ch: start.ch + colonIndex + 1, // `:` の直後
       };
       editor.setCursor(cursorPos);
-      console.log(
-        "[MyLabelEditorSuggest:selectSuggestion] Cursor moved to:",
-        cursorPos
-      );
+      if (!this.shouldSuppressLogs()) {
+        console.log(
+          "[MyLabelEditorSuggest:selectSuggestion] Cursor moved to:",
+          cursorPos
+        );
+      }
     }
 
     // ポップアップを閉じる
     this.close();
-    console.log("[MyLabelEditorSuggest:selectSuggestion] Popup closed.");
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelEditorSuggest:selectSuggestion] Popup closed.");
+    }
 
     // 次回のトリガーを抑制
     this.suppressNextTrigger = true;
-    console.log("[MyLabelEditorSuggest:selectSuggestion] Trigger suppressed.");
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelEditorSuggest:selectSuggestion] Trigger suppressed.");
+    }
   }
 }
 
@@ -191,13 +238,17 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
  */
 export class MyLabelSuggest extends EditorSuggest<MyCompletion> {
   private labels: MyCompletion[] = []; // ファイル内のラベル一覧
+  private plugin: PandocPlugin | null = null;
 
   // イベントリファレンスを保持して、あとで offref() するために使用
   private fileModifyEventRef: EventRef | null = null;
 
-  constructor(public app: App) {
+  constructor(public app: App, plugin?: PandocPlugin) {
     super(app);
-    console.log("MyLabelSuggest initialized.");
+    this.plugin = plugin || null;
+    if (!this.shouldSuppressLogs()) {
+      console.log("MyLabelSuggest initialized.");
+    }
 
     // ファイルが更新されるたびに呼ばれるイベントをフック
     this.fileModifyEventRef = this.app.vault.on("modify", async (modifiedFile) => {
@@ -216,15 +267,19 @@ export class MyLabelSuggest extends EditorSuggest<MyCompletion> {
   }
 
   /**
-   * （オプション）
-   * このサジェストが完全に破棄されるタイミングでイベントを解除したい場合
-   * Plugin 内の onUnload() などでも構いません。
+   * ログを抑制すべきかどうかを判定
+   */
+  private shouldSuppressLogs(): boolean {
+    return this.plugin?.settings?.suppressDeveloperLogs || false;
+  }
+
+  /**
+   * プラグインのアンロード時にイベントリスナーを削除
    */
   public onunload() {
     if (this.fileModifyEventRef) {
       this.app.vault.offref(this.fileModifyEventRef);
       this.fileModifyEventRef = null;
-      console.log("[MyLabelSuggest] File modify event offref done.");
     }
   }
 
@@ -238,17 +293,23 @@ export class MyLabelSuggest extends EditorSuggest<MyCompletion> {
     file: TFile
   ): EditorSuggestContext | null {
     const lineText = editor.getLine(cursor.line);
-    console.log("[MyLabelSuggest:onTrigger] line:", lineText);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelSuggest:onTrigger] line:", lineText);
+    }
 
     // `[@` または `[@...` に一致する正規表現
     const match = lineText.match(/(\[@[a-zA-Z0-9:_-]*\]?)/);
     if (!match || !match[0]) {
-      console.log("[MyLabelSuggest:onTrigger] No valid match found.");
+      if (!this.shouldSuppressLogs()) {
+        console.log("[MyLabelSuggest:onTrigger] No valid match found.");
+      }
       return null;
     }
 
     const foundText = match[0];
-    console.log("[MyLabelSuggest:onTrigger] Match found:", foundText);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelSuggest:onTrigger] Match found:", foundText);
+    }
 
     const startCh = lineText.indexOf(foundText);
     const endCh = startCh + foundText.length;
@@ -273,14 +334,18 @@ export class MyLabelSuggest extends EditorSuggest<MyCompletion> {
    * サジェスト候補を提供
    */
   getSuggestions(context: EditorSuggestContext): MyCompletion[] {
-    console.log("[MyLabelSuggest:getSuggestions] query:", context.query);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelSuggest:getSuggestions] query:", context.query);
+    }
 
     // クエリで始まるラベルをフィルタリング
     const matched = this.labels.filter((item) =>
       item.label.startsWith(context.query)
     );
 
-    console.log("[MyLabelSuggest:getSuggestions] matched:", matched);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelSuggest:getSuggestions] matched:", matched);
+    }
     return matched;
   }
 
@@ -288,7 +353,9 @@ export class MyLabelSuggest extends EditorSuggest<MyCompletion> {
    * サジェスト候補を描画
    */
   renderSuggestion(suggestion: MyCompletion, el: HTMLElement): void {
-    console.log("[MyLabelSuggest:renderSuggestion]", suggestion.label);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelSuggest:renderSuggestion]", suggestion.label);
+    }
 
     const labelEl = el.createDiv({ cls: "autocomplete-label" });
     labelEl.setText(suggestion.label);
@@ -312,7 +379,9 @@ export class MyLabelSuggest extends EditorSuggest<MyCompletion> {
       return;
     }
 
-    console.log("[MyLabelSuggest:selectSuggestion] Insert:", suggestion.label);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelSuggest:selectSuggestion] Insert:", suggestion.label);
+    }
 
     // 候補を挿入する (例: `lst:label` → `[@lst:label]`)
     editor.replaceRange(`[@${suggestion.label}]`, start, end);
@@ -323,11 +392,15 @@ export class MyLabelSuggest extends EditorSuggest<MyCompletion> {
       ch: start.ch + suggestion.label.length + 3, // `[@` + label + `]`
     };
     editor.setCursor(cursorPos);
-    console.log("[MyLabelSuggest:selectSuggestion] Cursor moved:", cursorPos);
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelSuggest:selectSuggestion] Cursor moved:", cursorPos);
+    }
 
     // サジェストウィンドウを閉じる
     this.close();
-    console.log("[MyLabelSuggest:selectSuggestion] Popup closed.");
+    if (!this.shouldSuppressLogs()) {
+      console.log("[MyLabelSuggest:selectSuggestion] Popup closed.");
+    }
   }
 
   /**
@@ -337,7 +410,9 @@ export class MyLabelSuggest extends EditorSuggest<MyCompletion> {
     try {
       const content = await this.app.vault.read(file);
       this.labels = this.extractLabels(content);
-      console.log("[MyLabelSuggest:updateLabels] Updated labels:", this.labels);
+      if (!this.shouldSuppressLogs()) {
+        console.log("[MyLabelSuggest:updateLabels] Updated labels:", this.labels);
+      }
     } catch (err) {
       this.labels = [];
       console.error("[MyLabelSuggest:updateLabels] Failed to read file:", err);
