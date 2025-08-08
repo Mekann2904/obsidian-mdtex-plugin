@@ -111,6 +111,29 @@ export default class PandocPlugin extends Plugin {
         content = activeProfile.headerIncludes + "\n" + content;
       }
       content = this.replaceWikiLinksAndCode(content);
+      // docx変換時にTeXコマンドを置換
+      if (format === "docx") {
+        content = content
+          // \textbf{...} → **...**
+          .replace(/\\textbf\{([^}]+)\}/g, '**$1**')
+          // \textit{...} → *...*
+          .replace(/\\textit\{([^}]+)\}/g, '*$1*')
+          // \footnote{...} → ^[...]
+          .replace(/\\footnote\{([^}]+)\}/g, '^[$1]')
+          // \centerline{...} → ::: {custom-style="Center"}
+          .replace(/\\centerline\{([^}]+)\}/g, '::: {custom-style="Center"}\n$1\n:::')
+          // \rightline{...} → ::: {custom-style="Right"}
+          .replace(/\\rightline\{([^}]+)\}/g, '::: {custom-style="Right"}\n$1\n:::')
+          // \vspace{...} → 空行
+          .replace(/\\vspace\{[^}]+\}/g, '\n\n')
+          // \kenten{...} → [語]{custom-style="Kenten"}
+          .replace(/\\kenten\{([^}]+)\}/g, '[$1]{custom-style="Kenten"}')
+          // \newpage/\clearpage → OpenXML改ページ
+          .replace(/\\newpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
+          .replace(/\\clearpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
+          // \noindent → 削除
+          .replace(/\\noindent/g, '');
+      }
       await fs.writeFile(intermediateFilename, content, "utf8");
 
       const success = await this.runPandoc(intermediateFilename, outputFilename, format);
@@ -185,6 +208,17 @@ export default class PandocPlugin extends Plugin {
       } else if (format === "latex") {
         args.push("-t", "latex");
         if (activeProfile.documentClass === "beamer") args.push("-t", "beamer");
+      } else if (format === "docx") {
+        args.push("-f", "markdown+raw_html+fenced_divs+raw_attribute");
+        args.push("-t", "docx");
+        
+        // 高度なTeXコマンド変換が有効な場合のみLuaフィルタを適用
+        if (activeProfile.enableAdvancedTexCommands) {
+          const luaFilterPath = activeProfile.luaFilterPath.trim();
+          if (luaFilterPath && fsSync.existsSync(luaFilterPath)) {
+            args.push("--lua-filter", luaFilterPath);
+          }
+        }
       }
       args.push("--listings");
 

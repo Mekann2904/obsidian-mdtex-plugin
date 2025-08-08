@@ -30,6 +30,8 @@ export interface ProfileSettings {
   documentClass: string;
   documentClassOptions: string;
   useStandalone: boolean;
+  enableAdvancedTexCommands: boolean;
+  luaFilterPath: string;
 }
 
 /**
@@ -118,6 +120,8 @@ eqnPrefix: "Eq.",
 documentClass: "ltjarticle",
 documentClassOptions: "",
 useStandalone: true,
+enableAdvancedTexCommands: true,
+luaFilterPath: "tex-to-docx.lua",
 };
 
 /**
