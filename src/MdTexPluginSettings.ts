@@ -30,6 +30,8 @@ export interface ProfileSettings {
   documentClass: string;
   documentClassOptions: string;
   useStandalone: boolean;
+  enableAdvancedTexCommands: boolean;
+  luaFilterPath: string;
 }
 
 /**
@@ -39,6 +41,7 @@ export interface ProfileSettings {
 export interface PandocPluginSettings {
   profiles: { [key: string]: ProfileSettings };
   activeProfile: string;
+  suppressDeveloperLogs: boolean;
 }
 
 /**
@@ -117,6 +120,8 @@ eqnPrefix: "Eq.",
 documentClass: "ltjarticle",
 documentClassOptions: "",
 useStandalone: true,
+enableAdvancedTexCommands: true,
+luaFilterPath: "tex-to-docx.lua",
 };
 
 /**
@@ -126,5 +131,6 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
   profiles: {
       'Default': DEFAULT_PROFILE
   },
-  activeProfile: 'Default'
+  activeProfile: 'Default',
+  suppressDeveloperLogs: true,
 };

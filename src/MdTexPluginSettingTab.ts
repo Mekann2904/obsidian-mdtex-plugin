@@ -262,6 +262,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     createSetting('pandocPath', { en: 'Pandoc Path', jp: 'Pandocパス' }, { en: 'Path to Pandoc executable.', jp: 'Pandoc実行ファイルのパス。' }, 'text');
     createSetting('pandocExtraArgs', { en: 'Pandoc Extra Args', jp: 'Pandoc追加オプション' }, { en: 'Extra arguments for Pandoc (space-separated).', jp: 'Pandoc追加オプション（スペース区切り）。' }, 'text');
     createSetting('pandocCrossrefPath', { en: 'pandoc-crossref Path', jp: 'pandoc-crossrefパス' }, { en: 'Path to pandoc-crossref executable.', jp: 'pandoc-crossref実行ファイルのパス。' }, 'text');
+    createSetting('luaFilterPath', { en: 'Lua Filter Path', jp: 'Luaフィルタパス' }, { en: 'Path to Lua filter for advanced TeX command conversion (e.g., tex-to-docx.lua).', jp: '高度なTeXコマンド変換用Luaフィルタのパス（例: tex-to-docx.lua）。' }, 'text');
     createSetting('searchDirectory', { en: 'Search Directory', jp: '検索ディレクトリ' }, { en: 'Root directory for searching images.', jp: '画像を検索するルートディレクトリ。' }, 'text');
     createSetting('outputDirectory', { en: 'Output Directory', jp: '出力ディレクトリ' }, { en: 'Directory for generated files (blank = vault root).', jp: '生成ファイルの保存先（空欄=Vaultルート）。' }, 'text');
     createSetting('latexEngine', { en: 'LaTeX Engine', jp: 'LaTeXエンジン' }, { en: 'e.g., lualatex, xelatex', jp: '例: lualatex, xelatex' }, 'text');
@@ -279,6 +280,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     createSetting('usePageNumber', { en: 'Enable Page Numbering', jp: 'ページ番号を付ける' }, { en: 'Enable page numbering in PDF.', jp: 'PDFにページ番号を付ける。' }, 'toggle');
     createSetting('useMarginSize', { en: 'Enable Margin Size', jp: '余白サイズを有効にする' }, { en: 'Enable geometry:margin option.', jp: 'geometry:marginオプションを有効にする。' }, 'toggle');
     createSetting('deleteIntermediateFiles', { en: 'Delete Intermediate Files', jp: '中間ファイルを削除' }, { en: '.temp.md after conversion.', jp: '変換後に.temp.mdを削除。' }, 'toggle');
+    createSetting('enableAdvancedTexCommands', { en: 'Enable Advanced TeX Commands', jp: '高度なTeXコマンドを有効にする' }, { en: 'Enable advanced TeX command conversion for docx (\\centerline, \\rightline, \\ruby, etc.).', jp: 'docx変換時に高度なTeXコマンド変換を有効にする（\\centerline、\\rightline、\\ruby等）。' }, 'toggle');
 
     // Labels and Prefixes
     containerEl.createEl("h4", { text: "Labels & Prefixes / ラベルとプレフィックス" });
@@ -294,5 +296,17 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // Header Includes
     containerEl.createEl("h4", { text: "Header Includes" });
     createSetting('headerIncludes', { en: 'Header Includes', jp: 'ヘッダIncludes' }, { en: 'Custom LaTeX header includes (YAML).', jp: 'カスタムLaTeXヘッダ（YAML形式）。' }, 'textarea');
+
+    // Global Settings
+    containerEl.createEl("h4", { text: "Global Settings / グローバル設定" });
+    new Setting(containerEl)
+      .setName("Suppress Developer Logs / 開発者ログを抑制")
+      .setDesc("Suppress console.log messages (errors will still be shown in console). / console.logメッセージを抑制（エラーは引き続きコンソールに表示）。")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.suppressDeveloperLogs)
+        .onChange(async (value) => {
+          this.plugin.settings.suppressDeveloperLogs = value;
+          await this.plugin.saveSettings();
+        }));
   }
 }

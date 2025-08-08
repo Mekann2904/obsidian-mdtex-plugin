@@ -29,7 +29,9 @@ export default class PandocPlugin extends Plugin {
    * プラグイン読み込み時の処理
    */
   async onload() {
-    console.log("PandocPlugin loaded!");
+    if (!this.settings?.suppressDeveloperLogs) {
+      console.log("PandocPlugin loaded!");
+    }
     await this.loadSettings();
     this.addSettingTab(new PandocPluginSettingTab(this.app, this));
 
@@ -50,10 +52,23 @@ export default class PandocPlugin extends Plugin {
       callback: () => this.convertCurrentPage("latex"),
     });
 
-    this.registerEditorSuggest(new MyLabelEditorSuggest(this.app));
+    this.registerEditorSuggest(new MyLabelEditorSuggest(this.app, this));
     this.loadExternalStylesheet();
-    this.registerEditorSuggest(new MyLabelSuggest(this.app));
-    console.log("MdTexPlugin: onload finished.");
+    this.registerEditorSuggest(new MyLabelSuggest(this.app, this));
+    if (!this.settings.suppressDeveloperLogs) {
+      console.log("MdTexPlugin: onload finished.");
+    }
+  }
+
+
+  async onunload() {
+    if (!this.settings?.suppressDeveloperLogs) {
+      console.log("PandocPlugin unloading...");
+    }
+    await this.saveSettings();
+    if (!this.settings?.suppressDeveloperLogs) {
+      console.log("MdTexPlugin: settings saved.");
+    }
   }
 
   /**
@@ -107,6 +122,29 @@ export default class PandocPlugin extends Plugin {
         content = activeProfile.headerIncludes + "\n" + content;
       }
       content = this.replaceWikiLinksAndCode(content);
+      // docx変換時にTeXコマンドを置換
+      if (format === "docx") {
+        content = content
+          // \textbf{...} → **...**
+          .replace(/\\textbf\{([^}]+)\}/g, '**$1**')
+          // \textit{...} → *...*
+          .replace(/\\textit\{([^}]+)\}/g, '*$1*')
+          // \footnote{...} → ^[...]
+          .replace(/\\footnote\{([^}]+)\}/g, '^[$1]')
+          // \centerline{...} → ::: {custom-style="Center"}
+          .replace(/\\centerline\{([^}]+)\}/g, '::: {custom-style="Center"}\n$1\n:::')
+          // \rightline{...} → ::: {custom-style="Right"}
+          .replace(/\\rightline\{([^}]+)\}/g, '::: {custom-style="Right"}\n$1\n:::')
+          // \vspace{...} → 空行
+          .replace(/\\vspace\{[^}]+\}/g, '\n\n')
+          // \kenten{...} → [語]{custom-style="Kenten"}
+          .replace(/\\kenten\{([^}]+)\}/g, '[$1]{custom-style="Kenten"}')
+          // \newpage/\clearpage → OpenXML改ページ
+          .replace(/\\newpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
+          .replace(/\\clearpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
+          // \noindent → 削除
+          .replace(/\\noindent/g, '');
+      }
       await fs.writeFile(intermediateFilename, content, "utf8");
 
       const success = await this.runPandoc(intermediateFilename, outputFilename, format);
@@ -181,6 +219,17 @@ export default class PandocPlugin extends Plugin {
       } else if (format === "latex") {
         args.push("-t", "latex");
         if (activeProfile.documentClass === "beamer") args.push("-t", "beamer");
+      } else if (format === "docx") {
+        args.push("-f", "markdown+raw_html+fenced_divs+raw_attribute");
+        args.push("-t", "docx");
+        
+        // 高度なTeXコマンド変換が有効な場合のみLuaフィルタを適用
+        if (activeProfile.enableAdvancedTexCommands) {
+          const luaFilterPath = activeProfile.luaFilterPath.trim();
+          if (luaFilterPath && fsSync.existsSync(luaFilterPath)) {
+            args.push("--lua-filter", luaFilterPath);
+          }
+        }
       }
       args.push("--listings");
 
@@ -209,7 +258,9 @@ export default class PandocPlugin extends Plugin {
       if (activeProfile.pandocExtraArgs.trim()) args.push(...activeProfile.pandocExtraArgs.split(/\s+/));
       if (activeProfile.useStandalone) args.push("--standalone");
 
-      console.log("Running pandoc with args:", args);
+      if (!this.settings.suppressDeveloperLogs) {
+        console.log("Running pandoc with args:", args);
+      }
 
       const pandocProcess = spawn(command, args, { stdio: "pipe", shell: true, env: { ...process.env, PATH: process.env.PATH ?? "" } });
 
@@ -218,7 +269,11 @@ export default class PandocPlugin extends Plugin {
         new Notice(`Pandoc error: ${msg}`);
         console.error(`Pandoc error: ${msg}`);
       });
-      pandocProcess.stdout?.on("data", (data) => console.log(`Pandoc output: ${data.toString()}`));
+      pandocProcess.stdout?.on("data", (data) => {
+        if (!this.settings.suppressDeveloperLogs) {
+          console.log(`Pandoc output: ${data.toString()}`);
+        }
+      });
       pandocProcess.on("close", (code) => {
         if (code === 0) {
           new Notice(`Successfully generated: ${outputFile}`);
@@ -255,6 +310,12 @@ export default class PandocPlugin extends Plugin {
 
   async loadSettings() {
     let loadedData = await this.loadData();
+    
+    if (!loadedData) {
+      this.settings = Object.assign({}, DEFAULT_SETTINGS);
+      return;
+    }
+
     // profilesArrayがあればそれを優先
     if (loadedData && Array.isArray(loadedData.profilesArray)) {
       const profilesObj: { [key: string]: ProfileSettings } = {};
@@ -265,6 +326,7 @@ export default class PandocPlugin extends Plugin {
       loadedData = {
         profiles: profilesObj,
         activeProfile: loadedData.currentProfileName || loadedData.activeProfile || Object.keys(profilesObj)[0] || 'Default',
+        suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
       };
     } else if (loadedData && Array.isArray(loadedData.profiles)) {
       // profiles: [{name: 'xxx', ...}, ...] → { name: ProfileSettings, ... }
@@ -276,6 +338,7 @@ export default class PandocPlugin extends Plugin {
       loadedData = {
         profiles: profilesObj,
         activeProfile: loadedData.currentProfileName || loadedData.activeProfile || Object.keys(profilesObj)[0] || 'Default',
+        suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
       };
     } else if (loadedData && !loadedData.profiles) {
       // 旧バージョンからの移行処理
@@ -283,9 +346,17 @@ export default class PandocPlugin extends Plugin {
       const oldSettings = loadedData;
       loadedData = {
           profiles: { 'Default': { ...DEFAULT_PROFILE, ...oldSettings } },
-          activeProfile: 'Default'
+          activeProfile: 'Default',
+          suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
+      };
+    } else {
+      // 通常の読み込み処理
+      loadedData = {
+        ...loadedData,
+        suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
       };
     }
+    
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
   }
 
