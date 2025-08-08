@@ -60,6 +60,17 @@ export default class PandocPlugin extends Plugin {
     }
   }
 
+
+  async onunload() {
+    if (!this.settings?.suppressDeveloperLogs) {
+      console.log("PandocPlugin unloading...");
+    }
+    await this.saveSettings();
+    if (!this.settings?.suppressDeveloperLogs) {
+      console.log("MdTexPlugin: settings saved.");
+    }
+  }
+
   /**
    * 現在アクティブなMarkdownファイルを指定フォーマットへ変換
    * @param format "pdf"|"latex"|"docx"など
@@ -299,6 +310,12 @@ export default class PandocPlugin extends Plugin {
 
   async loadSettings() {
     let loadedData = await this.loadData();
+    
+    if (!loadedData) {
+      this.settings = Object.assign({}, DEFAULT_SETTINGS);
+      return;
+    }
+
     // profilesArrayがあればそれを優先
     if (loadedData && Array.isArray(loadedData.profilesArray)) {
       const profilesObj: { [key: string]: ProfileSettings } = {};
@@ -309,6 +326,7 @@ export default class PandocPlugin extends Plugin {
       loadedData = {
         profiles: profilesObj,
         activeProfile: loadedData.currentProfileName || loadedData.activeProfile || Object.keys(profilesObj)[0] || 'Default',
+        suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
       };
     } else if (loadedData && Array.isArray(loadedData.profiles)) {
       // profiles: [{name: 'xxx', ...}, ...] → { name: ProfileSettings, ... }
@@ -320,6 +338,7 @@ export default class PandocPlugin extends Plugin {
       loadedData = {
         profiles: profilesObj,
         activeProfile: loadedData.currentProfileName || loadedData.activeProfile || Object.keys(profilesObj)[0] || 'Default',
+        suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
       };
     } else if (loadedData && !loadedData.profiles) {
       // 旧バージョンからの移行処理
@@ -327,9 +346,17 @@ export default class PandocPlugin extends Plugin {
       const oldSettings = loadedData;
       loadedData = {
           profiles: { 'Default': { ...DEFAULT_PROFILE, ...oldSettings } },
-          activeProfile: 'Default'
+          activeProfile: 'Default',
+          suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
+      };
+    } else {
+      // 通常の読み込み処理
+      loadedData = {
+        ...loadedData,
+        suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
       };
     }
+    
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
   }
 
