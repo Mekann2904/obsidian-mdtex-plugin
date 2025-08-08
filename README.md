@@ -266,11 +266,72 @@ Markdownから正確にPDFを生成するためには以下のLaTeXパッケー�
 - **説明**: PDF以外にもLaTeXやWord文書など、生成するドキュメント形式を指定します。(実験的)
 - **デフォルト値**: `pdf`
 - **選択肢**: `pdf`, `latex`, `docx` など
+- **DOCX変換**: `docx`を選択すると、Luaスクリプトが自動的に適用され、画像やテーブルのスタイルが調整されます。
 
 ### 13. LaTeXエンジン
 - **説明**: LaTeXのコンパイルに使用するエンジンを指定します。(実験的)
 - **デフォルト値**: `lualatex`
 - **選択肢**: `lualatex`, `xelatex`, `pdflatex`
+
+---
+
+### 14. Lua スクリプトを使った DOCX 変換
+
+プラグインは **Lua フィルタ** を用いて Markdown を DOCX に変換できます。
+
+#### 使い方
+
+1. プラグインの「出力形式」を **`docx`** に設定する。
+2. 変換時に Lua スクリプトが自動適用され、DOCX が生成される。
+
+   * Lua スクリプトは **[lua-script.lua](./lua-script.lua)** を使用。
+   * 参照テンプレートは **[reference.docx](./reference.docx)** を使用。
+
+> 自分でテンプレートを作る場合:
+>
+> ```bash
+> pandoc --print-default-data-file reference.docx > ~/reference.docx
+> ```
+>
+> 生成したファイルを Word で開いて保存し、必要ならスタイルを調整してください。
+
+#### Pandoc 追加オプション
+
+プラグインの「Pandoc 追加オプション」に以下を指定してください。
+
+```
+--reference-doc=reference.docx
+```
+
+（環境によっては相対パスではなく絶対パス推奨）
+
+#### コマンドライン例（参考）
+
+```bash
+pandoc input.md \
+  -f markdown+raw_tex+fenced_divs \
+  -t docx \
+  --lua-filter=lua-script.lua \
+  --reference-doc=reference.docx \
+  --standalone \
+  -o output.docx
+```
+
+#### Lua スクリプトでできること（例）
+
+* テーブルのスタイル調整
+* コードブロックの書式設定
+* 日本語フォント設定
+*（スクリプトの内容に依存します。必要な機能があるかは `lua-script.lua` を参照してください。）*
+
+#### 注意事項
+
+* DOCX 変換は **実験的** 機能です。
+* 一部の **LaTeX 専用コマンド** はそのままでは反映されません（Lua フィルタでの変換が必要）。
+* 画像の配置やサイズは Lua スクリプトのロジックに従います。
+* ルビなどを Lua で扱う場合は **Pandoc 2.12 以上** を推奨します。
+
+
 
 ---
 
