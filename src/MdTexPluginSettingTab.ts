@@ -300,6 +300,27 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // Global Settings
     containerEl.createEl("h4", { text: "Global Settings / グローバル設定" });
     new Setting(containerEl)
+      .setName("markdownlint-cli2 Path / 実行パス")
+      .setDesc("Absolute path to markdownlint-cli2 binary. 空欄は自動解決（node_modules/.bin優先→PATH）。")
+      .addText((txt) =>
+        txt
+          .setPlaceholder("/usr/local/bin/markdownlint-cli2 など")
+          .setValue(this.plugin.settings.markdownlintCli2Path || "")
+          .onChange(async (value) => {
+            this.plugin.settings.markdownlintCli2Path = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+    new Setting(containerEl)
+      .setName("Auto-fix Markdown Lint / Markdown Lint自動修正")
+      .setDesc("Run markdownlint-cli2 --fix before Pandoc. / Pandoc実行前にmarkdownlint-cli2 --fixを実行する。")
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.enableMarkdownlintFix)
+        .onChange(async (value) => {
+          this.plugin.settings.enableMarkdownlintFix = value;
+          await this.plugin.saveSettings();
+        }));
+    new Setting(containerEl)
       .setName("Suppress Developer Logs / 開発者ログを抑制")
       .setDesc("Suppress console.log messages (errors will still be shown in console). / console.logメッセージを抑制（エラーは引き続きコンソールに表示）。")
       .addToggle(toggle => toggle

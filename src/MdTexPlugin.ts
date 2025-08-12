@@ -5,6 +5,7 @@ import { spawn } from "child_process";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as path from "path";
+// markdownlint は動的importで解決（Obsidian環境のPATH差異を回避）
 
 import { PandocPluginSettings, ProfileSettings, DEFAULT_SETTINGS, DEFAULT_PROFILE } from "./MdTexPluginSettings";
 import { PandocPluginSettingTab } from "./MdTexPluginSettingTab";
@@ -58,6 +59,38 @@ export default class PandocPlugin extends Plugin {
     if (!this.settings.suppressDeveloperLogs) {
       console.log("MdTexPlugin: onload finished.");
     }
+
+    // Lint current note with markdownlint-cli2
+    this.addCommand({
+      id: "mdtex-lint-current-note",
+      name: "Lint current note (markdownlint-cli2)",
+      callback: () => this.lintCurrentNote(),
+    });
+
+    // Apply markdownlint-cli2 --fix to current file
+    this.addCommand({
+      id: "mdtex-fix-current-note",
+      name: "現在ファイルにmarkdownlint --fixを適用",
+      callback: async () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+          new Notice("No active file selected.");
+          return;
+        }
+        if (!activeFile.path.endsWith(".md")) {
+          new Notice("The active file is not a Markdown file.");
+          return;
+        }
+        const leaf = this.app.workspace.activeLeaf;
+        if (leaf && leaf.view instanceof MarkdownView) {
+          const markdownView = leaf.view as MarkdownView;
+          if (markdownView.file && markdownView.file.path === activeFile.path) {
+            await markdownView.save();
+          }
+        }
+        await this.runMarkdownlintFix(activeFile.path);
+      },
+    });
   }
 
 
@@ -68,6 +101,78 @@ export default class PandocPlugin extends Plugin {
     await this.saveSettings();
     if (!this.settings?.suppressDeveloperLogs) {
       console.log("MdTexPlugin: settings saved.");
+    }
+  }
+
+  /**
+   * 現在アクティブなMarkdownファイルを markdownlint-cli2 で解析
+   * - ルールはVaultルートの設定ファイル（例: .markdownlint.yaml / .markdownlint-cli2.yaml）を自動検出
+   * - 結果はNoticeとコンソールに出力
+   */
+  async lintCurrentNote() {
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile) {
+      new Notice("No active file selected.");
+      return;
+    }
+    if (!activeFile.path.endsWith(".md")) {
+      new Notice("The active file is not a Markdown file.");
+      return;
+    }
+
+    // 可能なら保存してから実行
+    const leaf = this.app.workspace.activeLeaf;
+    if (leaf && leaf.view instanceof MarkdownView) {
+      const markdownView = leaf.view as MarkdownView;
+      if (markdownView.file && markdownView.file.path === activeFile.path) {
+        await markdownView.save();
+      }
+    }
+
+    try {
+      const fileAdapter = this.app.vault.adapter as FileSystemAdapter;
+      const fullPath = fileAdapter.getFullPath(activeFile.path);
+      const vaultRoot = fileAdapter.getBasePath();
+
+      const cli = this.detectBrewMarkdownlintBin();
+      if (!cli) {
+        new Notice("markdownlint-cli2が見つからない。設定でパスを指定すること。");
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        const envPath = [
+          "/opt/homebrew/bin",
+          "/usr/local/bin",
+          "/opt/homebrew/opt/node/bin",
+          "/usr/local/opt/node/bin",
+          process.env.PATH || "",
+        ].join(":");
+        const child = spawn(cli, [fullPath], {
+          shell: false,
+          cwd: vaultRoot,
+          stdio: "pipe",
+          env: { ...process.env, PATH: envPath },
+        });
+        let out = "";
+        let err = "";
+        child.stdout?.on("data", (d) => { out += d.toString(); });
+        child.stderr?.on("data", (d) => { err += d.toString(); });
+        child.on("close", (code) => {
+          if (out.trim()) console.log("markdownlint output:\n" + out);
+          if (err.trim()) console.error("markdownlint error:\n" + err);
+          new Notice(code === 0 ? "Lint完了: 問題なし" : `Lint完了: 指摘あり (code=${code})`);
+          resolve();
+        });
+        child.on("error", (e) => {
+          console.error(e);
+          new Notice("markdownlint-cli2の起動に失敗。設定のパスとNodeのインストールを確認。");
+          resolve();
+        });
+      });
+    } catch (e: any) {
+      console.error(e);
+      new Notice(`Lintエラー: ${e?.message || e}`);
     }
   }
 
@@ -147,6 +252,16 @@ export default class PandocPlugin extends Plugin {
       }
       await fs.writeFile(intermediateFilename, content, "utf8");
 
+      // 事前Lint（--fix）: 元ファイルではなく中間ファイルに適用
+      if (this.settings.enableMarkdownlintFix) {
+        try {
+          await this.runMarkdownlintFix(intermediateFilename);
+        } catch (e: any) {
+          console.error(e);
+          new Notice("markdownlint-cli2実行に失敗。処理を継続。");
+        }
+      }
+
       const success = await this.runPandoc(intermediateFilename, outputFilename, format);
 
       if (success && activeProfile.deleteIntermediateFiles) {
@@ -168,6 +283,137 @@ export default class PandocPlugin extends Plugin {
       .replace(/_/g, "\\_").replace(/{/g, "\\{").replace(/}/g, "\\}")
       .replace(/\^/g, "\\^{}").replace(/~/g, "\\textasciitilde")
       .replace(/&/g, "\\&");
+  }
+
+  /**
+   * markdownlint-cli2 --fix を実行してファイルの自動修正を試みる
+   */
+  private async runMarkdownlintFix(targetPath: string): Promise<void> {
+    const fileAdapter = this.app.vault.adapter as FileSystemAdapter;
+    const vaultRoot = fileAdapter.getBasePath();
+    const fullPath = path.isAbsolute(targetPath)
+      ? targetPath
+      : fileAdapter.getFullPath(targetPath);
+
+    const cli = this.detectBrewMarkdownlintBin();
+    if (!cli) {
+      new Notice("markdownlint-cli2が見つからない。設定でパスを指定すること。");
+      return;
+    }
+
+    const original = await fs.readFile(fullPath, "utf8");
+    // YAMLフロントマターを保護（先頭の --- ... --- ブロック）
+    const yamlMatch = original.match(/^(---[\t\x20]*\n[\s\S]*?\n---[\t\x20]*\n?)/);
+    const tomlMatch = (!yamlMatch) ? original.match(/^(\+\+\+[\t\x20]*\n[\s\S]*?\n(\+\+\+|\.\.\.)[\t\x20]*\n?)/) : null;
+    const frontMatter = yamlMatch?.[1] || tomlMatch?.[1] || "";
+    const body = original.slice(frontMatter.length);
+
+    if (frontMatter) {
+      // 本文のみ一時ファイルで--fix実行
+      const tempBody = `${fullPath}.lintbody.md`;
+      await fs.writeFile(tempBody, body, "utf8");
+      await new Promise<void>((resolve) => {
+        const envPath = [
+          "/opt/homebrew/bin",
+          "/usr/local/bin",
+          "/opt/homebrew/opt/node/bin",
+          "/usr/local/opt/node/bin",
+          process.env.PATH || "",
+        ].join(":");
+        const child = spawn(cli, ["--fix", tempBody], {
+          shell: false,
+          cwd: vaultRoot,
+          stdio: "pipe",
+          env: { ...process.env, PATH: envPath },
+        });
+        child.on("close", async () => {
+          try {
+            const fixedBody = await fs.readFile(tempBody, "utf8");
+            await fs.writeFile(fullPath, frontMatter + fixedBody, "utf8");
+          } finally {
+            try { await fs.unlink(tempBody); } catch {}
+          }
+          resolve();
+        });
+        child.on("error", async () => {
+          try { await fs.unlink(tempBody); } catch {}
+          resolve();
+        });
+      });
+      return;
+    }
+
+    // フロントマターが無い場合はファイル全体に--fixを適用
+    await new Promise<void>((resolve) => {
+      const envPath = [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/opt/homebrew/opt/node/bin",
+        "/usr/local/opt/node/bin",
+        process.env.PATH || "",
+      ].join(":");
+      const child = spawn(cli, ["--fix", fullPath], {
+        shell: false,
+        cwd: vaultRoot,
+        stdio: "pipe",
+        env: { ...process.env, PATH: envPath },
+      });
+      child.on("close", () => resolve());
+      child.on("error", () => resolve());
+    });
+  }
+
+  // 旧解決関数（Node/ローカル.bin）は不要になったため削除
+
+  /**
+   * Homebrewの標準パスからmarkdownlint CLIを探索
+   * - 優先: markdownlint-cli2
+   * - 次点: markdownlint-cli
+   */
+  private detectBrewMarkdownlintBin(): string | null {
+    const configured = (this.settings.markdownlintCli2Path || "").trim();
+    const candidates = [
+      configured,
+      "/opt/homebrew/bin/markdownlint-cli2",
+      "/usr/local/bin/markdownlint-cli2",
+      "/opt/homebrew/bin/markdownlint-cli",
+      "/usr/local/bin/markdownlint-cli",
+    ].filter(Boolean) as string[];
+    for (const p of candidates) {
+      try {
+        if (fsSync.existsSync(p)) return p;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  /**
+   * Vaultルートでmarkdownlint設定を探索して読み込む
+   */
+  private async loadMarkdownlintConfig(vaultRoot: string): Promise<any> {
+    const candidates = [
+      ".markdownlint.yaml",
+      ".markdownlint.yml",
+      ".markdownlint.jsonc",
+      ".markdownlint.json",
+    ].map((name) => path.join(vaultRoot, name));
+
+    for (const p of candidates) {
+      try {
+        await fs.access(p);
+        const dynImport: any = (new Function("s", "return import(s)"));
+        const { readConfig } = await dynImport("markdownlint/promise");
+        const cfg = await readConfig(p);
+        if (!this.settings.suppressDeveloperLogs) {
+          console.log("Loaded markdownlint config:", p);
+        }
+        return cfg as any;
+      } catch (_) {
+        // continue
+      }
+    }
+    // デフォルト
+    return { default: true } as any;
   }
 
   replaceWikiLinksAndCode(markdown: string): string {
@@ -327,7 +573,9 @@ export default class PandocPlugin extends Plugin {
         profiles: profilesObj,
         activeProfile: loadedData.currentProfileName || loadedData.activeProfile || Object.keys(profilesObj)[0] || 'Default',
         suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
-      };
+        enableMarkdownlintFix: loadedData.enableMarkdownlintFix !== undefined ? loadedData.enableMarkdownlintFix : DEFAULT_SETTINGS.enableMarkdownlintFix,
+        markdownlintCli2Path: loadedData.markdownlintCli2Path !== undefined ? loadedData.markdownlintCli2Path : DEFAULT_SETTINGS.markdownlintCli2Path,
+      } as any;
     } else if (loadedData && Array.isArray(loadedData.profiles)) {
       // profiles: [{name: 'xxx', ...}, ...] → { name: ProfileSettings, ... }
       const profilesObj: { [key: string]: ProfileSettings } = {};
@@ -339,7 +587,9 @@ export default class PandocPlugin extends Plugin {
         profiles: profilesObj,
         activeProfile: loadedData.currentProfileName || loadedData.activeProfile || Object.keys(profilesObj)[0] || 'Default',
         suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
-      };
+        enableMarkdownlintFix: loadedData.enableMarkdownlintFix !== undefined ? loadedData.enableMarkdownlintFix : DEFAULT_SETTINGS.enableMarkdownlintFix,
+        markdownlintCli2Path: loadedData.markdownlintCli2Path !== undefined ? loadedData.markdownlintCli2Path : DEFAULT_SETTINGS.markdownlintCli2Path,
+      } as any;
     } else if (loadedData && !loadedData.profiles) {
       // 旧バージョンからの移行処理
       console.log("Migrating settings to new profile format.");
@@ -348,7 +598,9 @@ export default class PandocPlugin extends Plugin {
           profiles: { 'Default': { ...DEFAULT_PROFILE, ...oldSettings } },
           activeProfile: 'Default',
           suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
-      };
+          enableMarkdownlintFix: loadedData.enableMarkdownlintFix !== undefined ? loadedData.enableMarkdownlintFix : DEFAULT_SETTINGS.enableMarkdownlintFix,
+          markdownlintCli2Path: loadedData.markdownlintCli2Path !== undefined ? loadedData.markdownlintCli2Path : DEFAULT_SETTINGS.markdownlintCli2Path,
+      } as any;
     } else {
       // 通常の読み込み処理
       loadedData = {
