@@ -548,7 +548,9 @@ export default class PandocPlugin extends Plugin {
         profiles: profilesObj,
         activeProfile: loadedData.currentProfileName || loadedData.activeProfile || Object.keys(profilesObj)[0] || 'Default',
         suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
-      };
+        enableMarkdownlintFix: loadedData.enableMarkdownlintFix !== undefined ? loadedData.enableMarkdownlintFix : DEFAULT_SETTINGS.enableMarkdownlintFix,
+        markdownlintCli2Path: loadedData.markdownlintCli2Path !== undefined ? loadedData.markdownlintCli2Path : DEFAULT_SETTINGS.markdownlintCli2Path,
+      } as any;
     } else if (loadedData && Array.isArray(loadedData.profiles)) {
       // profiles: [{name: 'xxx', ...}, ...] → { name: ProfileSettings, ... }
       const profilesObj: { [key: string]: ProfileSettings } = {};
@@ -560,7 +562,9 @@ export default class PandocPlugin extends Plugin {
         profiles: profilesObj,
         activeProfile: loadedData.currentProfileName || loadedData.activeProfile || Object.keys(profilesObj)[0] || 'Default',
         suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
-      };
+        enableMarkdownlintFix: loadedData.enableMarkdownlintFix !== undefined ? loadedData.enableMarkdownlintFix : DEFAULT_SETTINGS.enableMarkdownlintFix,
+        markdownlintCli2Path: loadedData.markdownlintCli2Path !== undefined ? loadedData.markdownlintCli2Path : DEFAULT_SETTINGS.markdownlintCli2Path,
+      } as any;
     } else if (loadedData && !loadedData.profiles) {
       // 旧バージョンからの移行処理
       console.log("Migrating settings to new profile format.");
@@ -569,7 +573,9 @@ export default class PandocPlugin extends Plugin {
           profiles: { 'Default': { ...DEFAULT_PROFILE, ...oldSettings } },
           activeProfile: 'Default',
           suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
-      };
+          enableMarkdownlintFix: loadedData.enableMarkdownlintFix !== undefined ? loadedData.enableMarkdownlintFix : DEFAULT_SETTINGS.enableMarkdownlintFix,
+          markdownlintCli2Path: loadedData.markdownlintCli2Path !== undefined ? loadedData.markdownlintCli2Path : DEFAULT_SETTINGS.markdownlintCli2Path,
+      } as any;
     } else {
       // 通常の読み込み処理
       loadedData = {
