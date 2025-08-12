@@ -66,6 +66,31 @@ export default class PandocPlugin extends Plugin {
       name: "Lint current note (markdownlint-cli2)",
       callback: () => this.lintCurrentNote(),
     });
+
+    // Apply markdownlint-cli2 --fix to current file
+    this.addCommand({
+      id: "mdtex-fix-current-note",
+      name: "現在ファイルにmarkdownlint --fixを適用",
+      callback: async () => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) {
+          new Notice("No active file selected.");
+          return;
+        }
+        if (!activeFile.path.endsWith(".md")) {
+          new Notice("The active file is not a Markdown file.");
+          return;
+        }
+        const leaf = this.app.workspace.activeLeaf;
+        if (leaf && leaf.view instanceof MarkdownView) {
+          const markdownView = leaf.view as MarkdownView;
+          if (markdownView.file && markdownView.file.path === activeFile.path) {
+            await markdownView.save();
+          }
+        }
+        await this.runMarkdownlintFix(activeFile.path);
+      },
+    });
   }
 
 
