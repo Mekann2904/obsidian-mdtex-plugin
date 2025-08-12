@@ -42,6 +42,8 @@ export interface PandocPluginSettings {
   profiles: { [key: string]: ProfileSettings };
   activeProfile: string;
   suppressDeveloperLogs: boolean;
+  enableMarkdownlintFix: boolean; // markdownlint-cli2 --fix をPandoc実行前に適用
+  markdownlintCli2Path: string; // markdownlint-cli2実行ファイルパス（空は自動解決）
 }
 
 /**
@@ -133,4 +135,6 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
   },
   activeProfile: 'Default',
   suppressDeveloperLogs: true,
+  enableMarkdownlintFix: false,
+  markdownlintCli2Path: "",
 };
