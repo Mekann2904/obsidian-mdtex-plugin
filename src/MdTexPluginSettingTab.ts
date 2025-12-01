@@ -1,336 +1,552 @@
 // File: src/MdTexPluginSettingTab.ts
-// Purpose: 設定タブのUIを構築し、プロファイル管理と各設定項目を編集可能にする。
-// Reason: ユーザーがPandocプラグインの挙動をGUIで調整するため。
-// Related: src/MdTexPlugin.ts, src/MdTexPluginSettings.ts, src/services/settingsService.ts, src/services/convertService.ts
+// Purpose: プラグインの設定画面UIを提供する。
+// Reason: ユーザーがプロファイルを管理し、各パラメータ（パス、ラベル、LaTeXプリアンブル等）をGUIで変更可能にするため。
+// Related: src/MdTexPlugin.ts, src/MdTexPluginSettings.ts
 
-import { App, PluginSettingTab, Setting, Modal, Notice, Menu, TextComponent, TextAreaComponent } from "obsidian";
-import type MdTexPlugin from "./MdTexPlugin";
-import { DEFAULT_PROFILE, ProfileSettings } from "./MdTexPluginSettings";
+import { App, PluginSettingTab, Setting, Notice, Modal } from "obsidian";
+import MdTexPlugin from "./MdTexPlugin";
+import { DEFAULT_LATEX_PREAMBLE, ProfileSettings } from "./MdTexPluginSettings";
 
-/**
- * プロファイル名を入力するためのモーダル
- */
-class ProfileNameModal extends Modal {
-  result: string;
-  onSubmit: (result: string) => void;
-
-  constructor(app: App, onSubmit: (result: string) => void, public currentName: string = "") {
-    super(app);
-    this.onSubmit = onSubmit;
-  }
-
-  onOpen() {
-    const { contentEl } = this;
-    contentEl.createEl("h2", { text: "Profile Name" });
-    const text = contentEl.createEl("input", { type: "text", value: this.currentName });
-    text.style.width = "100%";
-    
-    const buttonContainer = contentEl.createDiv();
-    buttonContainer.style.textAlign = "right";
-    buttonContainer.style.marginTop = "1rem";
-    
-    const saveButton = buttonContainer.createEl("button", { text: "Save" });
-    saveButton.onclick = () => {
-      this.result = text.value.trim();
-      if (this.result) {
-        this.close();
-        this.onSubmit(this.result);
-      }
-    };
-  }
-
-  onClose() {
-    this.contentEl.empty();
-  }
-}
-
-/**
- * 設定タブクラス
- */
 export class PandocPluginSettingTab extends PluginSettingTab {
   plugin: MdTexPlugin;
-  language: "en" | "jp";
 
   constructor(app: App, plugin: MdTexPlugin) {
     super(app, plugin);
     this.plugin = plugin;
-    this.language = "jp";
   }
 
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Pandoc Plugin Settings" });
+    // タイトル
+    containerEl.createEl("h2", { text: "MdTex Plugin Settings" });
 
-    // --- Profile Management UI ---
-    containerEl.createEl("h3", { text: "Profiles / プロファイル" });
+    const settings = this.plugin.settings;
+    const activeProfileKey = settings.activeProfile;
+    const currentProfile = settings.profiles[activeProfileKey];
+
+    // =================================================================
+    // 1. プロファイル管理セクション
+    // =================================================================
+    containerEl.createEl("h3", { text: "Profile Management" });
 
     new Setting(containerEl)
-      .setName("Active Profile / アクティブなプロファイル")
-      .setDesc("Select the setting profile to use. / 使用する設定プロファイルを選択します。")
-      .addDropdown(dropdown => {
-        const profiles = this.plugin.settings.profiles;
-        Object.keys(profiles).forEach(name => {
-          dropdown.addOption(name, name);
+      .setName("Active Profile")
+      .setDesc("Select the profile to use for conversion.")
+      .addDropdown((dropdown) => {
+        Object.keys(settings.profiles).forEach((key) => {
+          dropdown.addOption(key, key);
         });
-        dropdown
-          .setValue(this.plugin.settings.activeProfile)
-          .onChange(async (value) => {
-            this.plugin.settings.activeProfile = value;
+        dropdown.setValue(activeProfileKey);
+        dropdown.onChange(async (value) => {
+          settings.activeProfile = value;
+          await this.plugin.saveSettings();
+          this.display(); // 再描画して値を更新
+        });
+      });
+
+    // 新規プロファイル作成
+    let newProfileName = "";
+    new Setting(containerEl)
+      .setName("Create New Profile")
+      .setDesc("Enter a name for the new profile.")
+      .addText((text) =>
+        text
+          .setPlaceholder("New Profile Name")
+          .onChange((value) => {
+            newProfileName = value;
+          })
+      )
+      .addButton((button) =>
+        button
+          .setButtonText("Add Profile")
+          .setCta()
+          .onClick(async () => {
+            if (!newProfileName || settings.profiles[newProfileName]) {
+              new Notice("Invalid or duplicate profile name.");
+              return;
+            }
+            // 現在のプロファイルをコピーして作成
+            settings.profiles[newProfileName] = { ...currentProfile };
+            settings.activeProfile = newProfileName;
             await this.plugin.saveSettings();
-            this.display(); // Refresh the settings tab
+            newProfileName = "";
+            this.display();
+            new Notice(`Profile "${newProfileName}" created.`);
+          })
+      );
+
+    // プロファイル削除
+    new Setting(containerEl)
+      .setName("Delete Current Profile")
+      .setDesc("Delete the currently active profile (cannot delete if it's the only one).")
+      .addButton((button) => {
+        button
+          .setButtonText("Delete Profile")
+          .setWarning()
+          .setDisabled(Object.keys(settings.profiles).length <= 1)
+          .onClick(async () => {
+            if (Object.keys(settings.profiles).length <= 1) return;
+            if (!confirm(`Are you sure you want to delete profile "${activeProfileKey}"?`)) return;
+
+            delete settings.profiles[activeProfileKey];
+            const remainingKeys = Object.keys(settings.profiles);
+            settings.activeProfile = remainingKeys[0];
+            await this.plugin.saveSettings();
+            this.display();
+            new Notice(`Profile "${activeProfileKey}" deleted.`);
           });
       });
 
+    // =================================================================
+    // 2. 変換・出力設定 (General)
+    // =================================================================
+    containerEl.createEl("h3", { text: "General Output Settings" });
+
     new Setting(containerEl)
-        .setName("Manage Profiles / プロファイル管理")
-        .addButton(btn => btn.setButtonText("New / 新規作成").onClick(() => {
-            new ProfileNameModal(this.app, async (name) => {
-                if (this.plugin.settings.profiles[name]) {
-                    new Notice(`Profile "${name}" already exists.`);
-                    return;
-                }
-                this.plugin.settings.profiles[name] = JSON.parse(JSON.stringify(DEFAULT_PROFILE)); // Deep copy
-                this.plugin.settings.activeProfile = name;
-                await this.plugin.saveSettings();
-                this.display();
-            }).open();
-        }))
-        .addButton(btn => btn.setButtonText("Rename / 名前変更").onClick(() => {
-            const oldName = this.plugin.settings.activeProfile;
-            new ProfileNameModal(this.app, async (newName) => {
-                if (this.plugin.settings.profiles[newName]) {
-                    new Notice(`Profile "${newName}" already exists.`);
-                    return;
-                }
-                this.plugin.settings.profiles[newName] = this.plugin.settings.profiles[oldName];
-                delete this.plugin.settings.profiles[oldName];
-                this.plugin.settings.activeProfile = newName;
-                await this.plugin.saveSettings();
-                this.display();
-            }, oldName).open();
-        }))
-        .addButton(btn => btn.setButtonText("Delete / 削除").setIcon("trash").onClick(async () => {
-            if (Object.keys(this.plugin.settings.profiles).length <= 1) {
-                new Notice("Cannot delete the last profile.");
-                return;
-            }
-            const nameToDelete = this.plugin.settings.activeProfile;
-            delete this.plugin.settings.profiles[nameToDelete];
-            this.plugin.settings.activeProfile = Object.keys(this.plugin.settings.profiles)[0];
+      .setName("Output Format")
+      .setDesc("Target format for conversion.")
+      .addDropdown((dropdown) => {
+        dropdown.addOption("pdf", "PDF");
+        dropdown.addOption("docx", "Word (docx)");
+        dropdown.addOption("latex", "LaTeX Source (.tex)");
+        dropdown.setValue(currentProfile.outputFormat)
+        .onChange(async (value) => {
+            currentProfile.outputFormat = value;
             await this.plugin.saveSettings();
-            this.display();
-        }));
+        });
+      });
 
-
-    // --- General Settings UI ---
-    containerEl.createEl("h3", { text: "Active Profile Settings / アクティブなプロファイル設定" });
-    
     new Setting(containerEl)
-      .setName("Language / 言語")
-      .setDesc("Switch between English and Japanese. / 英語と日本語を切り替えます。")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.language === "jp")
-          .onChange((value) => {
-            this.language = value ? "jp" : "en";
-            this.display();
+      .setName("Pandoc Path")
+      .setDesc("Absolute path to the pandoc executable (e.g. /usr/local/bin/pandoc).")
+      .addText((text) =>
+        text
+          .setValue(currentProfile.pandocPath)
+          .onChange(async (value) => {
+            currentProfile.pandocPath = value;
+            await this.plugin.saveSettings();
           })
       );
     
-    // 現在アクティブなプロファイルの設定を取得
-    const activeSettings = this.plugin.getActiveProfileSettings();
-    if (!activeSettings) {
-        containerEl.createEl('p', {text: 'Error: Active profile not found. Please create a new profile.'});
-        return;
-    }
+    new Setting(containerEl)
+        .setName("Output Directory")
+        .setDesc("Directory where generated files will be saved. Leave empty for Vault root.")
+        .addText((text) =>
+            text.setValue(currentProfile.outputDirectory)
+            .onChange(async (value) => {
+                currentProfile.outputDirectory = value;
+                await this.plugin.saveSettings();
+            })
+        );
+
+    new Setting(containerEl)
+        .setName("Resource Search Directory")
+        .setDesc("Directory to search for images and resources (--resource-path). If empty, uses the input file's directory.")
+        .addText((text) => 
+            text.setValue(currentProfile.searchDirectory)
+            .onChange(async (value) => {
+                currentProfile.searchDirectory = value;
+                await this.plugin.saveSettings();
+            })
+        );
+
+    new Setting(containerEl)
+      .setName("Delete Intermediate Files")
+      .setDesc("Delete .tex or .temp.md files after successful conversion.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(currentProfile.deleteIntermediateFiles)
+          .onChange(async (value) => {
+            currentProfile.deleteIntermediateFiles = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    // =================================================================
+    // 3. LaTeX / PDF 設定
+    // =================================================================
+    containerEl.createEl("h3", { text: "LaTeX / PDF Engine Settings" });
+
+    new Setting(containerEl)
+      .setName("LaTeX Engine")
+      .setDesc("Engine used for PDF generation (e.g. lualatex, xelatex, pdflatex).")
+      .addText((text) =>
+        text
+          .setValue(currentProfile.latexEngine)
+          .onChange(async (value) => {
+            currentProfile.latexEngine = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Document Class")
+      .setDesc("LaTeX document class (e.g. ltjarticle, article, book).")
+      .addText((text) =>
+        text
+          .setValue(currentProfile.documentClass)
+          .onChange(async (value) => {
+            currentProfile.documentClass = value;
+            await this.plugin.saveSettings();
+          })
+      );
     
-    const createSetting = (key: keyof ProfileSettings, name: {en: string, jp: string}, desc: {en: string, jp: string}, type: 'text' | 'textarea' | 'toggle' | 'dropdown', options?: any) => {
-        const setting = new Setting(containerEl)
-            .setName(this.language === 'jp' ? name.jp : name.en)
-            .setDesc(this.language === 'jp' ? desc.jp : desc.en);
-        
-        const changeHandler = async (value: any) => {
-            (activeSettings[key] as any) = typeof value === 'string' ? value.trim() : value;
+    new Setting(containerEl)
+        .setName("Document Class Options")
+        .setDesc("Options for document class (e.g. a4paper, twocolumn).")
+        .addText((text) =>
+            text.setValue(currentProfile.documentClassOptions)
+            .onChange(async (value) => {
+                currentProfile.documentClassOptions = value;
+                await this.plugin.saveSettings();
+            })
+        );
+
+    new Setting(containerEl)
+      .setName("Font Size")
+      .setDesc("Base font size (e.g. 11pt, 12pt).")
+      .addText((text) =>
+        text
+          .setValue(currentProfile.fontSize)
+          .onChange(async (value) => {
+            currentProfile.fontSize = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+        .setName("Use Margin Size")
+        .setDesc("Enable custom margin settings.")
+        .addToggle((toggle) => 
+            toggle.setValue(currentProfile.useMarginSize)
+            .onChange(async (value) => {
+                currentProfile.useMarginSize = value;
+                await this.plugin.saveSettings();
+                this.display(); // 再描画でMargin Size入力を有効/無効化
+            })
+        );
+    
+    if (currentProfile.useMarginSize) {
+        new Setting(containerEl)
+            .setName("Margin Size")
+            .setDesc("Geometry margin (e.g. 25mm, 1in).")
+            .addText((text) =>
+                text.setValue(currentProfile.marginSize)
+                .onChange(async (value) => {
+                    currentProfile.marginSize = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+    }
+
+    new Setting(containerEl)
+        .setName("Page Numbers")
+        .setDesc("Enable page numbering.")
+        .addToggle((toggle) => 
+            toggle.setValue(currentProfile.usePageNumber)
+            .onChange(async (value) => {
+                currentProfile.usePageNumber = value;
+                await this.plugin.saveSettings();
+            })
+        );
+
+    new Setting(containerEl)
+        .setName("Image Scale")
+        .setDesc("Default image scaling (e.g. width=0.8\\textwidth).")
+        .addText((text) =>
+            text.setValue(currentProfile.imageScale)
+            .onChange(async (value) => {
+                currentProfile.imageScale = value;
+                await this.plugin.saveSettings();
+            })
+        );
+
+    // =================================================================
+    // 4. LaTeX Preamble (Custom Header) - Improved UI
+    // =================================================================
+    containerEl.createEl("h3", { text: "LaTeX Preamble" });
+    
+    const preambleDesc = containerEl.createDiv({ cls: "setting-item-description" });
+    preambleDesc.setText("Enter pure LaTeX code only. YAML delimiters (---) and 'header-includes:' are injected automatically. This field supports full-width editing.");
+    preambleDesc.style.marginBottom = "8px";
+
+    // Create a container for the textarea to give it specific styling
+    const editorContainer = containerEl.createDiv();
+    editorContainer.style.width = "100%";
+    
+    const textArea = editorContainer.createEl("textarea");
+    textArea.style.width = "100%";
+    textArea.style.height = "400px"; // 十分な高さを確保
+    textArea.style.fontFamily = "var(--font-monospace)"; // 等幅フォント
+    textArea.style.fontSize = "13px";
+    textArea.style.whiteSpace = "pre"; // 自動折り返しを無効化（コードとして表示）
+    textArea.style.overflow = "auto";  // スクロールバー
+    textArea.style.resize = "vertical"; // 縦方向のみリサイズ可
+    textArea.spellcheck = false; // スペルチェック無効
+    
+    textArea.value = currentProfile.headerIncludes;
+    textArea.placeholder = "\\usepackage{...}";
+    
+    textArea.addEventListener("change", async () => {
+        currentProfile.headerIncludes = textArea.value;
+        await this.plugin.saveSettings();
+    });
+
+    // Reset / Copy / Fullscreen Buttons
+    const btnContainer = containerEl.createDiv();
+    btnContainer.style.marginTop = "8px";
+    btnContainer.style.display = "flex";
+    btnContainer.style.gap = "8px";
+    btnContainer.style.justifyContent = "flex-end";
+
+    const fullscreenBtn = btnContainer.createEl("button", { text: "Open Fullscreen" });
+    fullscreenBtn.onclick = async () => {
+      await this.plugin.saveSettings();
+      const modal = new PreambleModal(this.app, currentProfile.headerIncludes, async (val) => {
+        currentProfile.headerIncludes = val;
+        textArea.value = val;
+        await this.plugin.saveSettings();
+      });
+      modal.open();
+    };
+
+    const resetBtn = btnContainer.createEl("button", { text: "Reset Preamble to Default" });
+    resetBtn.addEventListener("click", async () => {
+        if(confirm("Are you sure you want to reset the LaTeX Preamble to the default template? This will overwrite your current changes.")) {
+            currentProfile.headerIncludes = DEFAULT_LATEX_PREAMBLE;
+            textArea.value = DEFAULT_LATEX_PREAMBLE;
+            await this.plugin.saveSettings();
+            new Notice("LaTeX Preamble reset to default.");
+        }
+    });
+
+    const copyBtn = btnContainer.createEl("button", { text: "Copy" });
+    copyBtn.onclick = async () => {
+      await navigator.clipboard.writeText(textArea.value);
+      new Notice("Preamble copied to clipboard.");
+    };
+
+    // =================================================================
+    // 5. Localization (Labels & Prefixes)
+    // =================================================================
+    containerEl.createEl("h3", { text: "Localization (Labels & Prefixes)" });
+    containerEl.createEl("p", { text: "Set the labels used for captions and cross-references.", cls: "setting-item-description" });
+
+    // Helper to create label settings pair
+    const createLabelSetting = (name: string, labelKey: keyof ProfileSettings, prefixKey: keyof ProfileSettings) => {
+        const div = containerEl.createDiv({ cls: "setting-item" });
+        div.style.display = "flex";
+        div.style.justifyContent = "space-between";
+        div.style.alignItems = "center";
+        div.style.padding = "0.75em 0";
+        div.style.borderTop = "1px solid var(--background-modifier-border)";
+
+        const info = div.createDiv({ cls: "setting-item-info" });
+        info.createDiv({ cls: "setting-item-name", text: name });
+
+        const control = div.createDiv({ cls: "setting-item-control" });
+        control.style.gap = "10px";
+
+        // Label Input
+        const labelInput = document.createElement("input");
+        labelInput.type = "text";
+        labelInput.placeholder = "Label";
+        labelInput.value = String(currentProfile[labelKey]);
+        labelInput.style.width = "120px";
+        labelInput.onchange = async () => {
+             // @ts-ignore
+            currentProfile[labelKey] = labelInput.value;
             await this.plugin.saveSettings();
         };
 
-        // 他プロファイルの値を取得
-        const otherProfiles = Object.entries(this.plugin.settings.profiles)
-            .filter(([profileName]) => profileName !== this.plugin.settings.activeProfile);
-        const otherProfileValues = otherProfiles
-            .map(([_, profile]) => profile[key])
-            .filter((v, i, arr) => typeof v === 'string' && v && arr.indexOf(v) === i) as string[];
-        const shouldShowSuggestButton = otherProfiles.length > 0;
+        // Prefix Input
+        const prefixInput = document.createElement("input");
+        prefixInput.type = "text";
+        prefixInput.placeholder = "Prefix";
+        prefixInput.value = String(currentProfile[prefixKey]);
+        prefixInput.style.width = "120px";
+        prefixInput.onchange = async () => {
+             // @ts-ignore
+            currentProfile[prefixKey] = prefixInput.value;
+            await this.plugin.saveSettings();
+        };
 
-        switch (type) {
-            case 'textarea': {
-                let textAreaComponent: TextAreaComponent;
-                setting.addTextArea((tc: TextAreaComponent) => {
-                    textAreaComponent = tc;
-                    tc.setValue(activeSettings[key] as string).onChange(changeHandler);
-                    tc.inputEl.addEventListener('input', (e) => {
-                        const value = tc.inputEl.value;
-                        if (value.endsWith('@') && shouldShowSuggestButton && otherProfileValues.length > 0) {
-                            const menu = new Menu();
-                            otherProfileValues.forEach(val => {
-                                menu.addItem((item: any) => item.setTitle(val).onClick(() => {
-                                    tc.setValue(val);
-                                    changeHandler(val);
-                                }));
-                            });
-                            const rect = tc.inputEl.getBoundingClientRect();
-                            const event = new MouseEvent('click', {clientX: rect.left, clientY: rect.bottom});
-                            menu.showAtMouseEvent(event);
-                        }
-                    });
-                });
-                if (shouldShowSuggestButton) {
-                    setting.addExtraButton(btn => {
-                        btn.setIcon('down-chevron')
-                           .setTooltip(this.language === 'jp' ? '他プロファイルから選択' : 'Select from other profiles')
-                           .onClick(() => {
-                               const menu = new Menu();
-                               otherProfileValues.forEach(val => {
-                                   menu.addItem((item: any) => item.setTitle(val).onClick(() => {
-                                       textAreaComponent.inputEl.value = val;
-                                       textAreaComponent.inputEl.dispatchEvent(new Event('input'));
-                                       changeHandler(val);
-                                   }));
-                               });
-                               const rect = btn.extraSettingsEl.getBoundingClientRect();
-                               const event = new MouseEvent('click', {clientX: rect.left, clientY: rect.bottom});
-                               menu.showAtMouseEvent(event);
-                           });
-                    });
-                }
-                break;
-            }
-            case 'toggle':
-                setting.addToggle(tg => tg.setValue(activeSettings[key] as boolean).onChange(changeHandler));
-                break;
-            case 'dropdown':
-                 setting.addDropdown(dd => {
-                     options.forEach((opt: [string, string]) => dd.addOption(opt[0], opt[1]));
-                     dd.setValue(activeSettings[key] as string).onChange(changeHandler);
-                 });
-                 break;
-            default: { // text
-                let textComponent: TextComponent;
-                setting.addText((txt: TextComponent) => {
-                    textComponent = txt;
-                    txt.setValue(activeSettings[key] as string).onChange(changeHandler);
-                    txt.inputEl.addEventListener('input', (e) => {
-                        const value = txt.inputEl.value;
-                        if (value.endsWith('@') && shouldShowSuggestButton && otherProfileValues.length > 0) {
-                            const menu = new Menu();
-                            otherProfileValues.forEach(val => {
-                                menu.addItem((item: any) => item.setTitle(val).onClick(() => {
-                                    txt.setValue(val);
-                                    changeHandler(val);
-                                }));
-                            });
-                            const rect = txt.inputEl.getBoundingClientRect();
-                            const event = new MouseEvent('click', {clientX: rect.left, clientY: rect.bottom});
-                            menu.showAtMouseEvent(event);
-                        }
-                    });
-                });
-                if (shouldShowSuggestButton) {
-                    setting.addExtraButton(btn => {
-                        btn.setIcon('down-chevron')
-                           .setTooltip(this.language === 'jp' ? '他プロファイルから選択' : 'Select from other profiles')
-                           .onClick(() => {
-                               const menu = new Menu();
-                               otherProfileValues.forEach(val => {
-                                   menu.addItem((item: any) => item.setTitle(val).onClick(() => {
-                                       textComponent.inputEl.value = val;
-                                       textComponent.inputEl.dispatchEvent(new Event('input'));
-                                       changeHandler(val);
-                                   }));
-                               });
-                               const rect = btn.extraSettingsEl.getBoundingClientRect();
-                               const event = new MouseEvent('click', {clientX: rect.left, clientY: rect.bottom});
-                               menu.showAtMouseEvent(event);
-                           });
-                    });
-                }
-                break;
-            }
-        }
+        control.appendChild(labelInput);
+        control.appendChild(prefixInput);
+    };
+
+    createLabelSetting("Figures (Label / Prefix)", "figureLabel", "figPrefix");
+    createLabelSetting("Tables (Label / Prefix)", "tableLabel", "tblPrefix");
+    createLabelSetting("Listings (Label / Prefix)", "codeLabel", "lstPrefix");
+    createLabelSetting("Equations (Label / Prefix)", "equationLabel", "eqnPrefix"); // Added Equation
+
+    // =================================================================
+    // 6. Cross-referencing & Filters
+    // =================================================================
+    containerEl.createEl("h3", { text: "Extensions & Filters" });
+
+    new Setting(containerEl)
+      .setName("Use Pandoc Crossref")
+      .setDesc("Enable pandoc-crossref filter.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(currentProfile.usePandocCrossref)
+          .onChange(async (value) => {
+            currentProfile.usePandocCrossref = value;
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
+    
+    if (currentProfile.usePandocCrossref) {
+        new Setting(containerEl)
+            .setName("Pandoc Crossref Path")
+            .setDesc("Path to pandoc-crossref executable.")
+            .addText((text) =>
+                text.setValue(currentProfile.pandocCrossrefPath)
+                .onChange(async (value) => {
+                    currentProfile.pandocCrossrefPath = value;
+                    await this.plugin.saveSettings();
+                })
+            );
     }
 
-    // 各種設定項目
-    createSetting('pandocPath', { en: 'Pandoc Path', jp: 'Pandocパス' }, { en: 'Path to Pandoc executable.', jp: 'Pandoc実行ファイルのパス。' }, 'text');
-    createSetting('pandocExtraArgs', { en: 'Pandoc Extra Args', jp: 'Pandoc追加オプション' }, { en: 'Extra arguments for Pandoc (space-separated).', jp: 'Pandoc追加オプション（スペース区切り）。' }, 'text');
-    createSetting('pandocCrossrefPath', { en: 'pandoc-crossref Path', jp: 'pandoc-crossrefパス' }, { en: 'Path to pandoc-crossref executable.', jp: 'pandoc-crossref実行ファイルのパス。' }, 'text');
-    createSetting('luaFilterPath', { en: 'Lua Filter Path', jp: 'Luaフィルタパス' }, { en: 'Path to Lua filter for advanced TeX command conversion (e.g., tex-to-docx.lua).', jp: '高度なTeXコマンド変換用Luaフィルタのパス（例: tex-to-docx.lua）。' }, 'text');
-    createSetting('searchDirectory', { en: 'Search Directory', jp: '検索ディレクトリ' }, { en: 'Root directory for searching images.', jp: '画像を検索するルートディレクトリ。' }, 'text');
-    createSetting('outputDirectory', { en: 'Output Directory', jp: '出力ディレクトリ' }, { en: 'Directory for generated files (blank = vault root).', jp: '生成ファイルの保存先（空欄=Vaultルート）。' }, 'text');
-    createSetting('latexEngine', { en: 'LaTeX Engine', jp: 'LaTeXエンジン' }, { en: 'e.g., lualatex, xelatex', jp: '例: lualatex, xelatex' }, 'text');
-    createSetting('documentClass', { en: 'Document Class', jp: 'ドキュメントクラス' }, { en: 'e.g., ltjarticle, beamer', jp: '例: ltjarticle, beamer' }, 'text');
-    createSetting('documentClassOptions', { en: 'Document Class Options', jp: 'ドキュメントクラスオプション' }, { en: 'e.g., dvipdfmx,12pt', jp: '例: dvipdfmx,12pt' }, 'text');
-    createSetting('fontSize', { en: 'Font Size', jp: 'フォントサイズ' }, { en: 'e.g., 12pt', jp: '例: 12pt' }, 'text');
-    createSetting('marginSize', { en: 'Margin Size', jp: '余白サイズ' }, { en: 'e.g., 25mm', jp: '例: 25mm' }, 'text');
-    createSetting('imageScale', { en: 'Image Scale', jp: '画像スケール' }, { en: 'e.g., width=0.8\\textwidth', jp: '例: width=0.8\\textwidth' }, 'text');
-
-    createSetting('outputFormat', {en: 'Default Output Format', jp: 'デフォルト出力形式'}, {en: 'Default format for ribbon icon.', jp: 'リボンアイコンのデフォルト形式。'}, 'dropdown', [['pdf', 'pdf'], ['latex', 'latex'], ['docx', 'docx']]);
-    
-    // Toggles
-    createSetting('useStandalone', { en: 'Use --standalone', jp: '--standaloneを使う' }, { en: 'Pass --standalone option to pandoc.', jp: 'pandocに--standaloneオプションを渡す。' }, 'toggle');
-    createSetting('usePandocCrossref', { en: 'Use pandoc-crossref', jp: 'pandoc-crossrefを使う' }, { en: 'Enable pandoc-crossref filter.', jp: 'pandoc-crossrefフィルタを有効にする。' }, 'toggle');
-    createSetting('usePageNumber', { en: 'Enable Page Numbering', jp: 'ページ番号を付ける' }, { en: 'Enable page numbering in PDF.', jp: 'PDFにページ番号を付ける。' }, 'toggle');
-    createSetting('useMarginSize', { en: 'Enable Margin Size', jp: '余白サイズを有効にする' }, { en: 'Enable geometry:margin option.', jp: 'geometry:marginオプションを有効にする。' }, 'toggle');
-    createSetting('deleteIntermediateFiles', { en: 'Delete Intermediate Files', jp: '中間ファイルを削除' }, { en: '.temp.md after conversion.', jp: '変換後に.temp.mdを削除。' }, 'toggle');
-    createSetting('enableAdvancedTexCommands', { en: 'Enable Advanced TeX Commands', jp: '高度なTeXコマンドを有効にする' }, { en: 'Enable advanced TeX command conversion for docx (\\centerline, \\rightline, \\ruby, etc.).', jp: 'docx変換時に高度なTeXコマンド変換を有効にする（\\centerline、\\rightline、\\ruby等）。' }, 'toggle');
-
-    // Labels and Prefixes
-    containerEl.createEl("h4", { text: "Labels & Prefixes / ラベルとプレフィックス" });
-    createSetting('figureLabel', { en: 'Figure Label', jp: '図のラベル' }, { en: 'e.g., Figure', jp: '例: 図' }, 'text');
-    createSetting('figPrefix', { en: 'Figure Prefix', jp: '図のプレフィックス' }, { en: 'e.g., Fig.', jp: '例: 図' }, 'text');
-    createSetting('tableLabel', { en: 'Table Label', jp: '表のラベル' }, { en: 'e.g., Table', jp: '例: 表' }, 'text');
-    createSetting('tblPrefix', { en: 'Table Prefix', jp: '表のプレフィックス' }, { en: 'e.g., Table', jp: '例: 表' }, 'text');
-    createSetting('codeLabel', { en: 'Code Label', jp: 'コードのラベル' }, { en: 'Caption label used by pandoc-crossref (e.g., Listing)', jp: 'pandoc-crossrefで使うキャプションラベル（例: Listing）' }, 'text');
-    createSetting('lstPrefix', { en: 'Code Prefix', jp: 'コードのプレフィックス' }, { en: 'Prefix for listing numbers (e.g., Listing)', jp: 'リスティング番号のプレフィックス（例: Listing）' }, 'text');
-    createSetting('equationLabel', { en: 'Equation Label', jp: '数式のラベル' }, { en: 'e.g., Equation', jp: '例: 式' }, 'text');
-    createSetting('eqnPrefix', { en: 'Equation Prefix', jp: '数式のプレフィックス' }, { en: 'e.g., Eq.', jp: '例: 式' }, 'text');
-
-    // Header Includes
-    containerEl.createEl("h4", { text: "Header Includes" });
-    createSetting('headerIncludes', { en: 'Header Includes', jp: 'ヘッダIncludes' }, { en: 'Custom LaTeX header includes (YAML).', jp: 'カスタムLaTeXヘッダ（YAML形式）。' }, 'textarea');
-
-    // Global Settings
-    containerEl.createEl("h4", { text: "Global Settings / グローバル設定" });
     new Setting(containerEl)
-      .setName("markdownlint-cli2 Path / 実行パス")
-      .setDesc("Absolute path to markdownlint-cli2 binary. 空欄は自動解決（node_modules/.bin優先→PATH）。")
-      .addText((txt) =>
-        txt
-          .setPlaceholder("/usr/local/bin/markdownlint-cli2 など")
-          .setValue(this.plugin.settings.markdownlintCli2Path || "")
+      .setName("Enable Advanced LaTeX Commands")
+      .setDesc("Enable Lua filters (e.g. for docx raw output).")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(currentProfile.enableAdvancedTexCommands)
           .onChange(async (value) => {
-            this.plugin.settings.markdownlintCli2Path = value.trim();
+            currentProfile.enableAdvancedTexCommands = value;
+            await this.plugin.saveSettings();
+            this.display();
+          })
+      );
+
+    if (currentProfile.enableAdvancedTexCommands) {
+        new Setting(containerEl)
+            .setName("Lua Filter Path")
+            .setDesc("Path to custom lua filter.")
+            .addText((text) => 
+                text.setValue(currentProfile.luaFilterPath)
+                .onChange(async (value) => {
+                    currentProfile.luaFilterPath = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+    }
+
+    new Setting(containerEl)
+        .setName("Pandoc Extra Arguments")
+        .setDesc("Any other arguments to pass to pandoc.")
+        .addText((text) =>
+            text.setValue(currentProfile.pandocExtraArgs)
+            .setPlaceholder("--toc --number-sections")
+            .onChange(async (value) => {
+                currentProfile.pandocExtraArgs = value;
+                await this.plugin.saveSettings();
+            })
+        );
+    
+    new Setting(containerEl)
+        .setName("Use Standalone")
+        .setDesc("Pass --standalone flag (produces full document with header).")
+        .addToggle((toggle) => 
+            toggle.setValue(currentProfile.useStandalone)
+            .onChange(async (value) => {
+                currentProfile.useStandalone = value;
+                await this.plugin.saveSettings();
+            })
+        );
+
+    // =================================================================
+    // 7. Global Settings
+    // =================================================================
+    containerEl.createEl("h3", { text: "Global Settings" });
+
+    new Setting(containerEl)
+        .setName("Enable Markdownlint Fix")
+        .setDesc("Run 'markdownlint-cli2 --fix' before conversion.")
+        .addToggle((toggle) => 
+            toggle.setValue(settings.enableMarkdownlintFix)
+            .onChange(async (value) => {
+                settings.enableMarkdownlintFix = value;
+                await this.plugin.saveSettings();
+                this.display();
+            })
+        );
+    
+    if (settings.enableMarkdownlintFix) {
+        new Setting(containerEl)
+            .setName("Markdownlint-cli2 Path")
+            .setDesc("Path to markdownlint-cli2 executable.")
+            .addText((text) =>
+                text.setValue(settings.markdownlintCli2Path)
+                .onChange(async (value) => {
+                    settings.markdownlintCli2Path = value;
+                    await this.plugin.saveSettings();
+                })
+            );
+    }
+
+    new Setting(containerEl)
+      .setName("Suppress Developer Logs")
+      .setDesc("Hide detailed logs in the developer console.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(settings.suppressDeveloperLogs)
+          .onChange(async (value) => {
+            settings.suppressDeveloperLogs = value;
             await this.plugin.saveSettings();
           })
       );
-    new Setting(containerEl)
-      .setName("Auto-fix Markdown Lint / Markdown Lint自動修正")
-      .setDesc("Run markdownlint-cli2 --fix before Pandoc. / Pandoc実行前にmarkdownlint-cli2 --fixを実行する。")
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.enableMarkdownlintFix)
-        .onChange(async (value) => {
-          this.plugin.settings.enableMarkdownlintFix = value;
-          await this.plugin.saveSettings();
-        }));
-    new Setting(containerEl)
-      .setName("Suppress Developer Logs / 開発者ログを抑制")
-      .setDesc("Suppress console.log messages (errors will still be shown in console). / console.logメッセージを抑制（エラーは引き続きコンソールに表示）。")
-      .addToggle(toggle => toggle
-        .setValue(this.plugin.settings.suppressDeveloperLogs)
-        .onChange(async (value) => {
-          this.plugin.settings.suppressDeveloperLogs = value;
-          await this.plugin.saveSettings();
-        }));
+  }
+}
+
+class PreambleModal extends Modal {
+  private initial: string;
+  private onSave: (val: string) => Promise<void> | void;
+
+  constructor(app: App, initial: string, onSave: (val: string) => Promise<void> | void) {
+    super(app);
+    this.initial = initial;
+    this.onSave = onSave;
+  }
+
+  onOpen(): void {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: "Edit LaTeX Preamble" });
+
+    const area = contentEl.createEl("textarea", { text: this.initial });
+    area.style.width = "100%";
+    area.style.height = "70vh";
+    area.style.fontFamily = "var(--font-monospace)";
+    area.style.fontSize = "13px";
+    area.style.lineHeight = "1.45";
+    area.style.resize = "vertical";
+    area.spellcheck = false;
+
+    const note = contentEl.createEl("p", { text: "Enter pure LaTeX only. YAML will be injected automatically." });
+    note.style.opacity = "0.8";
+
+    const buttons = contentEl.createDiv();
+    buttons.style.display = "flex";
+    buttons.style.justifyContent = "flex-end";
+    buttons.style.gap = "8px";
+    buttons.style.marginTop = "12px";
+
+    const cancel = buttons.createEl("button", { text: "Cancel" });
+    cancel.onclick = () => this.close();
+
+    const save = buttons.createEl("button", { text: "Save" });
+    save.classList.add("mod-cta");
+    save.onclick = async () => {
+      await this.onSave(area.value);
+      this.close();
+    };
   }
 }

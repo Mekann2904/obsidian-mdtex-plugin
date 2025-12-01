@@ -4,38 +4,14 @@
 // Related: src/MdTexPlugin.ts, src/services/lintService.ts, src/utils/markdownTransforms.ts
 
 import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
-import { spawn } from "child_process";
+import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
-import { PandocPluginSettings, ProfileSettings } from "../MdTexPluginSettings";
+import { ProfileSettings } from "../MdTexPluginSettings";
 import { replaceWikiLinksAndCode } from "../utils/markdownTransforms";
+import { cleanLatexPreamble, wrapLatexInYaml, appendListingOverrides } from "../utils/latexPreamble";
 import type { PluginContext } from "./lintService";
-
-const escapeForLatexCommand = (text: string) =>
-  text
-    .replace(/\\/g, "\\textbackslash{}").replace(/\{/g, "\\{").replace(/\}/g, "\\}")
-    .replace(/\^/g, "\\^").replace(/\~/g, "\\~{}")
-    .replace(/#/g, "\\#").replace(/%/g, "\\%")
-    .replace(/&/g, "\\&").replace(/\$/g, "\\$");
-
-function appendListingNamesToHeader(header: string, profile: ProfileSettings): string {
-  // Babel/Polyglossia が \begin{document} で上書きするため、遅延適用する
-  const nameCmd = `  - |\n    \\AtBeginDocument{\\renewcommand{\\lstlistingname}{${escapeForLatexCommand(profile.codeLabel)}}}`;
-  const listCmd = `  - |\n    \\AtBeginDocument{\\renewcommand{\\lstlistlistingname}{${escapeForLatexCommand(profile.lstPrefix)}}}`;
-
-  if (header.includes("header-includes")) {
-    const closing = header.lastIndexOf("\n---");
-    if (closing !== -1) {
-      const before = header.slice(0, closing);
-      const after = header.slice(closing); // includes closing ---
-      return `${before}\n${nameCmd}\n${listCmd}${after}`;
-    }
-    return `${header}\nheader-includes:\n${nameCmd}\n${listCmd}`;
-  }
-  // 万一 header-includes ブロックが無い場合は新規で作成
-  return `---\nheader-includes:\n${nameCmd}\n${listCmd}\n---\n\n${header}`;
-}
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
@@ -49,7 +25,7 @@ function getInputFormatArgs(format: string): string[] {
   return ["-f", "markdown"];
 }
 
-function addCommonPandocArgs(args: string[], activeProfile: ProfileSettings, format: string) {
+function addCommonPandocArgs(args: string[], activeProfile: ProfileSettings, format: string, inputDir: string) {
   if (format === "pdf") {
     args.push(`--pdf-engine=${activeProfile.latexEngine}`);
     if (activeProfile.documentClass === "beamer") args.push("-t", "beamer");
@@ -66,6 +42,11 @@ function addCommonPandocArgs(args: string[], activeProfile: ProfileSettings, for
     }
   }
   args.push("--listings");
+
+  const resourcePath = activeProfile.searchDirectory.trim()
+    ? activeProfile.searchDirectory.trim()
+    : inputDir;
+  args.push("--resource-path", resourcePath);
 
   if (activeProfile.usePandocCrossref) {
     const crossrefFilter = activeProfile.pandocCrossrefPath.trim() || "pandoc-crossref";
@@ -149,11 +130,11 @@ export async function convertCurrentPage(
   try {
     let content = await fs.readFile(inputFilePath, "utf8");
 
-    // headerIncludes が空でも listings のラベル設定を YAML で必ず注入する
-    const headerStr = activeProfile.headerIncludes || "";
-    const headerWithListingNames = appendListingNamesToHeader(headerStr, activeProfile);
-    // 複数 YAML ブロックは pandoc がマージするため単純結合でよい
-    content = headerWithListingNames + "\n" + content;
+    // ユーザー設定のプリアンブルをクリーンアップし、listing名の上書きを加えたうえでYAMLフロントマターへ包む
+    const cleanedHeader = cleanLatexPreamble(activeProfile.headerIncludes || "");
+    const headerWithListings = appendListingOverrides(cleanedHeader, activeProfile.codeLabel, activeProfile.lstPrefix);
+    const yamlBlock = wrapLatexInYaml(headerWithListings);
+    content = yamlBlock ? `${yamlBlock}\n${content}` : content;
 
     content = replaceWikiLinksAndCode(content, ctx.app, activeProfile, activeFile.path);
 
@@ -223,7 +204,8 @@ async function runPandoc(
     const inputFormat = getInputFormatArgs(format);
     const args = [inputFile, ...inputFormat, "-o", outputFile];
 
-    addCommonPandocArgs(args, activeProfile, format);
+    const cwd = path.dirname(inputFile);
+    addCommonPandocArgs(args, activeProfile, format, cwd);
 
     if (!ctx.settings.suppressDeveloperLogs) {
       console.log("Running pandoc with args:", args);
@@ -232,33 +214,11 @@ async function runPandoc(
     const pandocProcess = spawn(pandocPath, args, {
       stdio: "pipe",
       shell: false,
-      cwd: path.dirname(inputFile),
+      cwd,
       env: { ...process.env, PATH: process.env.PATH ?? "" },
     });
 
-    pandocProcess.stderr?.on("data", (data) => {
-      const msg = data.toString().trim();
-      new Notice(`Pandoc error: ${msg}`);
-      console.error(`Pandoc error: ${msg}`);
-    });
-    pandocProcess.stdout?.on("data", (data) => {
-      if (!ctx.settings.suppressDeveloperLogs) {
-        console.log(`Pandoc output: ${data.toString()}`);
-      }
-    });
-    pandocProcess.on("close", (code) => {
-      if (code === 0) {
-        new Notice(`Successfully generated: ${outputFile}`);
-        resolve(true);
-      } else {
-        new Notice(`Error: Pandoc process exited with code ${code}`);
-        resolve(false);
-      }
-    });
-    pandocProcess.on("error", (err) => {
-      new Notice(`Error launching Pandoc: ${err.message}`);
-      resolve(false);
-    });
+    handlePandocProcess(pandocProcess, outputFile, ctx, resolve);
   });
 }
 
@@ -276,7 +236,7 @@ async function runPandocWithStdin(
     const inputFormat = getInputFormatArgs(format);
     const args = [...inputFormat, "-o", outputFile];
 
-    addCommonPandocArgs(args, activeProfile, format);
+    addCommonPandocArgs(args, activeProfile, format, workingDir);
 
     if (!ctx.settings.suppressDeveloperLogs) {
       console.log("Running pandoc (stdin) with args:", args);
@@ -292,28 +252,42 @@ async function runPandocWithStdin(
     pandocProcess.stdin?.write(inputContent);
     pandocProcess.stdin?.end();
 
-    pandocProcess.stderr?.on("data", (data) => {
-      const msg = data.toString().trim();
-      new Notice(`Pandoc error: ${msg}`);
-      console.error(`Pandoc error: ${msg}`);
-    });
-    pandocProcess.stdout?.on("data", (data) => {
-      if (!ctx.settings.suppressDeveloperLogs) {
-        console.log(`Pandoc output: ${data.toString()}`);
-      }
-    });
-    pandocProcess.on("close", (code) => {
-      if (code === 0) {
-        new Notice(`Successfully generated: ${outputFile}`);
-        resolve(true);
-      } else {
-        new Notice(`Error: Pandoc process exited with code ${code}`);
-        resolve(false);
-      }
-    });
-    pandocProcess.on("error", (err) => {
-      new Notice(`Error launching Pandoc: ${err.message}`);
+    handlePandocProcess(pandocProcess, outputFile, ctx, resolve);
+  });
+}
+
+function handlePandocProcess(
+  proc: ChildProcess,
+  outputFile: string,
+  ctx: PluginContext,
+  resolve: (value: boolean) => void
+) {
+  proc.stderr?.on("data", (data) => {
+    const msg = data.toString().trim();
+    if (msg) {
+      console.warn(`Pandoc stderr: ${msg}`);
+      new Notice(`Pandoc: ${msg.substring(0, 100)}...`);
+    }
+  });
+
+  proc.stdout?.on("data", (data) => {
+    if (!ctx.settings.suppressDeveloperLogs) {
+      console.log(`Pandoc Output: ${data.toString()}`);
+    }
+  });
+
+  proc.on("close", (code) => {
+    if (code === 0) {
+      new Notice(`Successfully generated: ${path.basename(outputFile)}`);
+      resolve(true);
+    } else {
+      new Notice(`Error: Pandoc process exited with code ${code}`);
       resolve(false);
-    });
+    }
+  });
+
+  proc.on("error", (err) => {
+    new Notice(`Error launching Pandoc: ${err.message}`);
+    resolve(false);
   });
 }
