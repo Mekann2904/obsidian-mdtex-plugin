@@ -3,7 +3,17 @@
 // Reason: ラベル抽出とサジェスト責務を分割し、可読性を高めるため。
 // Related: src/suggest/LabelEditorSuggest.ts, src/suggest/labelParser.ts, src/MdTexPlugin.ts
 
-import { EditorSuggest, EditorPosition, EditorSuggestContext, Editor, TFile, App, EventRef } from "obsidian";
+import {
+  EditorSuggest,
+  EditorPosition,
+  EditorSuggestContext,
+  Editor,
+  TFile,
+  App,
+  EventRef,
+  debounce,
+  MarkdownView,
+} from "obsidian";
 import { extractLabels, LabelCompletion } from "./labelParser";
 
 interface PandocPluginLike {
@@ -13,78 +23,119 @@ interface PandocPluginLike {
 export class MyLabelSuggest extends EditorSuggest<LabelCompletion> {
   private labels: LabelCompletion[] = [];
   private plugin: PandocPluginLike | null = null;
-  private fileModifyEventRef: EventRef | null = null;
+  private eventRefs: EventRef[] = [];
+  private debouncedUpdateLabels: (file: TFile, editor?: Editor) => void;
 
   constructor(public app: App, plugin?: PandocPluginLike) {
     super(app);
     this.plugin = plugin || null;
 
-    this.fileModifyEventRef = this.app.vault.on("modify", async (modifiedFile) => {
-      if (modifiedFile instanceof TFile) {
-        await this.updateLabels(modifiedFile);
+    this.debouncedUpdateLabels = debounce(this.updateLabelsProcess.bind(this), 300, true);
+
+    const editorChangeRef = this.app.workspace.on("editor-change", (_editor, info) => {
+      if (info?.file instanceof TFile) {
+        this.debouncedUpdateLabels(info.file, _editor);
       }
     });
+    this.eventRefs.push(editorChangeRef);
+
+    const activeLeafRef = this.app.workspace.on("active-leaf-change", () => {
+      this.triggerUpdateForActiveView();
+    });
+    this.eventRefs.push(activeLeafRef);
+
+    this.triggerUpdateForActiveView();
   }
 
   private shouldSuppressLogs(): boolean {
     return this.plugin?.settings?.suppressDeveloperLogs || false;
   }
 
-  public onunload() {
-    if (this.fileModifyEventRef) {
-      this.app.vault.offref(this.fileModifyEventRef);
-      this.fileModifyEventRef = null;
+  private triggerUpdateForActiveView() {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (view && view.file) {
+      this.updateLabelsProcess(view.file, view.editor);
     }
   }
 
-  public onTrigger(cursor: EditorPosition, editor: Editor, file: TFile): EditorSuggestContext | null {
-    const lineText = editor.getLine(cursor.line);
-    const match = lineText.match(/(\[@[a-zA-Z0-9:_-]*\]?)/);
-    if (!match || !match[0]) return null;
+  public onunload() {
+    this.eventRefs.forEach((ref) => this.app.workspace.offref(ref));
+    this.eventRefs = [];
+  }
 
-    const foundText = match[0];
-    const startCh = lineText.indexOf(foundText);
-    const endCh = startCh + foundText.length;
-    const query = foundText.slice(2).replace(/\]$/, "");
+  public onTrigger(cursor: EditorPosition, editor: Editor, file: TFile): EditorSuggestContext | null {
+    const linePrefix = editor.getLine(cursor.line).substring(0, cursor.ch);
+    const match = linePrefix.match(/\[@([a-zA-Z0-9:_\-./]*)$/);
+    if (!match) return null;
+
+    const matchText = match[0];
+    const query = match[1];
+    const startCh = cursor.ch - matchText.length;
 
     return {
       editor,
       file,
       query,
       start: { line: cursor.line, ch: startCh },
-      end: { line: cursor.line, ch: endCh },
+      end: cursor,
     };
   }
 
   getSuggestions(context: EditorSuggestContext): LabelCompletion[] {
-    return this.labels.filter((item) => item.label.startsWith(context.query));
+    const query = context.query.toLowerCase();
+
+    return this.labels
+      .filter((item) => item.label.toLowerCase().includes(query))
+      .sort((a, b) => {
+        const aLower = a.label.toLowerCase();
+        const bLower = b.label.toLowerCase();
+
+        const aStarts = aLower.startsWith(query);
+        const bStarts = bLower.startsWith(query);
+
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+
+        return aLower.localeCompare(bLower);
+      });
   }
 
   renderSuggestion(suggestion: LabelCompletion, el: HTMLElement): void {
-    el.createDiv({ cls: "autocomplete-label", text: suggestion.label });
+    const container = el.createDiv({ cls: "label-suggest-item" });
+    container.createDiv({ cls: "autocomplete-label", text: suggestion.label });
     if (suggestion.detail) {
-      el.createDiv({ cls: "autocomplete-detail", text: suggestion.detail });
+      container.createDiv({
+        cls: "autocomplete-detail",
+        text: suggestion.detail,
+        attr: { style: "color: var(--text-muted); font-size: 0.8em; margin-left: 10px;" },
+      });
     }
   }
 
   selectSuggestion(suggestion: LabelCompletion): void {
-    const { editor, start, end } = this.context ?? {};
-    if (!editor || !start || !end) return;
+    const context = this.context;
+    if (!context) return;
+    const { editor, start, end } = context;
 
-    editor.replaceRange(`[@${suggestion.label}]`, start, end);
-    editor.setCursor({ line: start.line, ch: start.ch + suggestion.label.length + 3 });
+    const replacement = `[@${suggestion.label}]`;
+    editor.replaceRange(replacement, start, end);
+    editor.setCursor({ line: start.line, ch: start.ch + replacement.length });
     this.close();
   }
 
-  private async updateLabels(file: TFile): Promise<void> {
+  private async updateLabelsProcess(file: TFile, editor?: Editor): Promise<void> {
+    const active = this.app.workspace.getActiveFile();
+    if (!active || active.path !== file.path) return;
+
     try {
-      const content = await this.app.vault.read(file);
+      const content = editor ? editor.getValue() : await this.app.vault.read(file);
       this.labels = extractLabels(content);
       if (!this.shouldSuppressLogs()) {
-        console.log("[MyLabelSuggest:updateLabels] Updated labels:", this.labels);
+        console.log(
+          `[MyLabelSuggest:updateLabels] ${file.basename}: ${this.labels.length} labels (Source: ${editor ? "Editor" : "Vault"})`
+        );
       }
     } catch (err) {
-      this.labels = [];
       console.error("[MyLabelSuggest:updateLabels] Failed to read file:", err);
     }
   }
