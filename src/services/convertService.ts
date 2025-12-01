@@ -155,7 +155,7 @@ export async function convertCurrentPage(
     // 複数 YAML ブロックは pandoc がマージするため単純結合でよい
     content = headerWithListingNames + "\n" + content;
 
-    content = replaceWikiLinksAndCode(content, ctx.app, activeProfile);
+    content = replaceWikiLinksAndCode(content, ctx.app, activeProfile, activeFile.path);
 
     if (format === "docx") {
       content = content
