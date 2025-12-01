@@ -3,6 +3,6 @@
 // Reason: Obsidian が読み込むデフォルトエクスポートを提供するため。
 // Related: src/MdTexPlugin.ts, src/MdTexPluginSettings.ts, src/services/convertService.ts, src/services/lintService.ts
 
-import PandocPlugin from "./MdTexPlugin";
+import MdTexPlugin from "./MdTexPlugin";
 
-export default PandocPlugin;
+export default MdTexPlugin;

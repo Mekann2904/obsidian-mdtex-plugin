@@ -4,7 +4,7 @@
 // Related: src/MdTexPlugin.ts, src/MdTexPluginSettings.ts, src/services/settingsService.ts, src/services/convertService.ts
 
 import { App, PluginSettingTab, Setting, Modal, Notice, Menu, TextComponent, TextAreaComponent } from "obsidian";
-import type PandocPlugin from "./MdTexPlugin";
+import type MdTexPlugin from "./MdTexPlugin";
 import { DEFAULT_PROFILE, ProfileSettings } from "./MdTexPluginSettings";
 
 /**
@@ -48,10 +48,10 @@ class ProfileNameModal extends Modal {
  * 設定タブクラス
  */
 export class PandocPluginSettingTab extends PluginSettingTab {
-  plugin: PandocPlugin;
+  plugin: MdTexPlugin;
   language: "en" | "jp";
 
-  constructor(app: App, plugin: PandocPlugin) {
+  constructor(app: App, plugin: MdTexPlugin) {
     super(app, plugin);
     this.plugin = plugin;
     this.language = "jp";
