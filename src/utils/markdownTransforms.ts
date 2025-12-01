@@ -137,7 +137,8 @@ export function replaceWikiLinksRecursively(
  * 有効な WikiLink だけ [[ ]] を外してテキストにする。コードフェンス内は手を付けない。
  */
 export function unwrapValidWikiLinks(markdown: string, app: App, sourcePath: string): string {
-  const wikiLinkRegex = /\[\[(.*?)\]\]/g;
+  // ![[...]]（埋め込み・画像）を除外するため否定後読みを付ける
+  const wikiLinkRegex = /(?<!\!)\[\[(.*?)\]\]/g;
   const lines = markdown.split("\n");
   let inFence = false;
 
