@@ -9,8 +9,9 @@ import * as path from "path";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import { ProfileSettings } from "../MdTexPluginSettings";
-import { replaceWikiLinksAndCode } from "../utils/markdownTransforms";
+import { replaceWikiLinksRecursively } from "../utils/markdownTransforms";
 import { cleanLatexPreamble, wrapLatexInYaml, appendListingOverrides } from "../utils/latexPreamble";
+import { expandTransclusions } from "../utils/transclusion";
 import type { PluginContext } from "./lintService";
 
 export interface ConvertDeps {
@@ -132,13 +133,16 @@ export async function convertCurrentPage(
   try {
     let content = await fs.readFile(inputFilePath, "utf8");
 
+    // トランスクルージョン (![[...]]) を先に展開
+    content = await expandTransclusions(content, ctx.app, activeFile.path);
+
     // ユーザー設定のプリアンブルをクリーンアップし、listing名の上書きを加えたうえでYAMLフロントマターへ包む
     const cleanedHeader = cleanLatexPreamble(activeProfile.headerIncludes || "");
     const headerWithListings = appendListingOverrides(cleanedHeader, activeProfile.codeLabel, activeProfile.lstPrefix);
     const yamlBlock = wrapLatexInYaml(headerWithListings);
     content = yamlBlock ? `${yamlBlock}\n${content}` : content;
 
-    content = replaceWikiLinksAndCode(content, ctx.app, activeProfile, activeFile.path);
+    content = replaceWikiLinksRecursively(content, ctx.app, activeProfile, activeFile.path);
 
     if (format === "docx") {
       content = content
