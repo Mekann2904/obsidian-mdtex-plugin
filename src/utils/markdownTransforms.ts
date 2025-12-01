@@ -7,6 +7,7 @@ import { FileSystemAdapter, App, TFile } from "obsidian";
 import * as path from "path";
 import * as fsSync from "fs";
 import { ProfileSettings } from "../MdTexPluginSettings";
+import { getLinkTargetFile } from "./linkUtils";
 
 export const escapeSpecialCharacters = (code: string): string =>
   code
@@ -130,6 +131,34 @@ export function replaceWikiLinksRecursively(
   if (transformed === markdown) return transformed;
 
   return replaceWikiLinksRecursively(transformed, app, profile, sourcePath, inBlockquote, depth + 1);
+}
+
+/**
+ * 有効な WikiLink だけ [[ ]] を外してテキストにする。コードフェンス内は手を付けない。
+ */
+export function unwrapValidWikiLinks(markdown: string, app: App, sourcePath: string): string {
+  const wikiLinkRegex = /\[\[(.*?)\]\]/g;
+  const lines = markdown.split("\n");
+  let inFence = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^```/.test(line)) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+
+    lines[i] = line.replace(wikiLinkRegex, (match, inner) => {
+      const target = getLinkTargetFile(app, inner, sourcePath);
+      if (!target) return match;
+      const aliasSplit = inner.split("|");
+      if (aliasSplit.length > 1) return aliasSplit[1];
+      return aliasSplit[0];
+    });
+  }
+
+  return lines.join("\n");
 }
 
 function normalizeListingLanguage(codeLang: string | undefined): string | undefined {

@@ -9,7 +9,7 @@ import * as path from "path";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import { ProfileSettings } from "../MdTexPluginSettings";
-import { replaceWikiLinksRecursively } from "../utils/markdownTransforms";
+import { replaceWikiLinksRecursively, unwrapValidWikiLinks } from "../utils/markdownTransforms";
 import { cleanLatexPreamble, wrapLatexInYaml, appendListingOverrides } from "../utils/latexPreamble";
 import { expandTransclusions } from "../utils/transclusion";
 import type { PluginContext } from "./lintService";
@@ -141,6 +141,9 @@ export async function convertCurrentPage(
     const headerWithListings = appendListingOverrides(cleanedHeader, activeProfile.codeLabel, activeProfile.lstPrefix);
     const yamlBlock = wrapLatexInYaml(headerWithListings);
     content = yamlBlock ? `${yamlBlock}\n${content}` : content;
+
+    // 有効な WikiLink のみ [[ ]] を外してテキストにする
+    content = unwrapValidWikiLinks(content, ctx.app, activeFile.path);
 
     content = replaceWikiLinksRecursively(content, ctx.app, activeProfile, activeFile.path);
 
