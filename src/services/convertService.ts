@@ -41,6 +41,66 @@ export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
 }
 
+// 入力形式の指定を統一管理するヘルパー
+function getInputFormatArgs(format: string): string[] {
+  if (format === "docx") {
+    return ["-f", "markdown+raw_html+fenced_divs+raw_attribute"];
+  }
+  return ["-f", "markdown"];
+}
+
+function addCommonPandocArgs(args: string[], activeProfile: ProfileSettings, format: string) {
+  if (format === "pdf") {
+    args.push(`--pdf-engine=${activeProfile.latexEngine}`);
+    if (activeProfile.documentClass === "beamer") args.push("-t", "beamer");
+  } else if (format === "latex") {
+    args.push("-t", "latex");
+    if (activeProfile.documentClass === "beamer") args.push("-t", "beamer");
+  } else if (format === "docx") {
+    args.push("-t", "docx");
+    if (activeProfile.enableAdvancedTexCommands) {
+      const luaFilterPath = activeProfile.luaFilterPath.trim();
+      if (luaFilterPath && fsSync.existsSync(luaFilterPath)) {
+        args.push("--lua-filter", luaFilterPath);
+      }
+    }
+  }
+  args.push("--listings");
+
+  if (activeProfile.usePandocCrossref) {
+    const crossrefFilter = activeProfile.pandocCrossrefPath.trim() || "pandoc-crossref";
+    args.push("-F", crossrefFilter);
+  }
+
+  args.push("-M", `figureTitle=${activeProfile.figureLabel}`);
+  args.push("-M", `figPrefix=${activeProfile.figPrefix}`);
+  args.push("-M", `tableTitle=${activeProfile.tableLabel}`);
+  args.push("-M", `tblPrefix=${activeProfile.tblPrefix}`);
+  args.push("-M", `listingTitle=${activeProfile.codeLabel}`);
+  args.push("-M", `listing-title=${activeProfile.codeLabel}`);
+  args.push("-M", `lstPrefix=${activeProfile.lstPrefix}`);
+  args.push("-M", `eqnPrefix=${activeProfile.eqnPrefix}`);
+
+  if (activeProfile.useMarginSize) args.push("-V", `geometry:margin=${activeProfile.marginSize}`);
+  if (!activeProfile.usePageNumber) args.push("-V", "pagestyle=empty");
+
+  args.push("-V", `fontsize=${activeProfile.fontSize}`);
+  args.push("-V", `documentclass=${activeProfile.documentClass}`);
+  if (activeProfile.documentClassOptions?.trim()) args.push("-V", `classoption=${activeProfile.documentClassOptions}`);
+
+  args.push("--highlight-style=tango");
+
+  if (activeProfile.pandocExtraArgs.trim()) {
+    const extras = activeProfile.pandocExtraArgs.split(/\s+/);
+    const filtered = extras.filter((arg) => {
+      if (format !== "docx" && arg.startsWith("--reference-doc")) return false;
+      return true;
+    });
+    args.push(...filtered);
+  }
+  if (activeProfile.useStandalone) args.push("--standalone");
+}
+
 export async function convertCurrentPage(
   ctx: PluginContext,
   deps: ConvertDeps,
@@ -111,24 +171,38 @@ export async function convertCurrentPage(
         .replace(/\\noindent/g, '');
     }
 
-    await fs.writeFile(intermediateFilename, content, "utf8");
+    const lintEnabled = ctx.settings.enableMarkdownlintFix;
 
-    if (ctx.settings.enableMarkdownlintFix) {
+    if (lintEnabled) {
+      await fs.writeFile(intermediateFilename, content, "utf8");
       try {
         await deps.runMarkdownlintFix(ctx, intermediateFilename);
       } catch (e: any) {
         console.error(e);
         new Notice("markdownlint-cli2実行に失敗。処理を継続。");
       }
-    }
 
-    const success = await runPandoc(ctx, activeProfile, intermediateFilename, outputFilename, format);
+      const success = await runPandoc(ctx, activeProfile, intermediateFilename, outputFilename, format);
 
-    if (success && activeProfile.deleteIntermediateFiles) {
-      try {
-        await fs.unlink(intermediateFilename);
-      } catch (err) {
-        console.warn(`Failed to delete intermediate file: ${intermediateFilename}`, err);
+      if (success && activeProfile.deleteIntermediateFiles) {
+        try {
+          await fs.unlink(intermediateFilename);
+        } catch (err) {
+          console.warn(`Failed to delete intermediate file: ${intermediateFilename}`, err);
+        }
+      }
+    } else {
+      const success = await runPandocWithStdin(
+        ctx,
+        activeProfile,
+        content,
+        outputFilename,
+        format,
+        path.dirname(inputFilePath)
+      );
+
+      if (!success) {
+        new Notice("Pandoc failed when using stdin pathway.");
       }
     }
   } catch (error: any) {
@@ -145,70 +219,78 @@ async function runPandoc(
 ): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const pandocPath = activeProfile.pandocPath.trim() || "pandoc";
-    const command = `"${pandocPath}"`;
 
-    const args = [`"${inputFile}"`, "-o", `"${outputFile}"`];
+    const inputFormat = getInputFormatArgs(format);
+    const args = [inputFile, ...inputFormat, "-o", outputFile];
 
-    if (format === "pdf") {
-      args.push(`--pdf-engine=${activeProfile.latexEngine}`);
-      if (activeProfile.documentClass === "beamer") args.push("-t", "beamer");
-    } else if (format === "latex") {
-      args.push("-t", "latex");
-      if (activeProfile.documentClass === "beamer") args.push("-t", "beamer");
-    } else if (format === "docx") {
-      args.push("-f", "markdown+raw_html+fenced_divs+raw_attribute");
-      args.push("-t", "docx");
-      if (activeProfile.enableAdvancedTexCommands) {
-        const luaFilterPath = activeProfile.luaFilterPath.trim();
-        if (luaFilterPath && fsSync.existsSync(luaFilterPath)) {
-          args.push("--lua-filter", luaFilterPath);
-        }
-      }
-    }
-    args.push("--listings");
-
-    if (activeProfile.usePandocCrossref) {
-      const crossrefFilter = activeProfile.pandocCrossrefPath.trim() || "pandoc-crossref";
-      args.push("-F", `"${crossrefFilter}"`);
-    }
-
-    args.push("-M", `figureTitle=${activeProfile.figureLabel}`);
-    args.push("-M", `figPrefix=${activeProfile.figPrefix}`);
-    args.push("-M", `tableTitle=${activeProfile.tableLabel}`);
-    args.push("-M", `tblPrefix=${activeProfile.tblPrefix}`);
-    // listingsパッケージの見出し: pandocテンプレートは hyphen 形式を期待することがある
-    // listings見出し（pandocテンプレートは listing-title を参照）。
-    args.push("-M", `listingTitle=${activeProfile.codeLabel}`);
-    args.push("-M", `listing-title=${activeProfile.codeLabel}`);
-    // pandoc-crossref プレフィックス
-    args.push("-M", `lstPrefix=${activeProfile.lstPrefix}`);
-    args.push("-M", `eqnPrefix=${activeProfile.eqnPrefix}`);
-
-    if (activeProfile.useMarginSize) args.push("-V", `geometry:margin=${activeProfile.marginSize}`);
-    if (!activeProfile.usePageNumber) args.push("-V", "pagestyle=empty");
-
-    args.push("-V", `fontsize=${activeProfile.fontSize}`);
-    args.push("-V", `documentclass=${activeProfile.documentClass}`);
-    if (activeProfile.documentClassOptions?.trim()) args.push("-V", `classoption=${activeProfile.documentClassOptions}`);
-
-    args.push("--highlight-style=tango");
-
-    if (activeProfile.pandocExtraArgs.trim()) {
-      const extras = activeProfile.pandocExtraArgs.split(/\s+/);
-      const filtered = extras.filter((arg) => {
-        // docx専用オプションをPDF/LaTeXでは除外
-        if (format !== "docx" && arg.startsWith("--reference-doc")) return false;
-        return true;
-      });
-      args.push(...filtered);
-    }
-    if (activeProfile.useStandalone) args.push("--standalone");
+    addCommonPandocArgs(args, activeProfile, format);
 
     if (!ctx.settings.suppressDeveloperLogs) {
       console.log("Running pandoc with args:", args);
     }
 
-    const pandocProcess = spawn(command, args, { stdio: "pipe", shell: true, env: { ...process.env, PATH: process.env.PATH ?? "" } });
+    const pandocProcess = spawn(pandocPath, args, {
+      stdio: "pipe",
+      shell: false,
+      cwd: path.dirname(inputFile),
+      env: { ...process.env, PATH: process.env.PATH ?? "" },
+    });
+
+    pandocProcess.stderr?.on("data", (data) => {
+      const msg = data.toString().trim();
+      new Notice(`Pandoc error: ${msg}`);
+      console.error(`Pandoc error: ${msg}`);
+    });
+    pandocProcess.stdout?.on("data", (data) => {
+      if (!ctx.settings.suppressDeveloperLogs) {
+        console.log(`Pandoc output: ${data.toString()}`);
+      }
+    });
+    pandocProcess.on("close", (code) => {
+      if (code === 0) {
+        new Notice(`Successfully generated: ${outputFile}`);
+        resolve(true);
+      } else {
+        new Notice(`Error: Pandoc process exited with code ${code}`);
+        resolve(false);
+      }
+    });
+    pandocProcess.on("error", (err) => {
+      new Notice(`Error launching Pandoc: ${err.message}`);
+      resolve(false);
+    });
+  });
+}
+
+async function runPandocWithStdin(
+  ctx: PluginContext,
+  activeProfile: ProfileSettings,
+  inputContent: string,
+  outputFile: string,
+  format: string,
+  workingDir: string
+): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const pandocPath = activeProfile.pandocPath.trim() || "pandoc";
+
+    const inputFormat = getInputFormatArgs(format);
+    const args = [...inputFormat, "-o", outputFile];
+
+    addCommonPandocArgs(args, activeProfile, format);
+
+    if (!ctx.settings.suppressDeveloperLogs) {
+      console.log("Running pandoc (stdin) with args:", args);
+    }
+
+    const pandocProcess = spawn(pandocPath, args, {
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: false,
+      cwd: workingDir,
+      env: { ...process.env, PATH: process.env.PATH ?? "" },
+    });
+
+    pandocProcess.stdin?.write(inputContent);
+    pandocProcess.stdin?.end();
 
     pandocProcess.stderr?.on("data", (data) => {
       const msg = data.toString().trim();
