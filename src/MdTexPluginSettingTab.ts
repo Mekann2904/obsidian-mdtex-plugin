@@ -291,8 +291,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     createSetting('figPrefix', { en: 'Figure Prefix', jp: '図のプレフィックス' }, { en: 'e.g., Fig.', jp: '例: 図' }, 'text');
     createSetting('tableLabel', { en: 'Table Label', jp: '表のラベル' }, { en: 'e.g., Table', jp: '例: 表' }, 'text');
     createSetting('tblPrefix', { en: 'Table Prefix', jp: '表のプレフィックス' }, { en: 'e.g., Table', jp: '例: 表' }, 'text');
-    createSetting('codeLabel', { en: 'Code Label', jp: 'コードのラベル' }, { en: 'e.g., Code', jp: '例: コード' }, 'text');
-    createSetting('lstPrefix', { en: 'Code Prefix', jp: 'コードのプレフィックス' }, { en: 'e.g., Code', jp: '例: コード' }, 'text');
+    createSetting('codeLabel', { en: 'Code Label', jp: 'コードのラベル' }, { en: 'Caption label used by pandoc-crossref (e.g., Listing)', jp: 'pandoc-crossrefで使うキャプションラベル（例: Listing）' }, 'text');
+    createSetting('lstPrefix', { en: 'Code Prefix', jp: 'コードのプレフィックス' }, { en: 'Prefix for listing numbers (e.g., Listing)', jp: 'リスティング番号のプレフィックス（例: Listing）' }, 'text');
     createSetting('equationLabel', { en: 'Equation Label', jp: '数式のラベル' }, { en: 'e.g., Equation', jp: '例: 式' }, 'text');
     createSetting('eqnPrefix', { en: 'Equation Prefix', jp: '数式のプレフィックス' }, { en: 'e.g., Eq.', jp: '例: 式' }, 'text');
 

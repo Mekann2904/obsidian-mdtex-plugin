@@ -20,7 +20,7 @@ export function replaceWikiLinksAndCode(
   profile: ProfileSettings
 ): string {
   return markdown.replace(
-    /!\[\[([^\]]+)\]\](?:\{#([^}]+)\})?(?:\[(.*?)\])?|```(\w+)(?:\s*\{([^}]*)\})?\n([\s\S]*?)```/g,
+    /!\[\[([^\]]+)\]\](?:\{#([^}]+)\})?(?:\[(.*?)\])?|```(?:([\w-]+))?(?:\s*\{([^}]*)\})?\n([\s\S]*?)```/g,
     (match, imageLink, imageLabel, imageCaption, codeLang, codeAttrs, codeBody) => {
       if (imageLink) {
         const searchDir = profile.searchDirectory || (app.vault.adapter as FileSystemAdapter).getBasePath();
@@ -36,20 +36,54 @@ export function replaceWikiLinksAndCode(
       }
 
       if (codeBody) {
+        // 言語も属性もない単なるフェンスは変換せずそのまま返す
+        if (!codeLang && !codeAttrs) return match;
+
         const escapedCode = escapeSpecialCharacters(codeBody);
-        const resolvedLang = codeLang || "zsh";
-        let labelOption = "", captionOption = "";
+        const resolvedLang = normalizeListingLanguage(codeLang);
+        let labelOption = "", captionOption = "", langOption = "";
         if (codeAttrs) {
           const labelMatch = codeAttrs.match(/#lst:([\w-]+)/);
           if (labelMatch) labelOption = `,label={lst:${labelMatch[1]}}`;
           const captionMatch = codeAttrs.match(/caption\s*=\s*"(.*?)"/);
           if (captionMatch) captionOption = `,caption={${escapeSpecialCharacters(captionMatch[1])}}`;
         }
-        return `\\begin{lstlisting}[language=${resolvedLang}${labelOption}${captionOption}]\n${escapedCode}\n\\end{lstlisting}`;
+        if (resolvedLang) langOption = `language=${resolvedLang}`;
+        const options = [langOption, labelOption.slice(1), captionOption.slice(1)].filter(Boolean).join(",");
+        const optWrapped = options ? `[${options}]` : "";
+        return `\\begin{lstlisting}${optWrapped}\n${escapedCode}\n\\end{lstlisting}`;
       }
       return match;
     }
   );
+}
+
+function normalizeListingLanguage(codeLang?: string): string | null {
+  if (!codeLang) return null;
+  const lang = codeLang.toLowerCase();
+  const mapping: Record<string, string> = {
+    python: "Python",
+    py: "Python",
+    bash: "bash",
+    sh: "bash",
+    zsh: "bash",
+    javascript: "JavaScript",
+    js: "JavaScript",
+    typescript: "JavaScript",
+    ts: "JavaScript",
+    json: "JavaScript",
+    html: "HTML",
+    css: "CSS",
+    c: "C",
+    cpp: "C++",
+    java: "Java",
+    text: "",
+    plain: "",
+  };
+  const mapped = mapping[lang];
+  if (mapped === undefined) return null;
+  if (mapped === "") return null; // treat as no language to avoid listings error
+  return mapped;
 }
 
 export function findFileSync(filename: string, searchDirectory: string): string | null {

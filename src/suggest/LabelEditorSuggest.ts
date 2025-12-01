@@ -64,7 +64,7 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
     const allSuggestions: MyCompletion[] = [
       { label: "{#fig:}", detail: "Figure Label" },
       { label: "{#tbl:}", detail: "Table Label" },
-      { label: "{#lst: caption=\"\"}", detail: "Code Label" },
+      { label: "{#lst: caption=\"\"}", detail: "Listing Label" },
       { label: "{#eq:}", detail: "Equation Label" },
     ];
 

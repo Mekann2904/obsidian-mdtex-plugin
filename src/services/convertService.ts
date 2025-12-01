@@ -12,6 +12,31 @@ import { PandocPluginSettings, ProfileSettings } from "../MdTexPluginSettings";
 import { replaceWikiLinksAndCode } from "../utils/markdownTransforms";
 import type { PluginContext } from "./lintService";
 
+const escapeForLatexCommand = (text: string) =>
+  text
+    .replace(/\\/g, "\\textbackslash{}").replace(/\{/g, "\\{").replace(/\}/g, "\\}")
+    .replace(/\^/g, "\\^").replace(/\~/g, "\\~{}")
+    .replace(/#/g, "\\#").replace(/%/g, "\\%")
+    .replace(/&/g, "\\&").replace(/\$/g, "\\$");
+
+function appendListingNamesToHeader(header: string, profile: ProfileSettings): string {
+  // Babel/Polyglossia が \begin{document} で上書きするため、遅延適用する
+  const nameCmd = `  - |\n    \\AtBeginDocument{\\renewcommand{\\lstlistingname}{${escapeForLatexCommand(profile.codeLabel)}}}`;
+  const listCmd = `  - |\n    \\AtBeginDocument{\\renewcommand{\\lstlistlistingname}{${escapeForLatexCommand(profile.lstPrefix)}}}`;
+
+  if (header.includes("header-includes")) {
+    const closing = header.lastIndexOf("\n---");
+    if (closing !== -1) {
+      const before = header.slice(0, closing);
+      const after = header.slice(closing); // includes closing ---
+      return `${before}\n${nameCmd}\n${listCmd}${after}`;
+    }
+    return `${header}\nheader-includes:\n${nameCmd}\n${listCmd}`;
+  }
+  // 万一 header-includes ブロックが無い場合は新規で作成
+  return `---\nheader-includes:\n${nameCmd}\n${listCmd}\n---\n\n${header}`;
+}
+
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
 }
@@ -63,9 +88,13 @@ export async function convertCurrentPage(
 
   try {
     let content = await fs.readFile(inputFilePath, "utf8");
-    if (activeProfile.headerIncludes) {
-      content = activeProfile.headerIncludes + "\n" + content;
-    }
+
+    // headerIncludes が空でも listings のラベル設定を YAML で必ず注入する
+    const headerStr = activeProfile.headerIncludes || "";
+    const headerWithListingNames = appendListingNamesToHeader(headerStr, activeProfile);
+    // 複数 YAML ブロックは pandoc がマージするため単純結合でよい
+    content = headerWithListingNames + "\n" + content;
+
     content = replaceWikiLinksAndCode(content, ctx.app, activeProfile);
 
     if (format === "docx") {
@@ -147,7 +176,11 @@ async function runPandoc(
     args.push("-M", `figPrefix=${activeProfile.figPrefix}`);
     args.push("-M", `tableTitle=${activeProfile.tableLabel}`);
     args.push("-M", `tblPrefix=${activeProfile.tblPrefix}`);
+    // listingsパッケージの見出し: pandocテンプレートは hyphen 形式を期待することがある
+    // listings見出し（pandocテンプレートは listing-title を参照）。
     args.push("-M", `listingTitle=${activeProfile.codeLabel}`);
+    args.push("-M", `listing-title=${activeProfile.codeLabel}`);
+    // pandoc-crossref プレフィックス
     args.push("-M", `lstPrefix=${activeProfile.lstPrefix}`);
     args.push("-M", `eqnPrefix=${activeProfile.eqnPrefix}`);
 
@@ -160,7 +193,15 @@ async function runPandoc(
 
     args.push("--highlight-style=tango");
 
-    if (activeProfile.pandocExtraArgs.trim()) args.push(...activeProfile.pandocExtraArgs.split(/\s+/));
+    if (activeProfile.pandocExtraArgs.trim()) {
+      const extras = activeProfile.pandocExtraArgs.split(/\s+/);
+      const filtered = extras.filter((arg) => {
+        // docx専用オプションをPDF/LaTeXでは除外
+        if (format !== "docx" && arg.startsWith("--reference-doc")) return false;
+        return true;
+      });
+      args.push(...filtered);
+    }
     if (activeProfile.useStandalone) args.push("--standalone");
 
     if (!ctx.settings.suppressDeveloperLogs) {

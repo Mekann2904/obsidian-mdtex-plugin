@@ -1,6 +1,6 @@
 // File: src/suggest/labelParser.ts
-// Purpose: ラベル抽出とパースの共通処理を提供するユーティリティ。
-// Reason: オートコンプリート実装間で重複するロジックを一箇所にまとめるため。
+// Purpose: ラベル抽出とパースの共通処理。言語指定やスペース有無の揺れを吸収する。
+// Reason: サジェスト間でロジックを共有し、Markdown表記ゆれでも安定してラベルを検出するため。
 // Related: src/suggest/LabelReferenceSuggest.ts, src/suggest/LabelEditorSuggest.ts, src/utils/markdownTransforms.ts
 
 export interface LabelCompletion {
@@ -9,37 +9,42 @@ export interface LabelCompletion {
 }
 
 export function extractLabels(content: string): LabelCompletion[] {
-  const blockMatches = content.match(/```[a-zA-Z0-9]*\s*\{#(lst|fig|eq|tbl):[a-zA-Z0-9:_-]+(?:\s+caption=".*?")?\}/g) || [];
-  const inlineMatches = content.match(/\{#(lst|fig|eq|tbl):[a-zA-Z0-9:_-]+\}/g) || [];
-  const allMatches = [...blockMatches, ...inlineMatches];
-
-  const labelSet = new Set<string>();
   const results: LabelCompletion[] = [];
+  const labelSet = new Set<string>();
 
-  for (const match of allMatches) {
-    const labelInfo = parseLabel(match);
+  // ```lang {#lst:id caption="..."} も ```lang{#lst:id} も拾う
+  const blockRegex = /```(?:[\w-]*)?\s*(\{#(?:lst|fig|eq|tbl):[^}]+\})/g;
+  let match: RegExpExecArray | null;
+  while ((match = blockRegex.exec(content)) !== null) {
+    const labelInfo = parseLabel(match[1]);
     if (labelInfo && !labelSet.has(labelInfo.label)) {
       labelSet.add(labelInfo.label);
       results.push(labelInfo);
     }
   }
+
+  // インライン {#lst:foo}
+  const inlineMatches = content.match(/\{#(lst|fig|eq|tbl):[a-zA-Z0-9:_-]+\}/g) || [];
+  for (const m of inlineMatches) {
+    const labelInfo = parseLabel(m);
+    if (labelInfo && !labelSet.has(labelInfo.label)) {
+      labelSet.add(labelInfo.label);
+      results.push(labelInfo);
+    }
+  }
+
   return results;
 }
 
 export function parseLabel(labelStr: string): LabelCompletion | null {
-  const blockRegex = /\{#(lst|fig|eq|tbl):([a-zA-Z0-9:_-]+)(?:\s+caption="(.*?)")?\}/;
-  const inlineRegex = /\{#(lst|fig|eq|tbl):([a-zA-Z0-9:_-]+)\}/;
-
-  const blockMatch = labelStr.match(blockRegex);
-  if (blockMatch) {
-    const [, type, labelId, caption] = blockMatch;
-    return { label: `${type}:${labelId}`, detail: caption ?? `Label of type ${type}` };
-  }
-
-  const inlineMatch = labelStr.match(inlineRegex);
-  if (inlineMatch) {
-    const [, type, labelId] = inlineMatch;
-    return { label: `${type}:${labelId}`, detail: `Label of type ${type}` };
+  const regex = /\{#(lst|fig|eq|tbl):([a-zA-Z0-9:_-]+)(?:\s+caption="(.*?)")?\}/;
+  const match = labelStr.match(regex);
+  if (match) {
+    const [, type, labelId, caption] = match;
+    return {
+      label: `${type}:${labelId}`,
+      detail: caption ?? `Label of type ${type}`,
+    };
   }
   return null;
 }
