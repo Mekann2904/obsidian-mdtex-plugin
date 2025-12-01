@@ -1,4 +1,7 @@
-// MdTexPluginSettings.ts
+// File: src/MdTexPluginSettings.ts
+// Purpose: プロファイルとプラグイン全体の設定型定義とデフォルト値を管理する。
+// Reason: 設定値を型安全に扱い、他ファイルから参照しやすくするため。
+// Related: src/MdTexPlugin.ts, src/services/settingsService.ts, src/services/convertService.ts, src/MdTexPluginSettingTab.ts
 
 /**
  * 1つの設定プロファイルを定義するインタフェース

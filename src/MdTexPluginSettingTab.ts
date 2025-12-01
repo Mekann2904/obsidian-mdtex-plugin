@@ -1,4 +1,7 @@
-// MdTexPluginSettingTab.ts
+// File: src/MdTexPluginSettingTab.ts
+// Purpose: 設定タブのUIを構築し、プロファイル管理と各設定項目を編集可能にする。
+// Reason: ユーザーがPandocプラグインの挙動をGUIで調整するため。
+// Related: src/MdTexPlugin.ts, src/MdTexPluginSettings.ts, src/services/settingsService.ts, src/services/convertService.ts
 
 import { App, PluginSettingTab, Setting, Modal, Notice, Menu, TextComponent, TextAreaComponent } from "obsidian";
 import type PandocPlugin from "./MdTexPlugin";
