@@ -4,16 +4,21 @@
 // Related: src/services/convertService.ts, src/MdTexPluginSettings.ts, src/utils/markdownTransforms.ts
 
 export function cleanLatexPreamble(latexCode: string): string {
+  if (!latexCode) return "";
+
   const lines = latexCode.split("\n");
 
   const cleaned = lines
+    .map((line) => {
+      // 行中のエスケープされていない % 以降を削除（コメント扱い）
+      const withoutComment = line.replace(/(?<!\\)%.*$/, "");
+      return withoutComment.trim();
+    })
     .filter((line) => {
-      const trimmed = line.trim();
-      if (trimmed === "") return false;
-      if (trimmed.startsWith("---")) return false;
-      if (trimmed.startsWith("header-includes:")) return false;
-      if (trimmed.startsWith("- |")) return false;
-      if (trimmed.startsWith("%")) return false;
+      if (line === "") return false;
+      if (line.startsWith("---")) return false;
+      if (line.startsWith("header-includes:")) return false;
+      if (line.startsWith("- |")) return false;
       return true;
     })
     .join("\n")
