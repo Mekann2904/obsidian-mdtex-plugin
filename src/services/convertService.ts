@@ -87,6 +87,8 @@ export async function convertCurrentPage(
   deps: ConvertDeps,
   format: string
 ) {
+  const startedAt = Date.now();
+
   const activeFile = ctx.app.workspace.getActiveFile();
   if (!activeFile) {
     new Notice("No active file selected.");
@@ -188,6 +190,11 @@ export async function convertCurrentPage(
     }
   } catch (error: any) {
     new Notice(`Error generating output: ${error?.message || error}`);
+  } finally {
+    const elapsed = Date.now() - startedAt;
+    if (!ctx.settings.suppressDeveloperLogs) {
+      console.log(`[MdTex] convert ${format.toUpperCase()} completed in ${elapsed} ms`);
+    }
   }
 }
 
