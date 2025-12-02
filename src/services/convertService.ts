@@ -36,7 +36,92 @@ function getInputFormatArgs(format: string): string[] {
   return ["-f", "markdown"];
 }
 
-function addCommonPandocArgs(args: string[], activeProfile: ProfileSettings, format: string, inputDir: string) {
+function parseDraftFlag(extraArgs: string): { extras: string[]; isDraft: boolean } {
+  if (!extraArgs || !extraArgs.trim()) return { extras: [], isDraft: false };
+
+  let isDraft = false;
+  const extras = extraArgs
+    .split(/\s+/)
+    .filter((arg) => {
+      if (arg === "--draft") {
+        isDraft = true;
+        return false;
+      }
+      if (arg.startsWith("--draft=")) {
+        const value = arg.split("=")[1]?.toLowerCase();
+        isDraft = value !== "0" && value !== "false";
+        return false;
+      }
+      return !!arg;
+    });
+
+  return { extras, isDraft };
+}
+
+function detectDraftInFrontmatter(markdown: string): boolean {
+  const fmMatch = markdown.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (!fmMatch) return false;
+
+  const yaml = fmMatch[1];
+  const lines = yaml.split(/\r?\n/);
+
+  let inMdtexBlock = false;
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    // mdtex: draft: true  もしくは mdtex: draft (boolean省略)
+    if (/^mdtex\.draft\s*:/i.test(line)) {
+      const val = line.split(":")[1]?.trim() || "true";
+      return val.toLowerCase() !== "false" && val !== "0";
+    }
+
+    // mdtex:
+    if (/^mdtex\s*:/i.test(line)) {
+      inMdtexBlock = true;
+      const val = line.split(":")[1]?.trim();
+      if (val) {
+        // 単行で mdtex: draft と書かれた場合を true とみなす
+        return val.toLowerCase() !== "false" && val !== "0";
+      }
+      continue;
+    }
+
+    // インデントされた mdtex ブロック内の draft: true
+    if (inMdtexBlock && /^draft\s*:/i.test(line)) {
+      const val = line.split(":")[1]?.trim() || "true";
+      return val.toLowerCase() !== "false" && val !== "0";
+    }
+
+    if (inMdtexBlock && /^-\s*(draft|true|1|yes)$/i.test(line)) {
+      return true;
+    }
+
+    // 別ブロックに移行したらリセット
+    if (!raw.startsWith(" ") && !raw.startsWith("\t")) {
+      inMdtexBlock = false;
+    }
+  }
+
+  return false;
+}
+
+function filterPandocExtrasForFormat(extras: string[], format: string): string[] {
+  if (!extras.length) return [];
+  return extras.filter((arg) => {
+    if (format !== "docx" && arg.startsWith("--reference-doc")) return false;
+    return true;
+  });
+}
+
+function addCommonPandocArgs(
+  args: string[],
+  activeProfile: ProfileSettings,
+  format: string,
+  inputDir: string,
+  extraArgs: string[]
+) {
   if (format === "pdf") {
     args.push(`--pdf-engine=${activeProfile.latexEngine}`);
     if (activeProfile.documentClass === "beamer") args.push("-t", "beamer");
@@ -82,14 +167,8 @@ function addCommonPandocArgs(args: string[], activeProfile: ProfileSettings, for
 
   args.push("--highlight-style=tango");
 
-  if (activeProfile.pandocExtraArgs.trim()) {
-    const extras = activeProfile.pandocExtraArgs.split(/\s+/);
-    const filtered = extras.filter((arg) => {
-      if (format !== "docx" && arg.startsWith("--reference-doc")) return false;
-      return true;
-    });
-    args.push(...filtered);
-  }
+  const filteredExtras = filterPandocExtrasForFormat(extraArgs, format);
+  if (filteredExtras.length) args.push(...filteredExtras);
   if (activeProfile.useStandalone) args.push("--standalone");
 }
 
@@ -147,6 +226,11 @@ export async function convertCurrentPage(
   try {
     let content = await fs.readFile(inputFilePath, "utf8");
 
+    // mdtex固有の --draft フラグをPandoc引数から分離してLaTeXにだけ伝える
+    const { extras: pandocExtraArgs, isDraft } = parseDraftFlag(activeProfile.pandocExtraArgs);
+    const frontmatterDraft = detectDraftInFrontmatter(content);
+    const draftRequested = isDraft || frontmatterDraft;
+
     // トランスクルージョン (![[...]]) を先に展開（キャッシュ共有）
     content = await expandTransclusions(content, ctx.app, activeFile.path, cache);
 
@@ -157,8 +241,20 @@ export async function convertCurrentPage(
       : `${baseHeader.trim()}\n\n${CALLOUT_PREAMBLE}`.trim();
     const cleanedHeader = cleanLatexPreamble(withCallout);
     const headerWithListings = appendListingOverrides(cleanedHeader, activeProfile.codeLabel, activeProfile.lstPrefix);
+
+    const draftSnippet = draftRequested
+      ? [
+          "\\def\\isdraft{1}",
+          "\\PassOptionsToPackage{draft}{graphicx}",
+          "\\makeatletter\\Gin@drafttrue\\makeatother",
+        ].join("\n")
+      : "";
+
+    const headerWithDraftFlag = draftSnippet
+      ? `${draftSnippet}\n${headerWithListings}`
+      : headerWithListings;
     // LaTeX生ファイルとして include-in-header で渡す（Markdown経由のエスケープを防ぐ）
-    await fs.writeFile(headerFilePath, `${headerWithListings}\n`, "utf8");
+    await fs.writeFile(headerFilePath, `${headerWithDraftFlag}\n`, "utf8");
 
     // 有効な WikiLink のみ [[ ]] を外してテキストにする
     content = unwrapValidWikiLinks(content, ctx.app, activeFile.path);
@@ -190,7 +286,15 @@ export async function convertCurrentPage(
         new Notice("markdownlint-cli2実行に失敗。処理を継続。");
       }
 
-      const success = await runPandoc(ctx, activeProfile, intermediateFilename, outputFilename, format, headerFilePath);
+      const success = await runPandoc(
+        ctx,
+        activeProfile,
+        intermediateFilename,
+        outputFilename,
+        format,
+        headerFilePath,
+        pandocExtraArgs
+      );
 
       if (success && activeProfile.deleteIntermediateFiles) {
         try {
@@ -208,7 +312,8 @@ export async function convertCurrentPage(
         outputFilename,
         format,
         path.dirname(inputFilePath),
-        headerFilePath
+        headerFilePath,
+        pandocExtraArgs
       );
 
       if (success && activeProfile.deleteIntermediateFiles) {
@@ -239,7 +344,8 @@ async function runPandoc(
   inputFile: string,
   outputFile: string,
   format: string,
-  headerFilePath: string
+  headerFilePath: string,
+  pandocExtraArgs: string[]
 ): Promise<boolean> {
   const pandocPath = activeProfile.pandocPath.trim() || "pandoc";
   const inputFormat = getInputFormatArgs(format);
@@ -253,7 +359,7 @@ async function runPandoc(
       args.push("--lua-filter", tempLuaPath);
     }
 
-    addCommonPandocArgs(args, activeProfile, format, cwd);
+    addCommonPandocArgs(args, activeProfile, format, cwd, pandocExtraArgs);
 
     if (!ctx.settings.suppressDeveloperLogs) {
       console.log("Running pandoc with args:", args);
@@ -288,7 +394,8 @@ async function runPandocWithStdin(
   outputFile: string,
   format: string,
   workingDir: string,
-  headerFilePath: string
+  headerFilePath: string,
+  pandocExtraArgs: string[]
 ): Promise<boolean> {
   const pandocPath = activeProfile.pandocPath.trim() || "pandoc";
   const inputFormat = getInputFormatArgs(format);
@@ -301,7 +408,7 @@ async function runPandocWithStdin(
       args.push("--lua-filter", tempLuaPath);
     }
 
-    addCommonPandocArgs(args, activeProfile, format, workingDir);
+    addCommonPandocArgs(args, activeProfile, format, workingDir, pandocExtraArgs);
 
     if (!ctx.settings.suppressDeveloperLogs) {
       console.log("Running pandoc (stdin) with args:", args);
