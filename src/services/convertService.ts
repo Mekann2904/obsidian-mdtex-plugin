@@ -242,6 +242,14 @@ export async function convertCurrentPage(
     const cleanedHeader = cleanLatexPreamble(withCallout);
     const headerWithListings = appendListingOverrides(cleanedHeader, activeProfile.codeLabel, activeProfile.lstPrefix);
 
+    // 
+    // LaTeX の \maketitle はタイトルページを強制的に plain スタイルにする。
+    // ページ番号をオフにしても、plain スタイルのままだと1ページ目だけ数字が出る。
+    // plain → empty に差し替えてタイトルページも無番号に統一する。
+    const pageNumberSnippet = activeProfile.usePageNumber
+      ? ""
+      : "\\makeatletter\\let\\ps@plain\\ps@empty\\makeatother";
+
     const draftSnippet = draftRequested
       ? [
           "\\def\\isdraft{1}",
@@ -250,9 +258,13 @@ export async function convertCurrentPage(
         ].join("\n")
       : "";
 
-    const headerWithDraftFlag = draftSnippet
-      ? `${draftSnippet}\n${headerWithListings}`
+    const headerWithoutDraft = pageNumberSnippet
+      ? `${pageNumberSnippet}\n${headerWithListings}`
       : headerWithListings;
+
+    const headerWithDraftFlag = draftSnippet
+      ? `${draftSnippet}\n${headerWithoutDraft}`
+      : headerWithoutDraft;
     // LaTeX生ファイルとして include-in-header で渡す（Markdown経由のエスケープを防ぐ）
     await fs.writeFile(headerFilePath, `${headerWithDraftFlag}\n`, "utf8");
 
