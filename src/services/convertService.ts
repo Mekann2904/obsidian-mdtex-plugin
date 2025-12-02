@@ -10,12 +10,22 @@ import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import { ProfileSettings } from "../MdTexPluginSettings";
 import { replaceWikiLinksRecursively, unwrapValidWikiLinks } from "../utils/markdownTransforms";
-import { cleanLatexPreamble, wrapLatexInYaml, appendListingOverrides } from "../utils/latexPreamble";
+import { cleanLatexPreamble, appendListingOverrides } from "../utils/latexPreamble";
+import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
+import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
 import { expandTransclusions } from "../utils/transclusion";
 import type { PluginContext } from "./lintService";
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
+}
+
+// Luaフィルタを一時生成
+async function createTempLuaFilter(workingDir: string): Promise<string> {
+  const fileName = `callout-${Date.now()}-${Math.random().toString(16).slice(2)}.lua`;
+  const luaPath = path.join(workingDir, fileName);
+  await fs.writeFile(luaPath, CALLOUT_LUA_FILTER, "utf8");
+  return luaPath;
 }
 
 // 入力形式の指定を統一管理するヘルパー
@@ -126,6 +136,8 @@ export async function convertCurrentPage(
 
   const tempFileName = `${baseName.replace(/\s/g, "_")}.temp.md`;
   const intermediateFilename = path.join(outputDir, tempFileName);
+  const headerFileName = `${baseName.replace(/\s/g, "_")}.preamble.tex`;
+  const headerFilePath = path.join(outputDir, headerFileName);
 
   const ext = format === "latex" ? ".tex" : `.${format}`;
   const outputFilename = path.join(outputDir, `${baseName.replace(/\s/g, "_")}${ext}`);
@@ -136,11 +148,15 @@ export async function convertCurrentPage(
     // トランスクルージョン (![[...]]) を先に展開
     content = await expandTransclusions(content, ctx.app, activeFile.path);
 
-    // ユーザー設定のプリアンブルをクリーンアップし、listing名の上書きを加えたうえでYAMLフロントマターへ包む
-    const cleanedHeader = cleanLatexPreamble(activeProfile.headerIncludes || "");
+    // ユーザー設定プリアンブルにコールアウト定義を付与し、listing名の上書きを加える
+    const baseHeader = activeProfile.headerIncludes || "";
+    const withCallout = baseHeader.includes("obsidiancallout")
+      ? baseHeader
+      : `${baseHeader.trim()}\n\n${CALLOUT_PREAMBLE}`.trim();
+    const cleanedHeader = cleanLatexPreamble(withCallout);
     const headerWithListings = appendListingOverrides(cleanedHeader, activeProfile.codeLabel, activeProfile.lstPrefix);
-    const yamlBlock = wrapLatexInYaml(headerWithListings);
-    content = yamlBlock ? `${yamlBlock}\n${content}` : content;
+    // LaTeX生ファイルとして include-in-header で渡す（Markdown経由のエスケープを防ぐ）
+    await fs.writeFile(headerFilePath, `${headerWithListings}\n`, "utf8");
 
     // 有効な WikiLink のみ [[ ]] を外してテキストにする
     content = unwrapValidWikiLinks(content, ctx.app, activeFile.path);
@@ -172,11 +188,12 @@ export async function convertCurrentPage(
         new Notice("markdownlint-cli2実行に失敗。処理を継続。");
       }
 
-      const success = await runPandoc(ctx, activeProfile, intermediateFilename, outputFilename, format);
+      const success = await runPandoc(ctx, activeProfile, intermediateFilename, outputFilename, format, headerFilePath);
 
       if (success && activeProfile.deleteIntermediateFiles) {
         try {
           await fs.unlink(intermediateFilename);
+          await fs.unlink(headerFilePath);
         } catch (err) {
           console.warn(`Failed to delete intermediate file: ${intermediateFilename}`, err);
         }
@@ -188,8 +205,17 @@ export async function convertCurrentPage(
         content,
         outputFilename,
         format,
-        path.dirname(inputFilePath)
+        path.dirname(inputFilePath),
+        headerFilePath
       );
+
+      if (success && activeProfile.deleteIntermediateFiles) {
+        try {
+          await fs.unlink(headerFilePath);
+        } catch (err) {
+          console.warn(`Failed to delete header file: ${headerFilePath}`, err);
+        }
+      }
 
       if (!success) {
         new Notice("Pandoc failed when using stdin pathway.");
@@ -210,30 +236,47 @@ async function runPandoc(
   activeProfile: ProfileSettings,
   inputFile: string,
   outputFile: string,
-  format: string
+  format: string,
+  headerFilePath: string
 ): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    const pandocPath = activeProfile.pandocPath.trim() || "pandoc";
+  const pandocPath = activeProfile.pandocPath.trim() || "pandoc";
+  const inputFormat = getInputFormatArgs(format);
+  const args = [inputFile, ...inputFormat, "--include-in-header", headerFilePath, "-o", outputFile];
+  const cwd = path.dirname(inputFile);
 
-    const inputFormat = getInputFormatArgs(format);
-    const args = [inputFile, ...inputFormat, "-o", outputFile];
+  let tempLuaPath: string | null = null;
+  try {
+    if (format === "pdf" || format === "latex") {
+      tempLuaPath = await createTempLuaFilter(cwd);
+      args.push("--lua-filter", tempLuaPath);
+    }
 
-    const cwd = path.dirname(inputFile);
     addCommonPandocArgs(args, activeProfile, format, cwd);
 
     if (!ctx.settings.suppressDeveloperLogs) {
       console.log("Running pandoc with args:", args);
     }
 
-    const pandocProcess = spawn(pandocPath, args, {
-      stdio: "pipe",
-      shell: false,
-      cwd,
-      env: { ...process.env, PATH: process.env.PATH ?? "" },
+    const success = await new Promise<boolean>((resolve) => {
+      const pandocProcess = spawn(pandocPath, args, {
+        stdio: "pipe",
+        shell: false,
+        cwd,
+        env: { ...process.env, PATH: process.env.PATH ?? "" },
+      });
+
+      handlePandocProcess(pandocProcess, outputFile, ctx, resolve);
     });
 
-    handlePandocProcess(pandocProcess, outputFile, ctx, resolve);
-  });
+    return success;
+  } catch (error: any) {
+    new Notice(`Error launching Pandoc: ${error?.message ?? error}`);
+    return false;
+  } finally {
+    if (tempLuaPath) {
+      try { await fs.unlink(tempLuaPath); } catch {}
+    }
+  }
 }
 
 async function runPandocWithStdin(
@@ -242,13 +285,19 @@ async function runPandocWithStdin(
   inputContent: string,
   outputFile: string,
   format: string,
-  workingDir: string
+  workingDir: string,
+  headerFilePath: string
 ): Promise<boolean> {
-  return new Promise<boolean>((resolve) => {
-    const pandocPath = activeProfile.pandocPath.trim() || "pandoc";
+  const pandocPath = activeProfile.pandocPath.trim() || "pandoc";
+  const inputFormat = getInputFormatArgs(format);
+  const args = [...inputFormat, "--include-in-header", headerFilePath, "-o", outputFile];
 
-    const inputFormat = getInputFormatArgs(format);
-    const args = [...inputFormat, "-o", outputFile];
+  let tempLuaPath: string | null = null;
+  try {
+    if (format === "pdf" || format === "latex") {
+      tempLuaPath = await createTempLuaFilter(workingDir);
+      args.push("--lua-filter", tempLuaPath);
+    }
 
     addCommonPandocArgs(args, activeProfile, format, workingDir);
 
@@ -256,18 +305,29 @@ async function runPandocWithStdin(
       console.log("Running pandoc (stdin) with args:", args);
     }
 
-    const pandocProcess = spawn(pandocPath, args, {
-      stdio: ["pipe", "pipe", "pipe"],
-      shell: false,
-      cwd: workingDir,
-      env: { ...process.env, PATH: process.env.PATH ?? "" },
+    const success = await new Promise<boolean>((resolve) => {
+      const pandocProcess = spawn(pandocPath, args, {
+        stdio: ["pipe", "pipe", "pipe"],
+        shell: false,
+        cwd: workingDir,
+        env: { ...process.env, PATH: process.env.PATH ?? "" },
+      });
+
+      pandocProcess.stdin?.write(inputContent);
+      pandocProcess.stdin?.end();
+
+      handlePandocProcess(pandocProcess, outputFile, ctx, resolve);
     });
 
-    pandocProcess.stdin?.write(inputContent);
-    pandocProcess.stdin?.end();
-
-    handlePandocProcess(pandocProcess, outputFile, ctx, resolve);
-  });
+    return success;
+  } catch (error: any) {
+    new Notice(`Error launching Pandoc: ${error?.message ?? error}`);
+    return false;
+  } finally {
+    if (tempLuaPath) {
+      try { await fs.unlink(tempLuaPath); } catch {}
+    }
+  }
 }
 
 function handlePandocProcess(
