@@ -1,7 +1,7 @@
 // File: src/utils/transclusion.ts
 // Purpose: ![[link]] 埋め込みの解決（Markdown展開またはファイルパス取得）を行うユーティリティ。
 // Reason: Obsidian API を使ってリンク先の Markdown をインライン展開し、変換時に内容を取り込むため。
-// Related: src/services/convertService.ts
+// Related: src/services/convertService.ts, src/utils/markdownTransforms.ts
 
 import { App, TFile } from "obsidian";
 
@@ -28,6 +28,7 @@ export async function expandTransclusions(
   markdown: string,
   app: App,
   sourcePath: string,
+  cache: Map<string, string>,
   visited: Set<string> = new Set()
 ): Promise<string> {
   const regex = /!\[\[(.*?)\]\]/g;
@@ -68,11 +69,16 @@ export async function expandTransclusions(
       continue;
     }
 
-    let content: string | null = null;
-    try {
-      content = await app.vault.read(file);
-    } catch (e) {
-      console.error(`Failed to read embedded file: ${file.path}`, e);
+    const cachedKey = file.path;
+    let content: string | null = cache.get(cachedKey) ?? null;
+
+    if (content === null) {
+      try {
+        content = await app.vault.read(file);
+        cache.set(cachedKey, content);
+      } catch (e) {
+        console.error(`Failed to read embedded file: ${file.path}`, e);
+      }
     }
 
     if (content === null) {
@@ -96,7 +102,7 @@ export async function expandTransclusions(
     }
 
     const newVisited = new Set(visited).add(targetPath);
-    const expanded = await expandTransclusions(sliced, app, targetPath, newVisited);
+    const expanded = await expandTransclusions(sliced, app, targetPath, cache, newVisited);
 
     const withPrefix = blockquotePrefix ? applyBlockquotePrefix(expanded, blockquotePrefix) : expanded;
     result += withPrefix;

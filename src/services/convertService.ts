@@ -9,7 +9,7 @@ import * as path from "path";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import { ProfileSettings } from "../MdTexPluginSettings";
-import { replaceWikiLinksRecursively, unwrapValidWikiLinks } from "../utils/markdownTransforms";
+import { replaceWikiLinksRecursivelyAsync, unwrapValidWikiLinks } from "../utils/markdownTransforms";
 import { cleanLatexPreamble, appendListingOverrides } from "../utils/latexPreamble";
 import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
 import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
@@ -142,11 +142,13 @@ export async function convertCurrentPage(
   const ext = format === "latex" ? ".tex" : `.${format}`;
   const outputFilename = path.join(outputDir, `${baseName.replace(/\s/g, "_")}${ext}`);
 
+  const cache = new Map<string, string>();
+
   try {
     let content = await fs.readFile(inputFilePath, "utf8");
 
-    // トランスクルージョン (![[...]]) を先に展開
-    content = await expandTransclusions(content, ctx.app, activeFile.path);
+    // トランスクルージョン (![[...]]) を先に展開（キャッシュ共有）
+    content = await expandTransclusions(content, ctx.app, activeFile.path, cache);
 
     // ユーザー設定プリアンブルにコールアウト定義を付与し、listing名の上書きを加える
     const baseHeader = activeProfile.headerIncludes || "";
@@ -161,7 +163,7 @@ export async function convertCurrentPage(
     // 有効な WikiLink のみ [[ ]] を外してテキストにする
     content = unwrapValidWikiLinks(content, ctx.app, activeFile.path);
 
-    content = replaceWikiLinksRecursively(content, ctx.app, activeProfile, activeFile.path);
+    content = await replaceWikiLinksRecursivelyAsync(content, ctx.app, activeProfile, activeFile.path, cache);
 
     if (format === "docx") {
       content = content
@@ -336,11 +338,22 @@ function handlePandocProcess(
   ctx: PluginContext,
   resolve: (value: boolean) => void
 ) {
+  const NOTICE_LIMIT = 1;
+  let noticeCount = 0;
+  let overflowNotified = false;
+
   proc.stderr?.on("data", (data) => {
     const msg = data.toString().trim();
     if (msg) {
       console.warn(`Pandoc stderr: ${msg}`);
-      new Notice(`Pandoc: ${msg.substring(0, 100)}...`);
+      if (noticeCount < NOTICE_LIMIT) {
+        const suffix = "（追加ログはコンソールを確認してください）";
+        new Notice(`Pandoc: ${msg.substring(0, 100)}... ${suffix}`);
+        noticeCount += 1;
+      } else if (!overflowNotified) {
+        new Notice("Pandoc: 追加のログはコンソールを確認してください。");
+        overflowNotified = true;
+      }
     }
   });
 

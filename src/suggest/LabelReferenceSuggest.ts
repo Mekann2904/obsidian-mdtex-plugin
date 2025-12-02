@@ -30,7 +30,7 @@ export class MyLabelSuggest extends EditorSuggest<LabelCompletion> {
     super(app);
     this.plugin = plugin || null;
 
-    this.debouncedUpdateLabels = debounce(this.updateLabelsProcess.bind(this), 300, true);
+    this.debouncedUpdateLabels = debounce(this.updateLabelsProcess.bind(this), 300, false);
 
     const editorChangeRef = this.app.workspace.on("editor-change", (_editor, info) => {
       if (info?.file instanceof TFile) {
