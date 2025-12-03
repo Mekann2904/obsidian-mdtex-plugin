@@ -15,6 +15,7 @@ import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
 import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
 import { expandTransclusions } from "../utils/transclusion";
 import type { PluginContext } from "./lintService";
+import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
@@ -217,6 +218,7 @@ export async function convertCurrentPage(
   const intermediateFilename = path.join(outputDir, tempFileName);
   const headerFileName = `${baseName.replace(/\s/g, "_")}.preamble.tex`;
   const headerFilePath = path.join(outputDir, headerFileName);
+  const mermaidTempDirs: string[] = [];
 
   const ext = format === "latex" ? ".tex" : `.${format}`;
   const outputFilename = path.join(outputDir, `${baseName.replace(/\s/g, "_")}${ext}`);
@@ -233,6 +235,16 @@ export async function convertCurrentPage(
 
     // トランスクルージョン (![[...]]) を先に展開（キャッシュ共有）
     content = await expandTransclusions(content, ctx.app, activeFile.path, cache);
+
+    // Mermaidコードブロックを一時PNG化し、PDFでも確実に図が描かれるようにする
+    const mermaidResult = await rasterizeMermaidBlocks(content, {
+      app: ctx.app,
+      sourcePath: activeFile.path,
+      imageScale: activeProfile.imageScale,
+      suppressLogs: ctx.settings.suppressDeveloperLogs,
+    });
+    content = mermaidResult.content;
+    mermaidTempDirs.push(...mermaidResult.cleanupDirs);
 
     // ユーザー設定プリアンブルにコールアウト定義を付与し、listing名の上書きを加える
     const baseHeader = activeProfile.headerIncludes || "";
@@ -343,6 +355,14 @@ export async function convertCurrentPage(
   } catch (error: any) {
     new Notice(`Error generating output: ${error?.message || error}`);
   } finally {
+    for (const dir of mermaidTempDirs) {
+      try {
+        await fs.rm(dir, { recursive: true, force: true });
+      } catch (err) {
+        console.warn(`Failed to remove temporary Mermaid dir: ${dir}`, err);
+      }
+    }
+
     const elapsed = Date.now() - startedAt;
     if (!ctx.settings.suppressDeveloperLogs) {
       console.log(`[MdTex] convert ${format.toUpperCase()} completed in ${elapsed} ms`);
