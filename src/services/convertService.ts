@@ -16,6 +16,7 @@ import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
 import { expandTransclusions } from "../utils/transclusion";
 import type { PluginContext } from "./lintService";
 import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
+import { t } from "../lang/helpers";
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
@@ -182,7 +183,7 @@ export async function convertCurrentPage(
 
   const activeFile = ctx.app.workspace.getActiveFile();
   if (!activeFile) {
-    new Notice("No active file selected.");
+    new Notice(t("notice_no_active_file"));
     return;
   }
 
@@ -195,11 +196,11 @@ export async function convertCurrentPage(
   }
 
   if (!activeFile.path.endsWith(".md")) {
-    new Notice("The active file is not a Markdown file.");
+    new Notice(t("notice_not_markdown"));
     return;
   }
 
-  new Notice(`Converting to ${format.toUpperCase()}...`);
+  new Notice(t("notice_converting", [format.toUpperCase()]));
 
   const activeProfile = ctx.getActiveProfileSettings();
   const fileAdapter = ctx.app.vault.adapter as FileSystemAdapter;
@@ -210,7 +211,7 @@ export async function convertCurrentPage(
   try {
     await fs.access(outputDir);
   } catch (err) {
-    new Notice(`Output directory does not exist: ${outputDir}`);
+    new Notice(t("notice_output_dir_missing", [outputDir]));
     return;
   }
 
@@ -315,7 +316,7 @@ export async function convertCurrentPage(
         await deps.runMarkdownlintFix(ctx, intermediateFilename);
       } catch (e: any) {
         console.error(e);
-        new Notice("markdownlint-cli2実行に失敗。処理を継続。");
+        new Notice(t("notice_markdownlint_failed_continue"));
       }
 
       const success = await runPandoc(
@@ -357,11 +358,11 @@ export async function convertCurrentPage(
       }
 
       if (!success) {
-        new Notice("Pandoc failed when using stdin pathway.");
+        new Notice(t("notice_pandoc_stdin_failed"));
       }
     }
   } catch (error: any) {
-    new Notice(`Error generating output: ${error?.message || error}`);
+    new Notice(t("notice_error_generating", [error?.message || error]));
   } finally {
     for (const dir of mermaidTempDirs) {
       try {
@@ -423,7 +424,7 @@ async function runPandoc(
 
     return success;
   } catch (error: any) {
-    new Notice(`Error launching Pandoc: ${error?.message ?? error}`);
+    new Notice(t("notice_pandoc_launch_error", [error?.message ?? error]));
     return false;
   } finally {
     if (tempLuaPath) {
@@ -475,7 +476,7 @@ async function runPandocWithStdin(
 
     return success;
   } catch (error: any) {
-    new Notice(`Error launching Pandoc: ${error?.message ?? error}`);
+    new Notice(t("notice_pandoc_launch_error", [error?.message ?? error]));
     return false;
   } finally {
     if (tempLuaPath) {
@@ -499,11 +500,10 @@ function handlePandocProcess(
     if (msg) {
       console.warn(`Pandoc stderr: ${msg}`);
       if (noticeCount < NOTICE_LIMIT) {
-        const suffix = "（追加ログはコンソールを確認してください）";
-        new Notice(`Pandoc: ${msg.substring(0, 100)}... ${suffix}`);
+        new Notice(t("notice_pandoc_stderr", [msg.substring(0, 100)]));
         noticeCount += 1;
       } else if (!overflowNotified) {
-        new Notice("Pandoc: 追加のログはコンソールを確認してください。");
+        new Notice(t("notice_pandoc_more_logs"));
         overflowNotified = true;
       }
     }
@@ -517,16 +517,16 @@ function handlePandocProcess(
 
   proc.on("close", (code) => {
     if (code === 0) {
-      new Notice(`Successfully generated: ${path.basename(outputFile)}`);
+      new Notice(t("notice_generated", [path.basename(outputFile)]));
       resolve(true);
     } else {
-      new Notice(`Error: Pandoc process exited with code ${code}`);
+      new Notice(t("notice_pandoc_exit_code", [code]));
       resolve(false);
     }
   });
 
   proc.on("error", (err) => {
-    new Notice(`Error launching Pandoc: ${err.message}`);
+    new Notice(t("notice_pandoc_launch_error", [err.message]));
     resolve(false);
   });
 }

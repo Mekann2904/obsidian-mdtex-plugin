@@ -11,6 +11,7 @@ import { MyLabelSuggest } from "./suggest/LabelReferenceSuggest";
 import { convertCurrentPage } from "./services/convertService";
 import { lintCurrentNote, runMarkdownlintFix, PluginContext } from "./services/lintService";
 import { loadSettings as loadSettingsService, saveSettings as saveSettingsService } from "./services/settingsService";
+import { t } from "./lang/helpers";
 
 export default class MdTexPlugin extends Plugin {
   settings: PandocPluginSettings = DEFAULT_SETTINGS;
@@ -34,17 +35,17 @@ export default class MdTexPlugin extends Plugin {
 
     this.addSettingTab(new PandocPluginSettingTab(this.app, this));
 
-    this.addRibbonIcon("file-text", "Convert current file (active profile)", () => this.runConversion("active"));
+    this.addRibbonIcon("file-text", t("ribbon_convert_active"), () => this.runConversion("active"));
 
     this.addCommand({
       id: "mdtex-convert-pdf",
-      name: "Convert current file to PDF",
+      name: t("cmd_convert_pdf"),
       callback: () => this.runConversion("pdf"),
     });
 
     this.addCommand({
       id: "mdtex-convert-latex",
-      name: "Convert current file to LaTeX",
+      name: t("cmd_convert_latex"),
       callback: () => this.runConversion("latex"),
     });
 
@@ -54,13 +55,13 @@ export default class MdTexPlugin extends Plugin {
 
     this.addCommand({
       id: "mdtex-lint-current-note",
-      name: "Lint current note (markdownlint-cli2)",
+      name: t("cmd_lint"),
       callback: () => this.runLint(),
     });
 
     this.addCommand({
       id: "mdtex-fix-current-note",
-      name: "Apply markdownlint --fix to current note",
+      name: t("cmd_fix"),
       callback: () => this.runLintFix(),
     });
   }
@@ -91,7 +92,7 @@ export default class MdTexPlugin extends Plugin {
     try {
       const formatToUse = format === "active" ? this.getActiveProfileSettings().outputFormat : format;
       await convertCurrentPage(this.buildContext(), { runMarkdownlintFix }, formatToUse);
-      new Notice(`${formatToUse.toUpperCase()} conversion completed.`);
+      new Notice(t("notice_convert_done", [formatToUse.toUpperCase()]));
     } catch (error) {
       this.handleError("Conversion", error);
     }
@@ -100,7 +101,7 @@ export default class MdTexPlugin extends Plugin {
   private async runLint() {
     try {
       await lintCurrentNote(this.buildContext());
-      new Notice("Lint completed.");
+      new Notice(t("notice_lint_done"));
     } catch (error) {
       this.handleError("Lint", error);
     }
@@ -110,11 +111,11 @@ export default class MdTexPlugin extends Plugin {
     try {
       const activeFile = this.app.workspace.getActiveFile();
       if (!activeFile) {
-        new Notice("No active file to fix.");
+        new Notice(t("notice_no_active_file_fix"));
         return;
       }
       await runMarkdownlintFix(this.buildContext(), activeFile.path);
-      new Notice("markdownlint --fix applied.");
+      new Notice(t("notice_fix_done"));
     } catch (error) {
       this.handleError("Lint fix", error);
     }
@@ -123,7 +124,7 @@ export default class MdTexPlugin extends Plugin {
   private handleError(context: string, error: unknown) {
     console.error(`MdTexPlugin ${context} failed:`, error);
     const message = error instanceof Error ? error.message : String(error);
-    new Notice(`${context} failed: ${message}`);
+    new Notice(t("notice_operation_failed", [context, message]));
   }
 
   private debugLog(...args: unknown[]) {
