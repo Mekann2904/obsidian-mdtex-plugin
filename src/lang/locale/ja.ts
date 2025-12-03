@@ -3,9 +3,9 @@
 // Reason: ユーザー環境のロケールに応じて日本語 UI を提供するため。
 // Related: src/lang/locale/en.ts, src/lang/helpers.ts, src/MdTexPlugin.ts, src/MdTexPluginSettingTab.ts
 
-import en from "./en";
+import en, { TranslationKeys } from "./en";
 
-const ja: typeof en = {
+const ja: Record<TranslationKeys, string> = {
   ribbon_convert_active: "現在のファイルを変換（アクティブプロファイル）",
   cmd_convert_pdf: "現在のファイルを PDF へ変換",
   cmd_convert_latex: "現在のファイルを LaTeX へ変換",

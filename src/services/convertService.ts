@@ -516,11 +516,13 @@ function handlePandocProcess(
   });
 
   proc.on("close", (code) => {
-    if (code === 0) {
+    const exitCode = code ?? -1;
+
+    if (exitCode === 0) {
       new Notice(t("notice_generated", [path.basename(outputFile)]));
       resolve(true);
     } else {
-      new Notice(t("notice_pandoc_exit_code", [code]));
+      new Notice(t("notice_pandoc_exit_code", [exitCode]));
       resolve(false);
     }
   });

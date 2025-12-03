@@ -60,9 +60,10 @@ export async function lintCurrentNote(ctx: PluginContext) {
       child.stdout?.on("data", (d) => { out += d.toString(); });
       child.stderr?.on("data", (d) => { err += d.toString(); });
       child.on("close", (code) => {
+        const exitCode = code ?? -1;
         if (out.trim()) console.log("markdownlint output:\n" + out);
         if (err.trim()) console.error("markdownlint error:\n" + err);
-        new Notice(code === 0 ? t("notice_lint_ok") : t("notice_lint_warn_code", [code]));
+        new Notice(exitCode === 0 ? t("notice_lint_ok") : t("notice_lint_warn_code", [exitCode]));
         resolve();
       });
       child.on("error", (e) => {
