@@ -106,7 +106,7 @@ export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
 \\lstset{
   frame=single,
   framesep=3pt,
-  basicstyle=\\ttfamily\\scriptsize\\setmonofont{Ricty Diminished},
+  basicstyle=\\ttfamily\\scriptsize,
   keywordstyle=\\color{blue}\\bfseries,
   commentstyle=\\color{green!50!black},
   stringstyle=\\color{red},
