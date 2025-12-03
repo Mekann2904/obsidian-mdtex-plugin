@@ -33,11 +33,11 @@ export async function rasterizeMermaidBlocks(
     throw new Error("rasterizeMermaidBlocks requires app and sourcePath.");
   }
 
-  // 後続の {#fig:...}[mermaid] や {#fig:...}[任意キャプション] 行を一緒に拾って画像側へ付け替える（改行・空行・CRLFを許容）
+  // 後続の {#fig:... width=...}[caption] などの属性行をまとめて吸収（改行・空行・CRLFを許容）
   // 捕捉:
-  // 1: インデント（未使用） 2: フェンス記号 3: Mermaidコード本体 4: 属性行全体 5: fig ID部 6: キャプション部
+  // 1: インデント（未使用） 2: フェンス記号 3: Mermaidコード本体 4: 属性ブロック中身（#id や width=... などを含む） 5: キャプション [text]（任意）
   const mermaidRegex =
-    /^(\s*)(`{3,}|~{3,})mermaid[ \t]*\r?\n([\s\S]*?)\r?\n\2[ \t]*\r?\n?(?:\s*(\{#([^}\s]+)\})(\[[^\]]*\])?)?/gm;
+    /^(\s*)(`{3,}|~{3,})mermaid[ \t]*\r?\n([\s\S]*?)\r?\n\2[ \t]*\r?\n?(?:\s*\{([^}\r\n]+)\}(\[[^\]]*\])?)?/gm;
   if (!mermaidRegex.test(markdown)) {
     return { content: markdown, cleanupDirs: [], used: false };
   }
@@ -51,18 +51,12 @@ export async function rasterizeMermaidBlocks(
     mermaidRegex.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = mermaidRegex.exec(markdown)) !== null) {
-      const [fullMatch, _indent, _fence, mermaidCode, _attrLine, figIdRaw, figCaptionRaw] = match;
+      const [fullMatch, _indent, _fence, mermaidCode, attrContent, figCaptionRaw] = match;
       try {
         const svg = await renderMermaidInDom(options.app, mermaidCode, container, options.sourcePath);
         const pngBuffer = await svgToPngBuffer(svg, 2);
         const pngPath = await writePng(tempDir, pngBuffer);
-        const widthValue = options.imageScale || "width=100%";
-        const attrParts: string[] = [];
-        if (figIdRaw) attrParts.push(`#${figIdRaw.trim()}`);
-        attrParts.push(".mermaid");
-        if (widthValue) attrParts.push(widthValue.replace(/^\{|\}$/g, ""));
-
-        const attrBlock = attrParts.length ? `{${attrParts.join(" ")}}` : "";
+        const attrBlock = buildAttributeBlock(attrContent, options.imageScale);
         const posixPath = pngPath.split(path.sep).join("/");
         const caption = figCaptionRaw ? figCaptionRaw.replace(/^\[|\]$/g, "").trim() : "";
         const replacement = `![${caption}](<${posixPath}>)${attrBlock}`;
@@ -225,4 +219,41 @@ async function writePng(dir: string, data: Buffer): Promise<string> {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function buildAttributeBlock(attrContent?: string, imageScale?: string): string {
+  const attrs: string[] = [];
+  let widthToken: string | undefined;
+
+  if (attrContent) {
+    const tokens = attrContent.trim().split(/\s+/);
+    for (const token of tokens) {
+      if (!token) continue;
+      if (token.startsWith("#") || token.startsWith(".")) {
+        attrs.push(token);
+        continue;
+      }
+      if (/^width\s*=/.test(token)) {
+        widthToken = token.replace(/^width\s*=\s*/, "");
+        continue;
+      }
+      // その他の属性はそのまま残す（height= など）
+      attrs.push(token);
+    }
+  }
+
+  // デフォルト幅を補う（attrに幅指定がなければ imageScale または 100%）
+  const widthVal = widthToken || (imageScale ? imageScale.replace(/^\{|\}$/g, "") : "width=100%");
+  if (widthVal) {
+    // width= が抜けている場合は付与
+    const normalizedWidth = /^width\s*=/.test(widthVal) ? widthVal : `width=${widthVal}`;
+    attrs.push(normalizedWidth);
+  }
+
+  // Mermaidクラスを付けておくと後段でスタイル指定しやすい
+  if (!attrs.some((t) => t === ".mermaid" || t === "mermaid" || t === ".mermaid-rendered")) {
+    attrs.push(".mermaid");
+  }
+
+  return attrs.length ? `{${attrs.join(" ")}}` : "";
 }
