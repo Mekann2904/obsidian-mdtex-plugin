@@ -101,9 +101,7 @@ async function renderMermaidInDom(
 
   await MarkdownRenderer.render(app, `\`\`\`mermaid\n${code}\n\`\`\``, container, sourcePath, component);
 
-  const svg = await waitForSvg(container);
-  // Gantt/Sequence 等は追加レイアウト計算が走るため少し待つ
-  await sleep(250);
+  const svg = await waitForStableSvg(container, 2000, 50);
   component.unload();
 
   if (!svg) {
@@ -119,14 +117,55 @@ function clearContainer(container: HTMLElement) {
   }
 }
 
-async function waitForSvg(root: HTMLElement, timeoutMs = 1500): Promise<SVGSVGElement | null> {
+/**
+ * SVG が出現し、かつ DOM 変更が一定時間止まるまで待つ。
+ */
+async function waitForStableSvg(
+  root: HTMLElement,
+  timeoutMs = 2000,
+  stableThresholdMs = 50
+): Promise<SVGSVGElement> {
   const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    const found = root.querySelector("svg");
-    if (found) return found as SVGSVGElement;
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+  // Phase 1: SVG 出現待ち
+  let svg: SVGSVGElement | null = null;
+  while (!svg) {
+    svg = root.querySelector("svg");
+    if (svg) break;
+    if (Date.now() - start > timeoutMs) {
+      throw new Error("Timeout waiting for SVG element to appear.");
+    }
+    await new Promise((resolve) => requestAnimationFrame(resolve));
   }
-  return null;
+
+  // Phase 2: DOM 変更が止まるまで待つ
+  return new Promise((resolve) => {
+    let lastMutation = Date.now();
+
+    const observer = new MutationObserver(() => {
+      lastMutation = Date.now();
+    });
+
+    observer.observe(svg!, { attributes: true, childList: true, subtree: true });
+
+    const check = () => {
+      const now = Date.now();
+      if (now - lastMutation >= stableThresholdMs) {
+        observer.disconnect();
+        resolve(svg!);
+        return;
+      }
+      if (now - start > timeoutMs) {
+        observer.disconnect();
+        console.warn("[MdTex] Mermaid rendering timed out; using current SVG state.");
+        resolve(svg!);
+        return;
+      }
+      requestAnimationFrame(check);
+    };
+
+    requestAnimationFrame(check);
+  });
 }
 
 async function svgToPngBuffer(svg: SVGSVGElement, scale = 2): Promise<Buffer> {
@@ -215,10 +254,6 @@ async function writePng(dir: string, data: Buffer): Promise<string> {
   const pngPath = path.join(dir, `mermaid-${uniqueId}.png`);
   await fs.writeFile(pngPath, data);
   return pngPath;
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function buildAttributeBlock(attrContent?: string, imageScale?: string): string {

@@ -228,6 +228,12 @@ export async function convertCurrentPage(
   try {
     let content = await fs.readFile(inputFilePath, "utf8");
 
+    // 実験的Mermaidを使わない場合は、Pandoc listings が unknown language を吐かないよう
+    // フェンス言語を外してプレーンコードとして扱う
+    if (!ctx.settings.enableExperimentalMermaid) {
+      content = stripMermaidLanguage(content);
+    }
+
     // mdtex固有の --draft フラグをPandoc引数から分離してLaTeXにだけ伝える
     const { extras: pandocExtraArgs, isDraft } = parseDraftFlag(activeProfile.pandocExtraArgs);
     const frontmatterDraft = detectDraftInFrontmatter(content);
@@ -237,14 +243,16 @@ export async function convertCurrentPage(
     content = await expandTransclusions(content, ctx.app, activeFile.path, cache);
 
     // Mermaidコードブロックを一時PNG化し、PDFでも確実に図が描かれるようにする
-    const mermaidResult = await rasterizeMermaidBlocks(content, {
-      app: ctx.app,
-      sourcePath: activeFile.path,
-      imageScale: activeProfile.imageScale,
-      suppressLogs: ctx.settings.suppressDeveloperLogs,
-    });
-    content = mermaidResult.content;
-    mermaidTempDirs.push(...mermaidResult.cleanupDirs);
+    if (ctx.settings.enableExperimentalMermaid) {
+      const mermaidResult = await rasterizeMermaidBlocks(content, {
+        app: ctx.app,
+        sourcePath: activeFile.path,
+        imageScale: activeProfile.imageScale,
+        suppressLogs: ctx.settings.suppressDeveloperLogs,
+      });
+      content = mermaidResult.content;
+      mermaidTempDirs.push(...mermaidResult.cleanupDirs);
+    }
 
     // ユーザー設定プリアンブルにコールアウト定義を付与し、listing名の上書きを加える
     const baseHeader = activeProfile.headerIncludes || "";
@@ -368,6 +376,11 @@ export async function convertCurrentPage(
       console.log(`[MdTex] convert ${format.toUpperCase()} completed in ${elapsed} ms`);
     }
   }
+}
+
+// Mermaidフェンスをプレーンコードフェンスに落とし込む（listingsの unknown language 回避用）
+function stripMermaidLanguage(md: string): string {
+  return md.replace(/```mermaid[^\n]*\n([\s\S]*?)```/g, "```\n$1```");
 }
 
 async function runPandoc(

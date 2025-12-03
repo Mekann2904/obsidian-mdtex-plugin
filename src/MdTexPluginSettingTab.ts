@@ -503,6 +503,18 @@ export class PandocPluginSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+
+    new Setting(containerEl)
+      .setName("Enable Experimental Mermaid")
+      .setDesc("Render mermaid blocks via DOM-to-PNG (experimental; may be slow).")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(settings.enableExperimentalMermaid)
+          .onChange(async (value) => {
+            settings.enableExperimentalMermaid = value;
+            await this.plugin.saveSettings();
+          })
+      );
   }
 }
 

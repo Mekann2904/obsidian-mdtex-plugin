@@ -47,6 +47,7 @@ export interface PandocPluginSettings {
   suppressDeveloperLogs: boolean;
   enableMarkdownlintFix: boolean; // markdownlint-cli2 --fix をPandoc実行前に適用
   markdownlintCli2Path: string; // markdownlint-cli2実行ファイルパス（空は自動解決）
+  enableExperimentalMermaid: boolean; // Mermaid DOM rasterization を使うか（実験的）
 }
 
 /**
@@ -197,4 +198,5 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
   suppressDeveloperLogs: true,
   enableMarkdownlintFix: false,
   markdownlintCli2Path: "",
+  enableExperimentalMermaid: false,
 };
