@@ -47,6 +47,7 @@ export interface PandocPluginSettings {
   suppressDeveloperLogs: boolean;
   enableMarkdownlintFix: boolean; // markdownlint-cli2 --fix をPandoc実行前に適用
   markdownlintCli2Path: string; // markdownlint-cli2実行ファイルパス（空は自動解決）
+  enableExperimentalMermaid: boolean; // Mermaid DOM rasterization を使うか（実験的）
 }
 
 /**
@@ -106,7 +107,7 @@ export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
 \\lstset{
   frame=single,
   framesep=3pt,
-  basicstyle=\\ttfamily\\scriptsize\\setmonofont{Ricty Diminished},
+  basicstyle=\\ttfamily\\scriptsize,
   keywordstyle=\\color{blue}\\bfseries,
   commentstyle=\\color{green!50!black},
   stringstyle=\\color{red},
@@ -197,4 +198,5 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
   suppressDeveloperLogs: true,
   enableMarkdownlintFix: false,
   markdownlintCli2Path: "",
+  enableExperimentalMermaid: false,
 };

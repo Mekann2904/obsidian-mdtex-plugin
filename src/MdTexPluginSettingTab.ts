@@ -6,6 +6,7 @@
 import { App, PluginSettingTab, Setting, Notice, Modal } from "obsidian";
 import MdTexPlugin from "./MdTexPlugin";
 import { DEFAULT_LATEX_PREAMBLE, ProfileSettings } from "./MdTexPluginSettings";
+import { t } from "./lang/helpers";
 
 export class PandocPluginSettingTab extends PluginSettingTab {
   plugin: MdTexPlugin;
@@ -20,7 +21,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     // タイトル
-    containerEl.createEl("h2", { text: "MdTex Plugin Settings" });
+    containerEl.createEl("h2", { text: t("settings_title") });
 
     const settings = this.plugin.settings;
     const activeProfileKey = settings.activeProfile;
@@ -29,11 +30,11 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // =================================================================
     // 1. プロファイル管理セクション
     // =================================================================
-    containerEl.createEl("h3", { text: "Profile Management" });
+    containerEl.createEl("h3", { text: t("heading_profile") });
 
     new Setting(containerEl)
-      .setName("Active Profile")
-      .setDesc("Select the profile to use for conversion.")
+      .setName(t("setting_active_profile_name"))
+      .setDesc(t("setting_active_profile_desc"))
       .addDropdown((dropdown) => {
         Object.keys(settings.profiles).forEach((key) => {
           dropdown.addOption(key, key);
@@ -49,68 +50,69 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // 新規プロファイル作成
     let newProfileName = "";
     new Setting(containerEl)
-      .setName("Create New Profile")
-      .setDesc("Enter a name for the new profile.")
+      .setName(t("setting_create_profile_name"))
+      .setDesc(t("setting_create_profile_desc"))
       .addText((text) =>
         text
-          .setPlaceholder("New Profile Name")
+          .setPlaceholder(t("placeholder_new_profile"))
           .onChange((value) => {
             newProfileName = value;
           })
       )
       .addButton((button) =>
         button
-          .setButtonText("Add Profile")
+          .setButtonText(t("button_add_profile"))
           .setCta()
           .onClick(async () => {
             if (!newProfileName || settings.profiles[newProfileName]) {
-              new Notice("Invalid or duplicate profile name.");
+              new Notice(t("notice_invalid_profile"));
               return;
             }
             // 現在のプロファイルをコピーして作成
-            settings.profiles[newProfileName] = { ...currentProfile };
-            settings.activeProfile = newProfileName;
+            const createdName = newProfileName;
+            settings.profiles[createdName] = { ...currentProfile };
+            settings.activeProfile = createdName;
             await this.plugin.saveSettings();
             newProfileName = "";
             this.display();
-            new Notice(`Profile "${newProfileName}" created.`);
+            new Notice(t("notice_profile_created", [createdName]));
           })
       );
 
     // プロファイル削除
     new Setting(containerEl)
-      .setName("Delete Current Profile")
-      .setDesc("Delete the currently active profile (cannot delete if it's the only one).")
+      .setName(t("setting_delete_profile_name"))
+      .setDesc(t("setting_delete_profile_desc"))
       .addButton((button) => {
         button
-          .setButtonText("Delete Profile")
+          .setButtonText(t("button_delete_profile"))
           .setWarning()
           .setDisabled(Object.keys(settings.profiles).length <= 1)
           .onClick(async () => {
             if (Object.keys(settings.profiles).length <= 1) return;
-            if (!confirm(`Are you sure you want to delete profile "${activeProfileKey}"?`)) return;
+            if (!confirm(t("confirm_delete_profile", [activeProfileKey]))) return;
 
             delete settings.profiles[activeProfileKey];
             const remainingKeys = Object.keys(settings.profiles);
             settings.activeProfile = remainingKeys[0];
             await this.plugin.saveSettings();
             this.display();
-            new Notice(`Profile "${activeProfileKey}" deleted.`);
+            new Notice(t("notice_profile_deleted", [activeProfileKey]));
           });
       });
 
     // =================================================================
     // 2. 変換・出力設定 (General)
     // =================================================================
-    containerEl.createEl("h3", { text: "General Output Settings" });
+    containerEl.createEl("h3", { text: t("heading_general_output") });
 
     new Setting(containerEl)
-      .setName("Output Format")
-      .setDesc("Target format for conversion.")
+      .setName(t("setting_output_format_name"))
+      .setDesc(t("setting_output_format_desc"))
       .addDropdown((dropdown) => {
-        dropdown.addOption("pdf", "PDF");
-        dropdown.addOption("docx", "Word (docx)");
-        dropdown.addOption("latex", "LaTeX Source (.tex)");
+        dropdown.addOption("pdf", t("option_pdf"));
+        dropdown.addOption("docx", t("option_docx"));
+        dropdown.addOption("latex", t("option_latex"));
         dropdown.setValue(currentProfile.outputFormat)
         .onChange(async (value) => {
             currentProfile.outputFormat = value;
@@ -119,8 +121,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Pandoc Path")
-      .setDesc("Absolute path to the pandoc executable (e.g. /usr/local/bin/pandoc).")
+      .setName(t("setting_pandoc_path_name"))
+      .setDesc(t("setting_pandoc_path_desc"))
       .addText((text) =>
         text
           .setValue(currentProfile.pandocPath)
@@ -131,8 +133,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       );
     
     new Setting(containerEl)
-        .setName("Output Directory")
-        .setDesc("Directory where generated files will be saved. Leave empty for Vault root.")
+        .setName(t("setting_output_dir_name"))
+        .setDesc(t("setting_output_dir_desc"))
         .addText((text) =>
             text.setValue(currentProfile.outputDirectory)
             .onChange(async (value) => {
@@ -142,8 +144,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         );
 
     new Setting(containerEl)
-        .setName("Resource Search Directory")
-        .setDesc("Directory to search for images and resources (--resource-path). If empty, uses the input file's directory.")
+        .setName(t("setting_resource_dir_name"))
+        .setDesc(t("setting_resource_dir_desc"))
         .addText((text) => 
             text.setValue(currentProfile.searchDirectory)
             .onChange(async (value) => {
@@ -153,8 +155,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         );
 
     new Setting(containerEl)
-      .setName("Delete Intermediate Files")
-      .setDesc("Delete .tex or .temp.md files after successful conversion.")
+      .setName(t("setting_delete_intermediate_name"))
+      .setDesc(t("setting_delete_intermediate_desc"))
       .addToggle((toggle) =>
         toggle
           .setValue(currentProfile.deleteIntermediateFiles)
@@ -167,11 +169,11 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // =================================================================
     // 3. LaTeX / PDF 設定
     // =================================================================
-    containerEl.createEl("h3", { text: "LaTeX / PDF Engine Settings" });
+    containerEl.createEl("h3", { text: t("heading_latex_engine") });
 
     new Setting(containerEl)
-      .setName("LaTeX Engine")
-      .setDesc("Engine used for PDF generation (e.g. lualatex, xelatex, pdflatex).")
+      .setName(t("setting_latex_engine_name"))
+      .setDesc(t("setting_latex_engine_desc"))
       .addText((text) =>
         text
           .setValue(currentProfile.latexEngine)
@@ -182,8 +184,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Document Class")
-      .setDesc("LaTeX document class (e.g. ltjarticle, article, book).")
+      .setName(t("setting_document_class_name"))
+      .setDesc(t("setting_document_class_desc"))
       .addText((text) =>
         text
           .setValue(currentProfile.documentClass)
@@ -194,8 +196,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       );
     
     new Setting(containerEl)
-        .setName("Document Class Options")
-        .setDesc("Options for document class (e.g. a4paper, twocolumn).")
+        .setName(t("setting_document_class_opts_name"))
+        .setDesc(t("setting_document_class_opts_desc"))
         .addText((text) =>
             text.setValue(currentProfile.documentClassOptions)
             .onChange(async (value) => {
@@ -205,8 +207,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         );
 
     new Setting(containerEl)
-      .setName("Font Size")
-      .setDesc("Base font size (e.g. 11pt, 12pt).")
+      .setName(t("setting_font_size_name"))
+      .setDesc(t("setting_font_size_desc"))
       .addText((text) =>
         text
           .setValue(currentProfile.fontSize)
@@ -217,8 +219,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-        .setName("Use Margin Size")
-        .setDesc("Enable custom margin settings.")
+        .setName(t("setting_use_margin_name"))
+        .setDesc(t("setting_use_margin_desc"))
         .addToggle((toggle) => 
             toggle.setValue(currentProfile.useMarginSize)
             .onChange(async (value) => {
@@ -230,8 +232,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     
     if (currentProfile.useMarginSize) {
         new Setting(containerEl)
-            .setName("Margin Size")
-            .setDesc("Geometry margin (e.g. 25mm, 1in).")
+            .setName(t("setting_margin_size_name"))
+            .setDesc(t("setting_margin_size_desc"))
             .addText((text) =>
                 text.setValue(currentProfile.marginSize)
                 .onChange(async (value) => {
@@ -242,8 +244,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-        .setName("Page Numbers")
-        .setDesc("Enable page numbering.")
+        .setName(t("setting_page_numbers_name"))
+        .setDesc(t("setting_page_numbers_desc"))
         .addToggle((toggle) => 
             toggle.setValue(currentProfile.usePageNumber)
             .onChange(async (value) => {
@@ -253,8 +255,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         );
 
     new Setting(containerEl)
-        .setName("Image Scale")
-        .setDesc("Default image scaling (e.g. width=0.8\\textwidth).")
+        .setName(t("setting_image_scale_name"))
+        .setDesc(t("setting_image_scale_desc"))
         .addText((text) =>
             text.setValue(currentProfile.imageScale)
             .onChange(async (value) => {
@@ -266,10 +268,10 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // =================================================================
     // 4. LaTeX Preamble (Custom Header) - Improved UI
     // =================================================================
-    containerEl.createEl("h3", { text: "LaTeX Preamble" });
+    containerEl.createEl("h3", { text: t("heading_preamble") });
     
     const preambleDesc = containerEl.createDiv({ cls: "setting-item-description" });
-    preambleDesc.setText("Enter pure LaTeX code only. YAML delimiters (---) and 'header-includes:' are injected automatically. This field supports full-width editing.");
+    preambleDesc.setText(t("preamble_desc"));
     preambleDesc.style.marginBottom = "8px";
 
     // Create a container for the textarea to give it specific styling
@@ -287,7 +289,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     textArea.spellcheck = false; // スペルチェック無効
     
     textArea.value = currentProfile.headerIncludes;
-    textArea.placeholder = "\\usepackage{...}";
+    textArea.placeholder = t("placeholder_preamble");
     
     textArea.addEventListener("change", async () => {
         currentProfile.headerIncludes = textArea.value;
@@ -301,7 +303,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     btnContainer.style.gap = "8px";
     btnContainer.style.justifyContent = "flex-end";
 
-    const fullscreenBtn = btnContainer.createEl("button", { text: "Open Fullscreen" });
+    const fullscreenBtn = btnContainer.createEl("button", { text: t("button_open_fullscreen") });
     fullscreenBtn.onclick = async () => {
       await this.plugin.saveSettings();
       const modal = new PreambleModal(this.app, currentProfile.headerIncludes, async (val) => {
@@ -312,27 +314,27 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       modal.open();
     };
 
-    const resetBtn = btnContainer.createEl("button", { text: "Reset Preamble to Default" });
+    const resetBtn = btnContainer.createEl("button", { text: t("button_reset_preamble") });
     resetBtn.addEventListener("click", async () => {
-        if(confirm("Are you sure you want to reset the LaTeX Preamble to the default template? This will overwrite your current changes.")) {
+        if(confirm(t("confirm_reset_preamble"))) {
             currentProfile.headerIncludes = DEFAULT_LATEX_PREAMBLE;
             textArea.value = DEFAULT_LATEX_PREAMBLE;
             await this.plugin.saveSettings();
-            new Notice("LaTeX Preamble reset to default.");
+            new Notice(t("notice_preamble_reset"));
         }
     });
 
-    const copyBtn = btnContainer.createEl("button", { text: "Copy" });
+    const copyBtn = btnContainer.createEl("button", { text: t("button_copy") });
     copyBtn.onclick = async () => {
       await navigator.clipboard.writeText(textArea.value);
-      new Notice("Preamble copied to clipboard.");
+      new Notice(t("notice_preamble_copied"));
     };
 
     // =================================================================
     // 5. Localization (Labels & Prefixes)
     // =================================================================
-    containerEl.createEl("h3", { text: "Localization (Labels & Prefixes)" });
-    containerEl.createEl("p", { text: "Set the labels used for captions and cross-references.", cls: "setting-item-description" });
+    containerEl.createEl("h3", { text: t("heading_localization") });
+    containerEl.createEl("p", { text: t("heading_localization_desc"), cls: "setting-item-description" });
 
     // Helper to create label settings pair
     const createLabelSetting = (name: string, labelKey: keyof ProfileSettings, prefixKey: keyof ProfileSettings) => {
@@ -352,7 +354,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         // Label Input
         const labelInput = document.createElement("input");
         labelInput.type = "text";
-        labelInput.placeholder = "Label";
+        labelInput.placeholder = t("placeholder_label");
         labelInput.value = String(currentProfile[labelKey]);
         labelInput.style.width = "120px";
         labelInput.onchange = async () => {
@@ -364,7 +366,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         // Prefix Input
         const prefixInput = document.createElement("input");
         prefixInput.type = "text";
-        prefixInput.placeholder = "Prefix";
+        prefixInput.placeholder = t("placeholder_prefix");
         prefixInput.value = String(currentProfile[prefixKey]);
         prefixInput.style.width = "120px";
         prefixInput.onchange = async () => {
@@ -377,19 +379,19 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         control.appendChild(prefixInput);
     };
 
-    createLabelSetting("Figures (Label / Prefix)", "figureLabel", "figPrefix");
-    createLabelSetting("Tables (Label / Prefix)", "tableLabel", "tblPrefix");
-    createLabelSetting("Listings (Label / Prefix)", "codeLabel", "lstPrefix");
-    createLabelSetting("Equations (Label / Prefix)", "equationLabel", "eqnPrefix"); // Added Equation
+    createLabelSetting(t("label_figures"), "figureLabel", "figPrefix");
+    createLabelSetting(t("label_tables"), "tableLabel", "tblPrefix");
+    createLabelSetting(t("label_listings"), "codeLabel", "lstPrefix");
+    createLabelSetting(t("label_equations"), "equationLabel", "eqnPrefix"); // Added Equation
 
     // =================================================================
     // 6. Cross-referencing & Filters
     // =================================================================
-    containerEl.createEl("h3", { text: "Extensions & Filters" });
+    containerEl.createEl("h3", { text: t("heading_extensions") });
 
     new Setting(containerEl)
-      .setName("Use Pandoc Crossref")
-      .setDesc("Enable pandoc-crossref filter.")
+      .setName(t("setting_use_crossref_name"))
+      .setDesc(t("setting_use_crossref_desc"))
       .addToggle((toggle) =>
         toggle
           .setValue(currentProfile.usePandocCrossref)
@@ -402,8 +404,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     
     if (currentProfile.usePandocCrossref) {
         new Setting(containerEl)
-            .setName("Pandoc Crossref Path")
-            .setDesc("Path to pandoc-crossref executable.")
+            .setName(t("setting_crossref_path_name"))
+            .setDesc(t("setting_crossref_path_desc"))
             .addText((text) =>
                 text.setValue(currentProfile.pandocCrossrefPath)
                 .onChange(async (value) => {
@@ -414,8 +416,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-      .setName("Enable Advanced LaTeX Commands")
-      .setDesc("Enable Lua filters (e.g. for docx raw output).")
+      .setName(t("setting_enable_advtex_name"))
+      .setDesc(t("setting_enable_advtex_desc"))
       .addToggle((toggle) =>
         toggle
           .setValue(currentProfile.enableAdvancedTexCommands)
@@ -428,8 +430,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
 
     if (currentProfile.enableAdvancedTexCommands) {
         new Setting(containerEl)
-            .setName("Lua Filter Path")
-            .setDesc("Path to custom lua filter.")
+            .setName(t("setting_lua_filter_name"))
+            .setDesc(t("setting_lua_filter_desc"))
             .addText((text) => 
                 text.setValue(currentProfile.luaFilterPath)
                 .onChange(async (value) => {
@@ -440,11 +442,11 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-        .setName("Pandoc Extra Arguments")
-        .setDesc("Any other arguments to pass to pandoc.")
+        .setName(t("setting_pandoc_extra_args_name"))
+        .setDesc(t("setting_pandoc_extra_args_desc"))
         .addText((text) =>
             text.setValue(currentProfile.pandocExtraArgs)
-            .setPlaceholder("--toc --number-sections")
+            .setPlaceholder(t("placeholder_pandoc_extra_args"))
             .onChange(async (value) => {
                 currentProfile.pandocExtraArgs = value;
                 await this.plugin.saveSettings();
@@ -452,8 +454,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         );
     
     new Setting(containerEl)
-        .setName("Use Standalone")
-        .setDesc("Pass --standalone flag (produces full document with header).")
+        .setName(t("setting_use_standalone_name"))
+        .setDesc(t("setting_use_standalone_desc"))
         .addToggle((toggle) => 
             toggle.setValue(currentProfile.useStandalone)
             .onChange(async (value) => {
@@ -465,11 +467,11 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // =================================================================
     // 7. Global Settings
     // =================================================================
-    containerEl.createEl("h3", { text: "Global Settings" });
+    containerEl.createEl("h3", { text: t("heading_global") });
 
     new Setting(containerEl)
-        .setName("Enable Markdownlint Fix")
-        .setDesc("Run 'markdownlint-cli2 --fix' before conversion.")
+        .setName(t("setting_enable_lint_fix_name"))
+        .setDesc(t("setting_enable_lint_fix_desc"))
         .addToggle((toggle) => 
             toggle.setValue(settings.enableMarkdownlintFix)
             .onChange(async (value) => {
@@ -481,8 +483,8 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     
     if (settings.enableMarkdownlintFix) {
         new Setting(containerEl)
-            .setName("Markdownlint-cli2 Path")
-            .setDesc("Path to markdownlint-cli2 executable.")
+            .setName(t("setting_markdownlint_path_name"))
+            .setDesc(t("setting_markdownlint_path_desc"))
             .addText((text) =>
                 text.setValue(settings.markdownlintCli2Path)
                 .onChange(async (value) => {
@@ -493,13 +495,25 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-      .setName("Suppress Developer Logs")
-      .setDesc("Hide detailed logs in the developer console.")
+      .setName(t("setting_suppress_logs_name"))
+      .setDesc(t("setting_suppress_logs_desc"))
       .addToggle((toggle) =>
         toggle
           .setValue(settings.suppressDeveloperLogs)
           .onChange(async (value) => {
             settings.suppressDeveloperLogs = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t("setting_enable_mermaid_name"))
+      .setDesc(t("setting_enable_mermaid_desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(settings.enableExperimentalMermaid)
+          .onChange(async (value) => {
+            settings.enableExperimentalMermaid = value;
             await this.plugin.saveSettings();
           })
       );
@@ -519,7 +533,7 @@ class PreambleModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h2", { text: "Edit LaTeX Preamble" });
+    contentEl.createEl("h2", { text: t("modal_preamble_title") });
 
     const area = contentEl.createEl("textarea", { text: this.initial });
     area.style.width = "100%";
@@ -530,7 +544,7 @@ class PreambleModal extends Modal {
     area.style.resize = "vertical";
     area.spellcheck = false;
 
-    const note = contentEl.createEl("p", { text: "Enter pure LaTeX only. YAML will be injected automatically." });
+    const note = contentEl.createEl("p", { text: t("modal_note") });
     note.style.opacity = "0.8";
 
     const buttons = contentEl.createDiv();
@@ -539,10 +553,10 @@ class PreambleModal extends Modal {
     buttons.style.gap = "8px";
     buttons.style.marginTop = "12px";
 
-    const cancel = buttons.createEl("button", { text: "Cancel" });
+    const cancel = buttons.createEl("button", { text: t("modal_cancel") });
     cancel.onclick = () => this.close();
 
-    const save = buttons.createEl("button", { text: "Save" });
+    const save = buttons.createEl("button", { text: t("modal_save") });
     save.classList.add("mod-cta");
     save.onclick = async () => {
       await this.onSave(area.value);

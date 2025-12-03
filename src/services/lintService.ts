@@ -9,6 +9,7 @@ import * as path from "path";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import { PandocPluginSettings, ProfileSettings } from "../MdTexPluginSettings";
+import { t } from "../lang/helpers";
 
 export interface PluginContext {
   app: App;
@@ -19,11 +20,11 @@ export interface PluginContext {
 export async function lintCurrentNote(ctx: PluginContext) {
   const activeFile = ctx.app.workspace.getActiveFile();
   if (!activeFile) {
-    new Notice("No active file selected.");
+    new Notice(t("notice_no_active_file"));
     return;
   }
   if (!activeFile.path.endsWith(".md")) {
-    new Notice("The active file is not a Markdown file.");
+    new Notice(t("notice_not_markdown"));
     return;
   }
 
@@ -42,7 +43,7 @@ export async function lintCurrentNote(ctx: PluginContext) {
 
     const cli = detectBrewMarkdownlintBin(ctx.settings);
     if (!cli) {
-      new Notice("markdownlint-cli2が見つからない。設定でパスを指定すること。");
+      new Notice(t("notice_markdownlint_missing"));
       return;
     }
 
@@ -59,20 +60,21 @@ export async function lintCurrentNote(ctx: PluginContext) {
       child.stdout?.on("data", (d) => { out += d.toString(); });
       child.stderr?.on("data", (d) => { err += d.toString(); });
       child.on("close", (code) => {
+        const exitCode = code ?? -1;
         if (out.trim()) console.log("markdownlint output:\n" + out);
         if (err.trim()) console.error("markdownlint error:\n" + err);
-        new Notice(code === 0 ? "Lint完了: 問題なし" : `Lint完了: 指摘あり (code=${code})`);
+        new Notice(exitCode === 0 ? t("notice_lint_ok") : t("notice_lint_warn_code", [exitCode]));
         resolve();
       });
       child.on("error", (e) => {
         console.error(e);
-        new Notice("markdownlint-cli2の起動に失敗。設定のパスとNodeのインストールを確認。");
+        new Notice(t("notice_markdownlint_launch_failed"));
         resolve();
       });
     });
   } catch (e: any) {
     console.error(e);
-    new Notice(`Lintエラー: ${e?.message || e}`);
+    new Notice(t("notice_lint_error", [e?.message || e]));
   }
 }
 
@@ -85,7 +87,7 @@ export async function runMarkdownlintFix(ctx: PluginContext, targetPath: string)
 
   const cli = detectBrewMarkdownlintBin(ctx.settings);
   if (!cli) {
-    new Notice("markdownlint-cli2が見つからない。設定でパスを指定すること。");
+    new Notice(t("notice_markdownlint_missing"));
     return;
   }
 

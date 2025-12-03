@@ -39,6 +39,9 @@ export async function loadSettings(loadData: () => Promise<any>): Promise<Pandoc
     ...DEFAULT_SETTINGS,
     ...loadedData,
     suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
+    enableExperimentalMermaid: loadedData.enableExperimentalMermaid !== undefined
+      ? loadedData.enableExperimentalMermaid
+      : DEFAULT_SETTINGS.enableExperimentalMermaid,
   } as PandocPluginSettings;
 }
 
@@ -62,5 +65,8 @@ function normalize(
     suppressDeveloperLogs: loadedData.suppressDeveloperLogs !== undefined ? loadedData.suppressDeveloperLogs : DEFAULT_SETTINGS.suppressDeveloperLogs,
     enableMarkdownlintFix: loadedData.enableMarkdownlintFix !== undefined ? loadedData.enableMarkdownlintFix : DEFAULT_SETTINGS.enableMarkdownlintFix,
     markdownlintCli2Path: loadedData.markdownlintCli2Path !== undefined ? loadedData.markdownlintCli2Path : DEFAULT_SETTINGS.markdownlintCli2Path,
+    enableExperimentalMermaid: loadedData.enableExperimentalMermaid !== undefined
+      ? loadedData.enableExperimentalMermaid
+      : DEFAULT_SETTINGS.enableExperimentalMermaid,
   } as PandocPluginSettings;
 }
