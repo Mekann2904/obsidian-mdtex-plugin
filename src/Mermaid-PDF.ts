@@ -1,4 +1,7 @@
-// Mermaid-PDF.ts
+// File: src/Mermaid-PDF.ts
+// Purpose: MermaidコードブロックをPDFへ変換し、Markdown内リンクへ差し替える補助処理。
+// Reason: 変換パイプラインでMermaid図を自動生成する必要があるため。
+// Related: src/services/convertService.ts, src/utils/markdownTransforms.ts, src/MdTexPlugin.ts
 
 import { spawn } from "child_process";
 import { promises as fs } from "fs";

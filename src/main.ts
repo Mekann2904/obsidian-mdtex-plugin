@@ -1,7 +1,8 @@
-// main.ts
+// File: src/main.ts
+// Purpose: Obsidian にプラグインを登録するエントリポイント。
+// Reason: Obsidian が読み込むデフォルトエクスポートを提供するため。
+// Related: src/MdTexPlugin.ts, src/MdTexPluginSettings.ts, src/services/convertService.ts, src/services/lintService.ts
 
-// Description: Obsidian プラグインのエントリポイント
+import MdTexPlugin from "./MdTexPlugin";
 
-import PandocPlugin from "./MdTexPlugin";
-
-export default PandocPlugin;
+export default MdTexPlugin;
