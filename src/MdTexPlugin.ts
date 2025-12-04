@@ -15,6 +15,7 @@ import { loadSettings as loadSettingsService, saveSettings as saveSettingsServic
 import { t } from "./lang/helpers";
 import { LatexCommandModal } from "./modal/LatexCommandModal";
 import { buildLatexCommands } from "./data/latexCommands";
+import { createLatexGhostTextExtension } from "./extensions/latexGhostText";
 
 export default class MdTexPlugin extends Plugin {
   settings: PandocPluginSettings = DEFAULT_SETTINGS;
@@ -65,6 +66,8 @@ export default class MdTexPlugin extends Plugin {
         new LatexCommandModal(this.app, editor, this.getLatexCommands()).open();
       },
     });
+
+    this.registerEditorExtension(createLatexGhostTextExtension(this));
 
     this.latexSuggest = new LatexEditorSuggest(this.app, this);
     this.registerEditorSuggest(this.latexSuggest);
