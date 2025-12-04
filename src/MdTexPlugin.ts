@@ -4,17 +4,24 @@
 // Related: src/services/convertService.ts, src/services/lintService.ts, src/MdTexPluginSettingTab.ts, src/services/settingsService.ts
 
 import { Plugin, Notice } from "obsidian";
+import { Extension } from "@codemirror/state";
 import { PandocPluginSettings, ProfileSettings, DEFAULT_SETTINGS, DEFAULT_PROFILE } from "./MdTexPluginSettings";
 import { PandocPluginSettingTab } from "./MdTexPluginSettingTab";
 import { MyLabelEditorSuggest } from "./suggest/LabelEditorSuggest";
 import { MyLabelSuggest } from "./suggest/LabelReferenceSuggest";
+import { LatexEditorSuggest } from "./suggest/LatexEditorSuggest";
 import { convertCurrentPage } from "./services/convertService";
 import { lintCurrentNote, runMarkdownlintFix, PluginContext } from "./services/lintService";
 import { loadSettings as loadSettingsService, saveSettings as saveSettingsService } from "./services/settingsService";
 import { t } from "./lang/helpers";
+import { LatexCommandModal } from "./modal/LatexCommandModal";
+import { buildLatexCommands } from "./data/latexCommands";
+import { createLatexGhostTextExtension } from "./extensions/latexGhostText";
 
 export default class MdTexPlugin extends Plugin {
   settings: PandocPluginSettings = DEFAULT_SETTINGS;
+  private latexSuggest: LatexEditorSuggest | null = null;
+  private ghostExtension: Extension | null = null;
 
   getActiveProfileSettings(): ProfileSettings {
     const activeProfileName = this.settings.activeProfile;
@@ -48,6 +55,27 @@ export default class MdTexPlugin extends Plugin {
       name: t("cmd_convert_latex"),
       callback: () => this.runConversion("latex"),
     });
+
+    this.addCommand({
+      id: "mdtex-open-latex-command-palette",
+      name: t("cmd_open_latex_palette"),
+      icon: "function-square",
+      editorCallback: (editor) => {
+        if (!this.settings.enableLatexPalette) {
+          new Notice(t("notice_latex_palette_disabled"));
+          return;
+        }
+        new LatexCommandModal(this.app, editor, this.getLatexCommands()).open();
+      },
+    });
+
+    if (this.settings.enableLatexGhost) {
+      this.ghostExtension = createLatexGhostTextExtension(this);
+      this.registerEditorExtension(this.ghostExtension);
+    }
+
+    this.latexSuggest = new LatexEditorSuggest(this.app, this);
+    this.registerEditorSuggest(this.latexSuggest);
 
     this.registerEditorSuggest(new MyLabelEditorSuggest(this.app, this));
     this.registerEditorSuggest(new MyLabelSuggest(this.app, this));
@@ -86,6 +114,7 @@ export default class MdTexPlugin extends Plugin {
 
   async saveSettings() {
     await saveSettingsService(this.settings, (data) => this.saveData(data));
+    this.latexSuggest?.updateCommands();
   }
 
   private async runConversion(format: "pdf" | "latex" | "active") {
@@ -129,5 +158,9 @@ export default class MdTexPlugin extends Plugin {
 
   private debugLog(...args: unknown[]) {
     if (!this.settings?.suppressDeveloperLogs) console.log("[MdTexPlugin]", ...args);
+  }
+
+  private getLatexCommands() {
+    return buildLatexCommands(this.settings?.latexCommandsYaml);
   }
 }

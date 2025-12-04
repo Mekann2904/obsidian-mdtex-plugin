@@ -3,6 +3,8 @@
 // Reason: 設定値を型安全に扱い、他ファイルから参照しやすくするため。
 // Related: src/MdTexPlugin.ts, src/services/settingsService.ts, src/services/convertService.ts, src/MdTexPluginSettingTab.ts
 
+import { DEFAULT_LATEX_COMMANDS_YAML } from "./data/latexCommands";
+
 /**
  * 1つの設定プロファイルを定義するインタフェース
  */
@@ -48,6 +50,9 @@ export interface PandocPluginSettings {
   enableMarkdownlintFix: boolean; // markdownlint-cli2 --fix をPandoc実行前に適用
   markdownlintCli2Path: string; // markdownlint-cli2実行ファイルパス（空は自動解決）
   enableExperimentalMermaid: boolean; // Mermaid DOM rasterization を使うか（実験的）
+  latexCommandsYaml: string; // LaTeX コマンドパレット用のユーザ定義 YAML
+  enableLatexPalette: boolean; // LaTeXコマンドパレット/補完の有効・無効
+  enableLatexGhost: boolean; // ゴーストテキスト補完の有効・無効
 }
 
 /**
@@ -199,4 +204,7 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
   enableMarkdownlintFix: false,
   markdownlintCli2Path: "",
   enableExperimentalMermaid: false,
+  latexCommandsYaml: DEFAULT_LATEX_COMMANDS_YAML,
+  enableLatexPalette: true,
+  enableLatexGhost: true,
 };

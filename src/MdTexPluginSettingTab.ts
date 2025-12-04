@@ -3,9 +3,10 @@
 // Reason: ユーザーがプロファイルを管理し、各パラメータ（パス、ラベル、LaTeXプリアンブル等）をGUIで変更可能にするため。
 // Related: src/MdTexPlugin.ts, src/MdTexPluginSettings.ts
 
-import { App, PluginSettingTab, Setting, Notice, Modal } from "obsidian";
+import { App, PluginSettingTab, Setting, Notice, Modal, debounce } from "obsidian";
 import MdTexPlugin from "./MdTexPlugin";
 import { DEFAULT_LATEX_PREAMBLE, ProfileSettings } from "./MdTexPluginSettings";
+import { DEFAULT_LATEX_COMMANDS_YAML } from "./data/latexCommands";
 import { t } from "./lang/helpers";
 
 export class PandocPluginSettingTab extends PluginSettingTab {
@@ -328,6 +329,67 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     copyBtn.onclick = async () => {
       await navigator.clipboard.writeText(textArea.value);
       new Notice(t("notice_preamble_copied"));
+    };
+
+    // =================================================================
+    // 5. LaTeX Command Palette (YAML)
+    // =================================================================
+    containerEl.createEl("h3", { text: t("heading_latex_palette") });
+    containerEl.createEl("p", { text: t("setting_latex_yaml_desc"), cls: "setting-item-description" });
+
+    new Setting(containerEl)
+      .setName(t("setting_enable_latex_palette_name"))
+      .setDesc(t("setting_enable_latex_palette_desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(settings.enableLatexPalette)
+          .onChange(async (value) => {
+            settings.enableLatexPalette = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(t("setting_enable_latex_ghost_name"))
+      .setDesc(t("setting_enable_latex_ghost_desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(settings.enableLatexGhost)
+          .onChange(async (value) => {
+            settings.enableLatexGhost = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    const yamlArea = containerEl.createEl("textarea");
+    yamlArea.style.width = "100%";
+    yamlArea.style.height = "220px";
+    yamlArea.style.fontFamily = "var(--font-monospace)";
+    yamlArea.style.fontSize = "13px";
+    yamlArea.style.whiteSpace = "pre";
+    yamlArea.style.overflow = "auto";
+    yamlArea.spellcheck = false;
+    yamlArea.value = settings.latexCommandsYaml;
+    const saveYaml = debounce(async () => {
+      await this.plugin.saveSettings();
+    }, 400, false);
+
+    yamlArea.addEventListener("input", () => {
+      settings.latexCommandsYaml = yamlArea.value;
+      saveYaml();
+    });
+
+    const yamlBtnRow = containerEl.createDiv({ cls: "setting-item" });
+    yamlBtnRow.style.display = "flex";
+    yamlBtnRow.style.justifyContent = "flex-end";
+    yamlBtnRow.style.gap = "8px";
+
+    const resetYaml = yamlBtnRow.createEl("button", { text: t("button_reset_latex_yaml") });
+    resetYaml.onclick = async () => {
+      settings.latexCommandsYaml = DEFAULT_LATEX_COMMANDS_YAML;
+      yamlArea.value = DEFAULT_LATEX_COMMANDS_YAML;
+      await this.plugin.saveSettings();
+      new Notice(t("notice_latex_yaml_reset"));
     };
 
     // =================================================================
