@@ -12,9 +12,6 @@ export interface LatexCommand {
 }
 
 export const LATEX_COMMANDS: LatexCommand[] = [
-  { cmd: "\\section{}", desc: "Section heading", cursorOffset: -1 },
-  { cmd: "\\subsection{}", desc: "Subsection heading", cursorOffset: -1 },
-  { cmd: "\\item ", desc: "Item entry" },
   { cmd: "\\clearpage", desc: "Flush floats and new page" },
   { cmd: "\\newpage", desc: "New page" },
   { cmd: "\\bigskip", desc: "Large vertical space" },
@@ -27,14 +24,7 @@ export const LATEX_COMMANDS: LatexCommand[] = [
   { cmd: "\\\\", desc: "Line break" },
 ];
 
-export const DEFAULT_LATEX_COMMANDS_YAML = `- cmd: "\\section{}"
-  desc: "Section heading"
-  cursorOffset: -1
-- cmd: "\\subsection{}"
-  desc: "Subsection heading"
-  cursorOffset: -1
-- cmd: "\\item "
-  desc: "Item entry"
+export const DEFAULT_LATEX_COMMANDS_YAML = `
 - cmd: "\\clearpage"
   desc: "Flush floats and new page (改ページ・図表配置)"
 - cmd: "\\newpage"
