@@ -1,8 +1,134 @@
-/*
+/* File: styles.css */
 
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
+/* =================================================================
+   1. テーマ変数定義 (Dark / Light)
+   ================================================================= */
+body {
+  /* --- Dark Mode (Monokai-ish) --- */
+  --mdtex-fzf-bg: #1a1d21;
+  --mdtex-fzf-border: #3e4451;
+  --mdtex-fzf-shadow: rgba(0, 0, 0, 0.8);
+  --mdtex-fzf-header-bg: #1a1d21;
+  --mdtex-fzf-header-text: #5c6370;
+  --mdtex-fzf-item-text: #abb2bf;
+  --mdtex-fzf-cmd-text: #98c379;
+  --mdtex-fzf-selected-bg: #282c34;
+  --mdtex-fzf-selected-border: #f92672;
+  --mdtex-fzf-selected-cmd: #a6e22e;
+  --mdtex-fzf-selected-desc: #ffffff;
+  --mdtex-fzf-scroll: #3e4451;
+}
 
-If your plugin does not need CSS, delete this file.
+.theme-light {
+  /* --- Light Mode (GitHub Light-ish) --- */
+  --mdtex-fzf-bg: #ffffff;
+  --mdtex-fzf-border: #d0d7de;
+  --mdtex-fzf-shadow: rgba(0, 0, 0, 0.15);
+  --mdtex-fzf-header-bg: #f6f8fa;
+  --mdtex-fzf-header-text: #57606a;
+  --mdtex-fzf-item-text: #24292f;
+  --mdtex-fzf-cmd-text: #24292f;
+  --mdtex-fzf-selected-bg: #bca1fa;
+  --mdtex-fzf-selected-border: #8a5cf4;
+  --mdtex-fzf-selected-cmd: #24292f;
+  --mdtex-fzf-selected-desc: #57606a;
+  --mdtex-fzf-scroll: #d0d7de;
+}
 
-*/
+/* =================================================================
+   2. コンテナ（LaTeX補完時のみ）
+   ================================================================= */
+.suggestion-container:has(.mdtex-fzf-item) {
+  padding: 0 !important;
+  background-color: var(--mdtex-fzf-bg) !important;
+  border: 1px solid var(--mdtex-fzf-border) !important;
+  border-radius: 0 !important;
+  box-shadow: 0 10px 40px var(--mdtex-fzf-shadow) !important;
+  overflow: hidden;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Roboto Mono", monospace !important;
+  min-width: 450px !important;
+}
+
+.suggestion-container:has(.mdtex-fzf-item)::before {
+  content: " LaTeX Commands ----------------------------------------------------";
+  display: block;
+  padding: 6px 8px;
+  background-color: var(--mdtex-fzf-header-bg);
+  color: var(--mdtex-fzf-header-text);
+  font-size: 11px;
+  border-bottom: 1px solid var(--mdtex-fzf-border);
+  white-space: nowrap;
+  overflow: hidden;
+  opacity: 0.9;
+}
+
+/* =================================================================
+   3. アイテム
+   ================================================================= */
+.suggestion-item.mdtex-fzf-item {
+  padding: 5px 10px !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  background-color: transparent !important;
+  border-left: 4px solid transparent !important;
+  display: flex;
+  align-items: center;
+  color: var(--mdtex-fzf-item-text) !important;
+}
+
+.suggestion-item.mdtex-fzf-item.is-selected {
+  background-color: var(--mdtex-fzf-selected-bg) !important;
+  border-left-color: var(--mdtex-fzf-selected-border) !important;
+}
+
+/* =================================================================
+   4. コンテンツレイアウト
+   ================================================================= */
+.mdtex-fzf-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  gap: 15px;
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.mdtex-fzf-cmd {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--mdtex-fzf-cmd-text);
+}
+
+.suggestion-item.mdtex-fzf-item.is-selected .mdtex-fzf-cmd {
+  color: var(--mdtex-fzf-selected-cmd) !important;
+}
+
+.mdtex-fzf-desc {
+  font-size: 12px;
+  color: var(--mdtex-fzf-header-text);
+  max-width: 250px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+.suggestion-item.mdtex-fzf-item.is-selected .mdtex-fzf-desc {
+  color: var(--mdtex-fzf-selected-desc) !important;
+}
+
+/* =================================================================
+   5. スクロールバー
+   ================================================================= */
+.suggestion-container:has(.mdtex-fzf-item) {
+  scrollbar-width: none; /* Firefox */
+}
+
+.suggestion-container:has(.mdtex-fzf-item) ::-webkit-scrollbar {
+  width: 4px;
+  background-color: var(--mdtex-fzf-bg);
+}
+
+.suggestion-container:has(.mdtex-fzf-item) ::-webkit-scrollbar-thumb {
+  background-color: var(--mdtex-fzf-scroll);
+}

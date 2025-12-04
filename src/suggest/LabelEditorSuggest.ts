@@ -73,10 +73,11 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
   }
 
   renderSuggestion(suggestion: MyCompletion, el: HTMLElement): void {
-    el.createDiv({ cls: "autocomplete-label", text: suggestion.label });
-    if (suggestion.detail) {
-      el.createDiv({ cls: "autocomplete-detail", text: suggestion.detail });
-    }
+    el.empty();
+    el.addClass("mdtex-fzf-item");
+    const row = el.createDiv({ cls: "mdtex-fzf-content" });
+    row.createDiv({ cls: "mdtex-fzf-cmd" }).setText(suggestion.label);
+    row.createDiv({ cls: "mdtex-fzf-desc" }).setText(suggestion.detail || "");
   }
 
   selectSuggestion(suggestion: MyCompletion): void {

@@ -42,6 +42,7 @@ export async function loadSettings(loadData: () => Promise<any>): Promise<Pandoc
     enableExperimentalMermaid: loadedData.enableExperimentalMermaid !== undefined
       ? loadedData.enableExperimentalMermaid
       : DEFAULT_SETTINGS.enableExperimentalMermaid,
+    latexCommandsYaml: loadedData.latexCommandsYaml ?? DEFAULT_SETTINGS.latexCommandsYaml,
   } as PandocPluginSettings;
 }
 
@@ -68,5 +69,6 @@ function normalize(
     enableExperimentalMermaid: loadedData.enableExperimentalMermaid !== undefined
       ? loadedData.enableExperimentalMermaid
       : DEFAULT_SETTINGS.enableExperimentalMermaid,
+    latexCommandsYaml: loadedData.latexCommandsYaml ?? DEFAULT_SETTINGS.latexCommandsYaml,
   } as PandocPluginSettings;
 }
