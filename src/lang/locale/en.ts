@@ -16,6 +16,8 @@ const en = {
   notice_latex_yaml_reset: "LaTeX command list reset to default.",
   setting_enable_latex_palette_name: "Enable LaTeX palette & inline suggest",
   setting_enable_latex_palette_desc: "Toggle LaTeX command palette and inline suggestions.",
+  setting_enable_latex_ghost_name: "Enable inline ghost (experimental)",
+  setting_enable_latex_ghost_desc: "Show inline ghost suggestions; accept with Tab or ArrowRight.",
   notice_latex_palette_disabled: "LaTeX command palette is disabled in settings.",
 
   notice_convert_done: "{0} conversion completed.",

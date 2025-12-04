@@ -18,6 +18,8 @@ const ja: Record<TranslationKeys, string> = {
   notice_latex_yaml_reset: "コマンド一覧をデフォルトに戻しました。",
   setting_enable_latex_palette_name: "LaTeX パレットとインライン補完を有効",
   setting_enable_latex_palette_desc: "LaTeX コマンドパレットとインライン補完をオン/オフします。",
+  setting_enable_latex_ghost_name: "インラインゴースト補完を有効（実験的）",
+  setting_enable_latex_ghost_desc: "インラインのゴーストサジェストを表示します。Tab/→ で確定できます。",
   notice_latex_palette_disabled: "設定で LaTeX コマンドパレットが無効になっています。",
 
   notice_convert_done: "{0} 変換が完了しました。",

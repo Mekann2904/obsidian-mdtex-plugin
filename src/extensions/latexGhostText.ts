@@ -158,6 +158,7 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension {
 
   const findTrigger = (view: EditorView): TriggerContext | null => {
     if (!plugin.settings?.enableLatexPalette) return null;
+    if (!plugin.settings?.enableLatexGhost) return null;
     const sel = view.state.selection.main;
     if (!sel.empty) return null;
 

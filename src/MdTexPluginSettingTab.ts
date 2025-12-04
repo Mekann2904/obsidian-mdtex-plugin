@@ -349,6 +349,18 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           })
       );
 
+    new Setting(containerEl)
+      .setName(t("setting_enable_latex_ghost_name"))
+      .setDesc(t("setting_enable_latex_ghost_desc"))
+      .addToggle((toggle) =>
+        toggle
+          .setValue(settings.enableLatexGhost)
+          .onChange(async (value) => {
+            settings.enableLatexGhost = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
     const yamlArea = containerEl.createEl("textarea");
     yamlArea.style.width = "100%";
     yamlArea.style.height = "220px";

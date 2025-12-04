@@ -4,6 +4,7 @@
 // Related: src/services/convertService.ts, src/services/lintService.ts, src/MdTexPluginSettingTab.ts, src/services/settingsService.ts
 
 import { Plugin, Notice } from "obsidian";
+import { Extension } from "@codemirror/state";
 import { PandocPluginSettings, ProfileSettings, DEFAULT_SETTINGS, DEFAULT_PROFILE } from "./MdTexPluginSettings";
 import { PandocPluginSettingTab } from "./MdTexPluginSettingTab";
 import { MyLabelEditorSuggest } from "./suggest/LabelEditorSuggest";
@@ -20,6 +21,7 @@ import { createLatexGhostTextExtension } from "./extensions/latexGhostText";
 export default class MdTexPlugin extends Plugin {
   settings: PandocPluginSettings = DEFAULT_SETTINGS;
   private latexSuggest: LatexEditorSuggest | null = null;
+  private ghostExtension: Extension | null = null;
 
   getActiveProfileSettings(): ProfileSettings {
     const activeProfileName = this.settings.activeProfile;
@@ -67,7 +69,10 @@ export default class MdTexPlugin extends Plugin {
       },
     });
 
-    this.registerEditorExtension(createLatexGhostTextExtension(this));
+    if (this.settings.enableLatexGhost) {
+      this.ghostExtension = createLatexGhostTextExtension(this);
+      this.registerEditorExtension(this.ghostExtension);
+    }
 
     this.latexSuggest = new LatexEditorSuggest(this.app, this);
     this.registerEditorSuggest(this.latexSuggest);

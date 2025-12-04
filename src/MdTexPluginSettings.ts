@@ -52,6 +52,7 @@ export interface PandocPluginSettings {
   enableExperimentalMermaid: boolean; // Mermaid DOM rasterization を使うか（実験的）
   latexCommandsYaml: string; // LaTeX コマンドパレット用のユーザ定義 YAML
   enableLatexPalette: boolean; // LaTeXコマンドパレット/補完の有効・無効
+  enableLatexGhost: boolean; // ゴーストテキスト補完の有効・無効
 }
 
 /**
@@ -205,4 +206,5 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
   enableExperimentalMermaid: false,
   latexCommandsYaml: DEFAULT_LATEX_COMMANDS_YAML,
   enableLatexPalette: true,
+  enableLatexGhost: true,
 };

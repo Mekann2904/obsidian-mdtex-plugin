@@ -46,6 +46,9 @@ export async function loadSettings(loadData: () => Promise<any>): Promise<Pandoc
     enableLatexPalette: loadedData.enableLatexPalette !== undefined
       ? loadedData.enableLatexPalette
       : DEFAULT_SETTINGS.enableLatexPalette,
+    enableLatexGhost: loadedData.enableLatexGhost !== undefined
+      ? loadedData.enableLatexGhost
+      : DEFAULT_SETTINGS.enableLatexGhost,
   } as PandocPluginSettings;
 }
 
@@ -76,5 +79,8 @@ function normalize(
     enableLatexPalette: loadedData.enableLatexPalette !== undefined
       ? loadedData.enableLatexPalette
       : DEFAULT_SETTINGS.enableLatexPalette,
+    enableLatexGhost: loadedData.enableLatexGhost !== undefined
+      ? loadedData.enableLatexGhost
+      : DEFAULT_SETTINGS.enableLatexGhost,
   } as PandocPluginSettings;
 }
