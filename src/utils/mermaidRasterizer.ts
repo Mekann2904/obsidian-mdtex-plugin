@@ -58,7 +58,8 @@ export async function rasterizeMermaidBlocks(
         const attrBlock = buildAttributeBlock(attrContent, options.imageScale);
         const posixPath = pngPath.split(path.sep).join("/");
         const caption = figCaptionRaw ? figCaptionRaw.replace(/^\[|\]$/g, "").trim() : "";
-        const replacement = `![${caption}](<${posixPath}>)${attrBlock}`;
+        // ブロック画像として扱わせるため、前後に空行を必ず入れる
+        const replacement = `\n\n![${caption}](<${posixPath}>)${attrBlock}\n\n`;
         replacements.push({ original: fullMatch, replacement });
       } catch (error) {
         if (!options.suppressLogs) {
