@@ -7,6 +7,7 @@ import { App, PluginSettingTab, Setting, Notice, Modal, debounce } from "obsidia
 import MdTexPlugin from "./MdTexPlugin";
 import { DEFAULT_LATEX_PREAMBLE, ProfileSettings } from "./MdTexPluginSettings";
 import { DEFAULT_LATEX_COMMANDS_YAML } from "./data/latexCommands";
+import { addProfile, removeProfile } from "./services/profileManager";
 import { t } from "./lang/helpers";
 
 export class PandocPluginSettingTab extends PluginSettingTab {
@@ -71,8 +72,13 @@ export class PandocPluginSettingTab extends PluginSettingTab {
             }
             // 現在のプロファイルをコピーして作成
             const createdName = newProfileName;
-            settings.profiles[createdName] = { ...currentProfile };
-            settings.activeProfile = createdName;
+            const nextState = addProfile(
+              { profiles: settings.profiles, activeProfile: settings.activeProfile },
+              createdName,
+              currentProfile
+            );
+            settings.profiles = nextState.profiles;
+            settings.activeProfile = nextState.activeProfile;
             await this.plugin.saveSettings();
             newProfileName = "";
             this.display();
@@ -93,9 +99,12 @@ export class PandocPluginSettingTab extends PluginSettingTab {
             if (Object.keys(settings.profiles).length <= 1) return;
             if (!confirm(t("confirm_delete_profile", [activeProfileKey]))) return;
 
-            delete settings.profiles[activeProfileKey];
-            const remainingKeys = Object.keys(settings.profiles);
-            settings.activeProfile = remainingKeys[0];
+            const nextState = removeProfile(
+              { profiles: settings.profiles, activeProfile: settings.activeProfile },
+              activeProfileKey
+            );
+            settings.profiles = nextState.profiles;
+            settings.activeProfile = nextState.activeProfile;
             await this.plugin.saveSettings();
             this.display();
             new Notice(t("notice_profile_deleted", [activeProfileKey]));

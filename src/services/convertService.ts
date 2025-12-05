@@ -4,7 +4,6 @@
 // Related: src/MdTexPlugin.ts, src/services/lintService.ts, src/utils/markdownTransforms.ts
 
 import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
-import { spawn, ChildProcess } from "child_process";
 import * as path from "path";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
@@ -17,6 +16,8 @@ import { expandTransclusions } from "../utils/transclusion";
 import type { PluginContext } from "./lintService";
 import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
 import { t } from "../lang/helpers";
+import { buildPandocCommand, OutputFormat, PandocCommandResult } from "./pandocCommandBuilder";
+import { runCommand } from "../utils/processRunner";
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
@@ -28,14 +29,6 @@ async function createTempLuaFilter(workingDir: string): Promise<string> {
   const luaPath = path.join(workingDir, fileName);
   await fs.writeFile(luaPath, CALLOUT_LUA_FILTER, "utf8");
   return luaPath;
-}
-
-// 入力形式の指定を統一管理するヘルパー
-function getInputFormatArgs(format: string): string[] {
-  if (format === "docx") {
-    return ["-f", "markdown+raw_html+fenced_divs+raw_attribute"];
-  }
-  return ["-f", "markdown"];
 }
 
 function parseDraftFlag(extraArgs: string): { extras: string[]; isDraft: boolean } {
@@ -109,75 +102,10 @@ function detectDraftInFrontmatter(markdown: string): boolean {
   return false;
 }
 
-function filterPandocExtrasForFormat(extras: string[], format: string): string[] {
-  if (!extras.length) return [];
-  return extras.filter((arg) => {
-    if (format !== "docx" && arg.startsWith("--reference-doc")) return false;
-    return true;
-  });
-}
-
-function addCommonPandocArgs(
-  args: string[],
-  activeProfile: ProfileSettings,
-  format: string,
-  inputDir: string,
-  extraArgs: string[]
-) {
-  if (format === "pdf") {
-    args.push(`--pdf-engine=${activeProfile.latexEngine}`);
-    if (activeProfile.documentClass === "beamer") args.push("-t", "beamer");
-  } else if (format === "latex") {
-    args.push("-t", "latex");
-    if (activeProfile.documentClass === "beamer") args.push("-t", "beamer");
-  } else if (format === "docx") {
-    args.push("-t", "docx");
-    if (activeProfile.enableAdvancedTexCommands) {
-      const luaFilterPath = activeProfile.luaFilterPath.trim();
-      if (luaFilterPath && fsSync.existsSync(luaFilterPath)) {
-        args.push("--lua-filter", luaFilterPath);
-      }
-    }
-  }
-  args.push("--listings");
-
-  const resourcePath = activeProfile.searchDirectory.trim()
-    ? activeProfile.searchDirectory.trim()
-    : inputDir;
-  args.push("--resource-path", resourcePath);
-
-  if (activeProfile.usePandocCrossref) {
-    const crossrefFilter = activeProfile.pandocCrossrefPath.trim() || "pandoc-crossref";
-    args.push("-F", crossrefFilter);
-  }
-
-  args.push("-M", `figureTitle=${activeProfile.figureLabel}`);
-  args.push("-M", `figPrefix=${activeProfile.figPrefix}`);
-  args.push("-M", `tableTitle=${activeProfile.tableLabel}`);
-  args.push("-M", `tblPrefix=${activeProfile.tblPrefix}`);
-  args.push("-M", `listingTitle=${activeProfile.codeLabel}`);
-  args.push("-M", `listing-title=${activeProfile.codeLabel}`);
-  args.push("-M", `lstPrefix=${activeProfile.lstPrefix}`);
-  args.push("-M", `eqnPrefix=${activeProfile.eqnPrefix}`);
-
-  if (activeProfile.useMarginSize) args.push("-V", `geometry:margin=${activeProfile.marginSize}`);
-  if (!activeProfile.usePageNumber) args.push("-V", "pagestyle=empty");
-
-  args.push("-V", `fontsize=${activeProfile.fontSize}`);
-  args.push("-V", `documentclass=${activeProfile.documentClass}`);
-  if (activeProfile.documentClassOptions?.trim()) args.push("-V", `classoption=${activeProfile.documentClassOptions}`);
-
-  args.push("--highlight-style=tango");
-
-  const filteredExtras = filterPandocExtrasForFormat(extraArgs, format);
-  if (filteredExtras.length) args.push(...filteredExtras);
-  if (activeProfile.useStandalone) args.push("--standalone");
-}
-
 export async function convertCurrentPage(
   ctx: PluginContext,
   deps: ConvertDeps,
-  format: string
+  format: OutputFormat
 ) {
   const startedAt = Date.now();
 
@@ -389,47 +317,24 @@ async function runPandoc(
   activeProfile: ProfileSettings,
   inputFile: string,
   outputFile: string,
-  format: string,
+  format: OutputFormat,
   headerFilePath: string,
   pandocExtraArgs: string[]
 ): Promise<boolean> {
-  const pandocPath = activeProfile.pandocPath.trim() || "pandoc";
-  const inputFormat = getInputFormatArgs(format);
-  const args = [inputFile, ...inputFormat, "--include-in-header", headerFilePath, "-o", outputFile];
-  const cwd = path.dirname(inputFile);
+  const plan = await buildPandocExecutionPlan({
+    profile: activeProfile,
+    format,
+    headerFilePath,
+    outputFile,
+    workingDir: path.dirname(inputFile),
+    inputPath: inputFile,
+    pandocExtraArgs,
+  });
 
-  let tempLuaPath: string | null = null;
   try {
-    if (format === "pdf" || format === "latex") {
-      tempLuaPath = await createTempLuaFilter(cwd);
-      args.push("--lua-filter", tempLuaPath);
-    }
-
-    addCommonPandocArgs(args, activeProfile, format, cwd, pandocExtraArgs);
-
-    if (!ctx.settings.suppressDeveloperLogs) {
-      console.log("Running pandoc with args:", args);
-    }
-
-    const success = await new Promise<boolean>((resolve) => {
-      const pandocProcess = spawn(pandocPath, args, {
-        stdio: "pipe",
-        shell: false,
-        cwd,
-        env: { ...process.env, PATH: process.env.PATH ?? "" },
-      });
-
-      handlePandocProcess(pandocProcess, outputFile, ctx, resolve);
-    });
-
-    return success;
-  } catch (error: any) {
-    new Notice(t("notice_pandoc_launch_error", [error?.message ?? error]));
-    return false;
+    return await executePandocCommand(plan, ctx, outputFile);
   } finally {
-    if (tempLuaPath) {
-      try { await fs.unlink(tempLuaPath); } catch {}
-    }
+    await cleanupTemporaryFiles(plan.tempFiles);
   }
 }
 
@@ -438,67 +343,107 @@ async function runPandocWithStdin(
   activeProfile: ProfileSettings,
   inputContent: string,
   outputFile: string,
-  format: string,
+  format: OutputFormat,
   workingDir: string,
   headerFilePath: string,
   pandocExtraArgs: string[]
 ): Promise<boolean> {
-  const pandocPath = activeProfile.pandocPath.trim() || "pandoc";
-  const inputFormat = getInputFormatArgs(format);
-  const args = [...inputFormat, "--include-in-header", headerFilePath, "-o", outputFile];
+  const plan = await buildPandocExecutionPlan({
+    profile: activeProfile,
+    format,
+    headerFilePath,
+    outputFile,
+    workingDir,
+    pandocExtraArgs,
+    useStdin: true,
+  });
 
-  let tempLuaPath: string | null = null;
   try {
-    if (format === "pdf" || format === "latex") {
-      tempLuaPath = await createTempLuaFilter(workingDir);
-      args.push("--lua-filter", tempLuaPath);
-    }
-
-    addCommonPandocArgs(args, activeProfile, format, workingDir, pandocExtraArgs);
-
-    if (!ctx.settings.suppressDeveloperLogs) {
-      console.log("Running pandoc (stdin) with args:", args);
-    }
-
-    const success = await new Promise<boolean>((resolve) => {
-      const pandocProcess = spawn(pandocPath, args, {
-        stdio: ["pipe", "pipe", "pipe"],
-        shell: false,
-        cwd: workingDir,
-        env: { ...process.env, PATH: process.env.PATH ?? "" },
-      });
-
-      pandocProcess.stdin?.write(inputContent);
-      pandocProcess.stdin?.end();
-
-      handlePandocProcess(pandocProcess, outputFile, ctx, resolve);
-    });
-
-    return success;
-  } catch (error: any) {
-    new Notice(t("notice_pandoc_launch_error", [error?.message ?? error]));
-    return false;
+    return await executePandocCommand(plan, ctx, outputFile, inputContent);
   } finally {
-    if (tempLuaPath) {
-      try { await fs.unlink(tempLuaPath); } catch {}
+    await cleanupTemporaryFiles(plan.tempFiles);
+  }
+}
+
+interface PandocExecutionPlan {
+  command: PandocCommandResult;
+  tempFiles: string[];
+  workingDir: string;
+}
+
+function resolveDocxLuaFilter(profile: ProfileSettings, format: OutputFormat): string | null {
+  if (format !== "docx") return null;
+  if (!profile.enableAdvancedTexCommands) return null;
+  const luaFilterPath = profile.luaFilterPath.trim();
+  if (!luaFilterPath) return null;
+  return fsSync.existsSync(luaFilterPath) ? luaFilterPath : null;
+}
+
+async function buildPandocExecutionPlan(params: {
+  profile: ProfileSettings;
+  format: OutputFormat;
+  headerFilePath: string;
+  outputFile: string;
+  workingDir: string;
+  pandocExtraArgs: string[];
+  inputPath?: string;
+  useStdin?: boolean;
+}): Promise<PandocExecutionPlan> {
+  const tempFiles: string[] = [];
+  const luaFilters: string[] = [];
+
+  if (params.format === "pdf" || params.format === "latex") {
+    const tempLuaPath = await createTempLuaFilter(params.workingDir);
+    luaFilters.push(tempLuaPath);
+    tempFiles.push(tempLuaPath);
+  }
+
+  const docxLua = resolveDocxLuaFilter(params.profile, params.format);
+  if (docxLua) luaFilters.push(docxLua);
+
+  const command = buildPandocCommand({
+    profile: params.profile,
+    format: params.format,
+    inputPath: params.useStdin ? undefined : params.inputPath,
+    outputPath: params.outputFile,
+    headerPath: params.headerFilePath,
+    workingDir: params.workingDir,
+    extraArgs: params.pandocExtraArgs,
+    luaFilters,
+    resourcePath: params.profile.searchDirectory.trim() || params.workingDir,
+    useStdin: params.useStdin,
+  });
+
+  return { command, tempFiles, workingDir: params.workingDir };
+}
+
+async function cleanupTemporaryFiles(files: string[]) {
+  for (const file of files) {
+    try {
+      await fs.unlink(file);
+    } catch (err) {
+      console.warn(`Failed to delete temporary file: ${file}`, err);
     }
   }
 }
 
-function handlePandocProcess(
-  proc: ChildProcess,
-  outputFile: string,
-  ctx: PluginContext,
-  resolve: (value: boolean) => void
-) {
+function createPandocNoticeHandlers(ctx: PluginContext) {
   const NOTICE_LIMIT = 1;
   let noticeCount = 0;
   let overflowNotified = false;
 
-  proc.stderr?.on("data", (data) => {
-    const msg = data.toString().trim();
-    if (msg) {
-      console.warn(`Pandoc stderr: ${msg}`);
+  return {
+    onStdout: (data: string) => {
+      if (!ctx.settings.suppressDeveloperLogs) {
+        console.log(`Pandoc Output: ${data.trim()}`);
+      }
+    },
+    onStderr: (data: string) => {
+      const msg = data.toString().trim();
+      if (!msg) return;
+      if (!ctx.settings.suppressDeveloperLogs) {
+        console.warn(`Pandoc stderr: ${msg}`);
+      }
       if (noticeCount < NOTICE_LIMIT) {
         new Notice(t("notice_pandoc_stderr", [msg.substring(0, 100)]));
         noticeCount += 1;
@@ -506,29 +451,36 @@ function handlePandocProcess(
         new Notice(t("notice_pandoc_more_logs"));
         overflowNotified = true;
       }
-    }
-  });
+    },
+  };
+}
 
-  proc.stdout?.on("data", (data) => {
-    if (!ctx.settings.suppressDeveloperLogs) {
-      console.log(`Pandoc Output: ${data.toString()}`);
-    }
-  });
+async function executePandocCommand(
+  plan: PandocExecutionPlan,
+  ctx: PluginContext,
+  outputFile: string,
+  inputContent?: string
+): Promise<boolean> {
+  const handlers = createPandocNoticeHandlers(ctx);
 
-  proc.on("close", (code) => {
-    const exitCode = code ?? -1;
+  try {
+    const result = await runCommand(plan.command.command, plan.command.args, {
+      cwd: plan.workingDir,
+      env: { ...process.env, PATH: process.env.PATH ?? "" },
+      input: inputContent,
+      onStdout: handlers.onStdout,
+      onStderr: handlers.onStderr,
+    });
 
-    if (exitCode === 0) {
+    if (result.exitCode === 0) {
       new Notice(t("notice_generated", [path.basename(outputFile)]));
-      resolve(true);
-    } else {
-      new Notice(t("notice_pandoc_exit_code", [exitCode]));
-      resolve(false);
+      return true;
     }
-  });
 
-  proc.on("error", (err) => {
-    new Notice(t("notice_pandoc_launch_error", [err.message]));
-    resolve(false);
-  });
+    new Notice(t("notice_pandoc_exit_code", [result.exitCode]));
+    return false;
+  } catch (error: any) {
+    new Notice(t("notice_pandoc_launch_error", [error?.message ?? error]));
+    return false;
+  }
 }
