@@ -114,7 +114,13 @@ export class MyLabelSuggest extends EditorSuggest<LabelCompletion> {
     const { editor, start, end } = context;
 
     const replacement = `[@${suggestion.label}]`;
-    editor.replaceRange(replacement, start, end);
+
+    const lineText = editor.getLine(end.line);
+    const hasAutoClosedBracket = lineText.length > end.ch && lineText[end.ch] === "]";
+    const replaceEnd = hasAutoClosedBracket ? { line: end.line, ch: end.ch + 1 } : end;
+
+    // Obsidian が自動で閉じカッコを入れた場合に備え、既存の ']' も含めて置換する。
+    editor.replaceRange(replacement, start, replaceEnd);
     editor.setCursor({ line: start.line, ch: start.ch + replacement.length });
     this.close();
   }

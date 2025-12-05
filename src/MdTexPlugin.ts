@@ -17,6 +17,7 @@ import { t } from "./lang/helpers";
 import { LatexCommandModal } from "./modal/LatexCommandModal";
 import { buildLatexCommands } from "./data/latexCommands";
 import { createLatexGhostTextExtension } from "./extensions/latexGhostText";
+import { OutputFormat } from "./services/pandocCommandBuilder";
 
 export default class MdTexPlugin extends Plugin {
   settings: PandocPluginSettings = DEFAULT_SETTINGS;
@@ -119,7 +120,10 @@ export default class MdTexPlugin extends Plugin {
 
   private async runConversion(format: "pdf" | "latex" | "active") {
     try {
-      const formatToUse = format === "active" ? this.getActiveProfileSettings().outputFormat : format;
+      const preferred = format === "active" ? this.getActiveProfileSettings().outputFormat : format;
+      const formatToUse: OutputFormat =
+        preferred === "latex" || preferred === "docx" ? preferred : "pdf";
+
       await convertCurrentPage(this.buildContext(), { runMarkdownlintFix }, formatToUse);
       new Notice(t("notice_convert_done", [formatToUse.toUpperCase()]));
     } catch (error) {

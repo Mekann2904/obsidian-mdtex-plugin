@@ -26,6 +26,9 @@ jobs:
           npm install eslint@8 --save-dev
           npm ci
 
+      - name: Run tests
+        run: npm test
+
       - name: Build plugin
         run: npm run build
 
