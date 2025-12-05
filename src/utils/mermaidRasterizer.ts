@@ -296,7 +296,7 @@ function injectSafeStyles(clonedSvg: SVGSVGElement, _originalSvg: SVGSVGElement)
 
   const existingStyles = clonedSvg.querySelectorAll("style");
   existingStyles.forEach((s) => {
-    if (s === styleEl) return;
+    if (s.isSameNode(styleEl)) return;
     if (s.textContent) {
       s.textContent = s.textContent
         .replace(/@import\s+url\([^)]+\);?/gi, "")
