@@ -33,11 +33,10 @@ export async function rasterizeMermaidBlocks(
     throw new Error("rasterizeMermaidBlocks requires app and sourcePath.");
   }
 
-  // 後続の {#fig:... width=...}[caption] などの属性行をまとめて吸収（改行・空行・CRLFを許容）
-  // 捕捉:
-  // 1: インデント（未使用） 2: フェンス記号 3: Mermaidコード本体 4: 属性ブロック中身（#id や width=... などを含む） 5: キャプション [text]（任意）
+  // 後続の {#fig:... width=...}[caption] などの属性行をまとめて吸収する（改行・空行・CRLFを許容）。
+  // 捕捉: 1: インデント（未使用） 2: フェンス記号 3: Mermaidコード本体 4: 属性ブロック中身 5: キャプション [text]（任意）
   const mermaidRegex =
-    /^(\s*)(`{3,}|~{3,})mermaid[ \t]*\r?\n([\s\S]*?)\r?\n\2[ \t]*\r?\n?(?:\s*\{([^}\r\n]+)\}(\[[^\]]*\])?)?/gm;
+    /^(\s*)(`{3,}|~{3,})mermaid[ \t]*\r?\n([\s\S]*?)\r?\n\2[ \t]*(?:[\r\n]+\s*)?(?:\{([^}\r\n]+)\}(\[[^\]]*\])?)?/gm;
   if (!mermaidRegex.test(markdown)) {
     return { content: markdown, cleanupDirs: [], used: false };
   }
@@ -86,6 +85,8 @@ function createHiddenContainer(): HTMLDivElement {
   container.style.left = "-9999px";
   container.style.top = "-9999px";
   container.style.width = "1800px";
+  container.style.height = "auto";
+  container.style.minHeight = "1000px";
   container.style.pointerEvents = "none";
   return container;
 }
@@ -101,7 +102,7 @@ async function renderMermaidInDom(
 
   await MarkdownRenderer.render(app, `\`\`\`mermaid\n${code}\n\`\`\``, container, sourcePath, component);
 
-  const svg = await waitForStableSvg(container, 2000, 50);
+  const svg = await waitForStableSvg(container, 5000, 100);
   component.unload();
 
   if (!svg) {
@@ -122,8 +123,8 @@ function clearContainer(container: HTMLElement) {
  */
 async function waitForStableSvg(
   root: HTMLElement,
-  timeoutMs = 2000,
-  stableThresholdMs = 50
+  timeoutMs = 5000,
+  stableThresholdMs = 100
 ): Promise<SVGSVGElement> {
   const start = Date.now();
 
@@ -170,7 +171,7 @@ async function waitForStableSvg(
 
 async function svgToPngBuffer(svg: SVGSVGElement, scale = 2): Promise<Buffer> {
   const cloned = svg.cloneNode(true) as SVGSVGElement;
-  inlineStyles(cloned);
+  injectSafeStyles(cloned, svg);
 
   const { width, height, viewBox } = getSvgSize(cloned);
   cloned.setAttribute("width", `${width}`);
@@ -178,11 +179,11 @@ async function svgToPngBuffer(svg: SVGSVGElement, scale = 2): Promise<Buffer> {
   cloned.setAttribute("viewBox", viewBox ?? `0 0 ${width} ${height}`);
 
   const serialized = new XMLSerializer().serializeToString(cloned);
-  const blob = new Blob([serialized], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
+  const sanitizedSerialized = sanitizeSerializedSvg(serialized);
+  const dataUri = `data:image/svg+xml;base64,${Buffer.from(sanitizedSerialized).toString("base64")}`;
 
   try {
-    const img = await loadImage(url);
+    const img = await loadImage(dataUri);
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(width * scale));
     canvas.height = Math.max(1, Math.round(height * scale));
@@ -194,26 +195,166 @@ async function svgToPngBuffer(svg: SVGSVGElement, scale = 2): Promise<Buffer> {
     ctx.drawImage(img, 0, 0);
 
     const pngBlob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Failed to create PNG blob."))), "image/png");
+      try {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Failed to create PNG blob (canvas empty?)."))), "image/png");
+      } catch (e) {
+        reject(e);
+      }
     });
 
     const buffer = Buffer.from(await pngBlob.arrayBuffer());
     return buffer;
-  } finally {
-    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.warn("[MdTex] Mermaid rasterization failed (SecurityError likely). Using fallback image.", error);
+    return createFallbackImageBuffer(Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale)));
   }
 }
 
-function inlineStyles(svg: SVGSVGElement) {
-  const walker = document.createTreeWalker(svg, NodeFilter.SHOW_ELEMENT);
-  while (walker.nextNode()) {
-    const el = walker.currentNode as HTMLElement;
-    const style = window.getComputedStyle(el);
-    const cssText = Array.from(style)
-      .map((prop) => `${prop}:${style.getPropertyValue(prop)};`)
-      .join("");
-    if (cssText) el.setAttribute("style", cssText);
+function injectSafeStyles(clonedSvg: SVGSVGElement, _originalSvg: SVGSVGElement) {
+  const cssVariables = collectCssVariables(document.body);
+  const safeFontStack =
+    'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;';
+
+  const styleContent = `
+    :root, svg { ${cssVariables} }
+    * { ${safeFontStack} }
+    .label, .node text, .messageText, .loopText, .sectionTitle, .actor, .legend, .title { ${safeFontStack} }
+  `;
+
+  const styleEl = document.createElementNS("http://www.w3.org/2000/svg", "style");
+  styleEl.textContent = styleContent;
+  if (clonedSvg.firstChild) {
+    clonedSvg.insertBefore(styleEl, clonedSvg.firstChild);
+  } else {
+    clonedSvg.appendChild(styleEl);
   }
+
+  const nodesToRemove: Element[] = [];
+  const walker = document.createTreeWalker(clonedSvg, NodeFilter.SHOW_ELEMENT);
+  while (walker.nextNode()) {
+    const el = walker.currentNode as Element;
+    const tagName = el.tagName.toLowerCase();
+
+    if (["script", "iframe", "object", "embed", "link"].includes(tagName)) {
+      nodesToRemove.push(el);
+      continue;
+    }
+
+    for (const name of el.getAttributeNames()) {
+      const val = el.getAttribute(name);
+      if (!val) continue;
+
+      if (val.toLowerCase().includes("url(")) {
+        const cleanVal = val.replace(/url\(\s*(?!['"]?(?:#|data:|blob:))[^)]+\)/gi, "none");
+        if (val !== cleanVal) el.setAttribute(name, cleanVal);
+      }
+
+      if (["href", "xlink:href", "src"].includes(name)) {
+        if (!/^(#|data:|blob:)/i.test(val)) {
+          el.removeAttribute(name);
+          if (["image", "img"].includes(tagName)) {
+            nodesToRemove.push(el);
+          }
+        }
+      }
+
+      if (name.startsWith("on")) {
+        el.removeAttribute(name);
+      }
+    }
+
+    if (el.hasAttribute("style")) {
+      const s = el.getAttribute("style") || "";
+      if (s.toLowerCase().includes("url(")) {
+        el.setAttribute("style", s.replace(/url\(\s*(?!['"]?(?:#|data:|blob:))[^)]+\)/gi, "none"));
+      }
+    }
+
+    if (el.hasAttribute("srcset")) {
+      el.removeAttribute("srcset");
+    }
+
+    if (tagName === "image") {
+      const href = el.getAttribute("href") || el.getAttribute("xlink:href");
+      if (href && !(href.startsWith("data:") || href.startsWith("blob:") || href.startsWith("#"))) {
+        nodesToRemove.push(el);
+      }
+    }
+
+    if (tagName === "img") {
+      const src = el.getAttribute("src");
+      if (src && !(src.startsWith("data:") || src.startsWith("blob:") || src.startsWith("#"))) {
+        nodesToRemove.push(el);
+      }
+    }
+  }
+
+  nodesToRemove.forEach((el) => {
+    if (el.parentNode) el.parentNode.removeChild(el);
+  });
+
+  const existingStyles = clonedSvg.querySelectorAll("style");
+  existingStyles.forEach((s) => {
+    if (s === styleEl) return;
+    if (s.textContent) {
+      s.textContent = s.textContent
+        .replace(/@import\s+url\([^)]+\);?/gi, "")
+        .replace(/url\(\s*(?!['"]?(?:#|data:|blob:))[^)]+\)/gi, "none");
+    }
+  });
+}
+
+function collectCssVariables(element: HTMLElement): string {
+  const style = window.getComputedStyle(element);
+  let cssText = "";
+
+  const colorRegex = /^(#[0-9a-fA-F]{3,8}|rgba?\s*\(|hsla?\s*\(|[a-zA-Z]+$)/;
+
+  for (let i = 0; i < style.length; i++) {
+    const prop = style[i];
+    if (!prop.startsWith("--")) continue;
+
+    const val = style.getPropertyValue(prop).trim();
+    if (colorRegex.test(val) && !val.toLowerCase().includes("url(")) {
+      cssText += `${prop}: ${val};\n`;
+    }
+  }
+
+  return cssText;
+}
+
+// シリアライズ済みSVG文字列の最終サニタイズ。
+// 念のため外部参照が残っていてもここで除去する（二重の安全策）。
+function sanitizeSerializedSvg(svgText: string): string {
+  return svgText
+    .replace(/url\(\s*(?!['"]?(?:#|data:|blob:))[^)]+\)/gi, "none")
+    .replace(/\b(?:href|xlink:href|src)\s*=\s*(["'])(?!#|data:|blob:)[^"']*\1/gi, '$1""$1')
+    .replace(/<link\b[^>]*>/gi, "")
+    .replace(/@import\s+url\([^)]+\);?/gi, "")
+    .replace(/<image\b[^>]*?(?:href|xlink:href)=["'](?!#|data:|blob:)[^"']+["'][^>]*>/gi, "")
+    .replace(/<img\b[^>]*?src=["'](?!data:|blob:)[^"']+["'][^>]*>/gi, "");
+}
+
+function createFallbackImageBuffer(width: number, height: number): Buffer {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = "#f0f0f0";
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = "red";
+    ctx.lineWidth = 5;
+    ctx.strokeRect(0, 0, width, height);
+    ctx.fillStyle = "red";
+    ctx.font = "24px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Mermaid Error", width / 2, height / 2);
+  }
+  const dataUrl = canvas.toDataURL("image/png");
+  const base64 = dataUrl.split(",")[1];
+  return Buffer.from(base64, "base64");
 }
 
 function getSvgSize(svg: SVGSVGElement): { width: number; height: number; viewBox?: string } {
@@ -243,6 +384,7 @@ function getSvgSize(svg: SVGSVGElement): { width: number; height: number; viewBo
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
+    img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
     img.onerror = (err) => reject(err);
     img.src = src;
