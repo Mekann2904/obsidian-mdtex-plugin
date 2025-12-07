@@ -134,6 +134,7 @@ export async function convertCurrentPage(
   const fileAdapter = ctx.app.vault.adapter as FileSystemAdapter;
   const inputFilePath = fileAdapter.getFullPath(activeFile.path);
   const baseName = path.basename(inputFilePath, ".md");
+  const sourceDir = path.dirname(inputFilePath);
 
   const outputDir = activeProfile.outputDirectory || fileAdapter.getBasePath();
   try {
@@ -144,7 +145,8 @@ export async function convertCurrentPage(
   }
 
   const tempFileName = `${baseName.replace(/\s/g, "_")}.temp.md`;
-  const intermediateFilename = path.join(outputDir, tempFileName);
+  // lint 実行時の workingDir を元ノートと揃えるため、中間ファイルをソース側に置く
+  const intermediateFilename = path.join(sourceDir, tempFileName);
   const headerFileName = `${baseName.replace(/\s/g, "_")}.preamble.tex`;
   const headerFilePath = path.join(outputDir, headerFileName);
   const mermaidTempDirs: string[] = [];
@@ -254,7 +256,8 @@ export async function convertCurrentPage(
         outputFilename,
         format,
         headerFilePath,
-        pandocExtraArgs
+        pandocExtraArgs,
+        sourceDir
       );
 
       if (success && activeProfile.deleteIntermediateFiles) {
@@ -319,14 +322,15 @@ async function runPandoc(
   outputFile: string,
   format: OutputFormat,
   headerFilePath: string,
-  pandocExtraArgs: string[]
+  pandocExtraArgs: string[],
+  workingDirOverride?: string
 ): Promise<boolean> {
   const plan = await buildPandocExecutionPlan({
     profile: activeProfile,
     format,
     headerFilePath,
     outputFile,
-    workingDir: path.dirname(inputFile),
+    workingDir: workingDirOverride ?? path.dirname(inputFile),
     inputPath: inputFile,
     pandocExtraArgs,
   });
