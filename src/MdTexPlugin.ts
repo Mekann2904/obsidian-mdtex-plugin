@@ -23,6 +23,7 @@ export default class MdTexPlugin extends Plugin {
   settings: PandocPluginSettings = DEFAULT_SETTINGS;
   private latexSuggest: LatexEditorSuggest | null = null;
   private ghostExtension: Extension | null = null;
+   private statusBarItem: HTMLElement | null = null;
 
   getActiveProfileSettings(): ProfileSettings {
     const activeProfileName = this.settings.activeProfile;
@@ -40,6 +41,9 @@ export default class MdTexPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
     this.debugLog("MdTexPlugin loaded");
+
+    this.statusBarItem = this.addStatusBarItem();
+    this.updateStatus(t("status_ready"));
 
     this.addSettingTab(new PandocPluginSettingTab(this.app, this));
 
@@ -98,6 +102,7 @@ export default class MdTexPlugin extends Plugin {
   async onunload() {
     this.debugLog("MdTexPlugin unloading...");
     await this.saveSettings();
+    this.updateStatus("");
     this.debugLog("MdTexPlugin: settings saved.");
   }
 
@@ -119,37 +124,54 @@ export default class MdTexPlugin extends Plugin {
   }
 
   private async runConversion(format: "pdf" | "latex" | "active") {
+    const startedAt = Date.now();
     try {
       const preferred = format === "active" ? this.getActiveProfileSettings().outputFormat : format;
       const formatToUse: OutputFormat =
         preferred === "latex" || preferred === "docx" ? preferred : "pdf";
 
+      this.updateStatus(t("status_converting", [formatToUse.toUpperCase()]));
+
       await convertCurrentPage(this.buildContext(), { runMarkdownlintFix }, formatToUse);
       new Notice(t("notice_convert_done", [formatToUse.toUpperCase()]));
+      const elapsed = Date.now() - startedAt;
+      this.updateStatus(t("status_done", [formatToUse.toUpperCase(), elapsed]));
     } catch (error) {
+      this.updateStatus(t("status_error", [format.toUpperCase()]));
       this.handleError("Conversion", error);
     }
   }
 
   private async runLint() {
+    const startedAt = Date.now();
+    this.updateStatus(t("status_linting"));
     try {
       await lintCurrentNote(this.buildContext());
       new Notice(t("notice_lint_done"));
+      const elapsed = Date.now() - startedAt;
+      this.updateStatus(t("status_done", ["LINT", elapsed]));
     } catch (error) {
+      this.updateStatus(t("status_error", ["LINT"]));
       this.handleError("Lint", error);
     }
   }
 
   private async runLintFix() {
+    const startedAt = Date.now();
+    this.updateStatus(t("status_fixing"));
     try {
       const activeFile = this.app.workspace.getActiveFile();
       if (!activeFile) {
         new Notice(t("notice_no_active_file_fix"));
+        this.updateStatus(t("status_ready"));
         return;
       }
       await runMarkdownlintFix(this.buildContext(), activeFile.path);
       new Notice(t("notice_fix_done"));
+      const elapsed = Date.now() - startedAt;
+      this.updateStatus(t("status_done", ["FIX", elapsed]));
     } catch (error) {
+      this.updateStatus(t("status_error", ["FIX"]));
       this.handleError("Lint fix", error);
     }
   }
@@ -162,6 +184,16 @@ export default class MdTexPlugin extends Plugin {
 
   private debugLog(...args: unknown[]) {
     if (!this.settings?.suppressDeveloperLogs) console.log("[MdTexPlugin]", ...args);
+  }
+
+  private updateStatus(text: string) {
+    if (!this.statusBarItem) return;
+    const el = this.statusBarItem as HTMLElement & { setText?: (value: string) => void };
+    if (el.setText) {
+      el.setText(text);
+    } else {
+      el.textContent = text;
+    }
   }
 
   private getLatexCommands() {
