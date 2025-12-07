@@ -46,16 +46,38 @@ export const escapeForLatexCommand = (text: string): string =>
     .replace(/&/g, "\\&").replace(/\$/g, "\\$")
     .replace(/_/g, "\\_");
 
-export function appendListingOverrides(latexCode: string, codeLabel: string, lstPrefix: string): string {
-  const nameCmd = escapeForLatexCommand(codeLabel);
-  const listCmd = escapeForLatexCommand(lstPrefix);
-
-  const overrides = `\\makeatletter
-\\AtBeginDocument{
-  \\renewcommand{\\lstlistingname}{${nameCmd}}
-  \\renewcommand{\\lstlistlistingname}{${listCmd}}
+export interface LabelOverrides {
+  figureLabel: string;
+  figPrefix: string;
+  tableLabel: string;
+  tblPrefix: string;
+  codeLabel: string;
+  lstPrefix: string;
+  equationLabel: string;
+  eqnPrefix: string;
 }
-\\makeatother`;
 
-  return [latexCode.trim(), overrides].filter(Boolean).join("\n\n");
+export function appendLabelOverrides(latexCode: string, labels: LabelOverrides): string {
+  const safe = (val: string) => escapeForLatexCommand(val || "");
+
+  const overrides: string[] = [
+    labels.figureLabel ? `\\renewcommand{\\figurename}{${safe(labels.figureLabel)}}` : "",
+    labels.tableLabel ? `\\renewcommand{\\tablename}{${safe(labels.tableLabel)}}` : "",
+    labels.codeLabel ? `\\renewcommand{\\lstlistingname}{${safe(labels.codeLabel)}}` : "",
+    labels.lstPrefix ? `\\renewcommand{\\lstlistlistingname}{${safe(labels.lstPrefix)}}` : "",
+    labels.equationLabel
+      ? `\\providecommand{\\equationautorefname}{${safe(labels.equationLabel)}}\\renewcommand{\\equationautorefname}{${safe(labels.equationLabel)}}`
+      : "",
+  ].filter(Boolean);
+
+  if (!overrides.length) return latexCode.trim();
+
+  const block = [
+    latexCode.trim(),
+    "\\makeatletter",
+    ...overrides,
+    "\\makeatother",
+  ].filter(Boolean).join("\n\n");
+
+  return block.trim();
 }

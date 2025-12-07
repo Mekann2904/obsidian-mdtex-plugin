@@ -9,7 +9,7 @@ import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import { ProfileSettings } from "../MdTexPluginSettings";
 import { replaceWikiLinksRecursivelyAsync, unwrapValidWikiLinks } from "../utils/markdownTransforms";
-import { cleanLatexPreamble, appendListingOverrides } from "../utils/latexPreamble";
+import { cleanLatexPreamble, appendLabelOverrides } from "../utils/latexPreamble";
 import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
 import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
 import { expandTransclusions } from "../utils/transclusion";
@@ -191,7 +191,16 @@ export async function convertCurrentPage(
       ? baseHeader
       : `${baseHeader.trim()}\n\n${CALLOUT_PREAMBLE}`.trim();
     const cleanedHeader = cleanLatexPreamble(withCallout);
-    const headerWithListings = appendListingOverrides(cleanedHeader, activeProfile.codeLabel, activeProfile.lstPrefix);
+    const headerWithListings = appendLabelOverrides(cleanedHeader, {
+      figureLabel: activeProfile.figureLabel,
+      figPrefix: activeProfile.figPrefix,
+      tableLabel: activeProfile.tableLabel,
+      tblPrefix: activeProfile.tblPrefix,
+      codeLabel: activeProfile.codeLabel,
+      lstPrefix: activeProfile.lstPrefix,
+      equationLabel: activeProfile.equationLabel,
+      eqnPrefix: activeProfile.eqnPrefix,
+    });
 
     // 
     // LaTeX の \maketitle はタイトルページを強制的に plain スタイルにする。
