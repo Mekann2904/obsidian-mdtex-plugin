@@ -45,6 +45,13 @@ const en = {
   notice_markdownlint_launch_failed: "Failed to launch markdownlint-cli2. Check the path and Node installation.",
   notice_lint_error: "Lint error: {0}",
 
+  status_ready: "MdTex: ready",
+  status_converting: "MdTex: converting to {0}…",
+  status_linting: "MdTex: linting…",
+  status_fixing: "MdTex: fixing…",
+  status_done: "MdTex: done ({0}, {1} ms)",
+  status_error: "MdTex: error in {0}",
+
   settings_title: "MdTex Plugin Settings",
   heading_profile: "Profile Management",
   setting_active_profile_name: "Active Profile",

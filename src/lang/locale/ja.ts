@@ -47,6 +47,13 @@ const ja: Record<TranslationKeys, string> = {
   notice_markdownlint_launch_failed: "markdownlint-cli2 の起動に失敗しました。パスと Node のインストールを確認してください。",
   notice_lint_error: "Lint エラー: {0}",
 
+  status_ready: "MdTex: 待機中",
+  status_converting: "MdTex: {0} へ変換中",
+  status_linting: "MdTex: Lint 実行中",
+  status_fixing: "MdTex: 修正適用中",
+  status_done: "MdTex: 完了 ({0}, {1} ms)",
+  status_error: "MdTex: {0} でエラー",
+
   settings_title: "MdTex プラグイン設定",
   heading_profile: "プロファイル管理",
   setting_active_profile_name: "使用するプロファイル",
