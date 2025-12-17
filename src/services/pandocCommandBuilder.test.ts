@@ -82,4 +82,18 @@ describe("buildPandocCommand", () => {
     expect(result.args).toContain("geometry:margin=30mm");
     expect(result.args).toContain("graphics=width=0.6\\textwidth");
   });
+
+  it("resourcePath オーバーライドをそのまま --resource-path に使う", () => {
+    const profile = createDefaultProfile();
+    const result = buildPandocCommand({
+      profile,
+      format: "pdf",
+      outputPath: "/tmp/out.pdf",
+      workingDir: "/tmp/workdir",
+      resourcePath: "/vault/root",
+    });
+
+    expect(result.args).toContain("--resource-path");
+    expect(result.args).toContain("/vault/root");
+  });
 });

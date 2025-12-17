@@ -60,59 +60,72 @@ export interface PandocPluginSettings {
 */
 export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
 
-\\usepackage{microtype}
-\\usepackage{luatexja}
+% LuaLaTeX + 日本語
 \\usepackage{luatexja-fontspec}
-\\usepackage[noto-otf]{luatexja-preset}
-\\setmainfont{Noto Sans CJK JP}
-\\setsansfont{Noto Sans CJK JP}
-\\setmonofont{Ricty Diminished}
 \\usepackage{luatexja-ruby}
 
+% 数式
+\\usepackage{unicode-math}
+
+% 欧文（数字含む）は大文字基準で和文に寄せる
+\\setmainfont[Scale=MatchUppercase]{Noto Serif}
+\\setsansfont[Scale=MatchUppercase]{Noto Sans}
+\\setmonofont[Scale=1.18]{Ricty Diminished}
+
+
+% 和文
+\\setmainjfont{Noto Serif CJK JP}
+\\setsansjfont{Noto Sans CJK JP}
+\\setmonojfont[Scale=1.18]{Ricty Diminished}
+
+% 数式フォント
+\\setmathfont{XITS Math}
+
+% 体裁
+\\usepackage{microtype}
 \\usepackage{parskip}
-\\usepackage{listings}
 \\usepackage{xcolor}
+\\definecolor{textcolor}{RGB}{34,34,34}
 \\usepackage{setspace}
-\\usepackage{booktabs}
-\\usepackage{amsmath,amssymb}
-\\usepackage{mathtools}
-\\usepackage{hyperref}
-\\usepackage{cleveref}
-\\usepackage{autonum}
-\\usepackage{graphicx}
-\\usepackage{caption}
-\\captionsetup{labelsep=colon}
-\\usepackage{fontspec}
-\\setcounter{tocdepth}{4}
 \\linespread{1.1}
+\\setcounter{tocdepth}{4}
+
+% 表
+\\usepackage{booktabs}
 \\usepackage{makecell}
 \\usepackage{multirow}
 \\usepackage{array}
+
+% 数式環境（mathtools は amsmath を読み込む）
+\\usepackage{mathtools}
+\\usepackage{amssymb}
+
+% 図
+\\usepackage{graphicx}
+\\usepackage{caption}
+\\captionsetup{labelsep=colon}
+
+% TikZ
 \\usepackage{tikz}
-\\definecolor{textcolor}{RGB}{34,34,34}
+
+% フロート（元の指定を維持）
 \\usepackage{float}
 \\floatplacement{figure}{H}
 \\floatplacement{table}{H}
 
-\\renewcommand{\\labelitemii}{\\textbullet}
-\\renewcommand{\\labelitemiii}{\\textbullet}
-\\renewcommand{\\labelitemiv}{\\textbullet}
-\\makeatletter
-\\renewcommand{\\paragraph}{\\@startsection{paragraph}{4}{\\z@}%
-  {3.25ex \\@plus 1ex \\@minus .2ex}%
-  {1em}%
-  {\\normalfont\\normalsize\\bfseries\\noindent}}
+% 参照（hyperref は遅め、cleveref はその直後、autonum は最後）
+\\usepackage[unicode,hypertexnames=false]{hyperref}
+\\usepackage{cleveref}
+\\usepackage{autonum}
 
-\\renewcommand{\\subparagraph}{\\@startsection{subparagraph}{5}{\\z@}%
-  {3.25ex \\@plus 1ex \\@minus .2ex}%
-  {1em}%
-  {\\normalfont\\normalsize\\bfseries\\noindent}}
-\\makeatother
-
+% listings
+\\usepackage{listings}
 \\lstset{
   frame=single,
   framesep=3pt,
-  basicstyle=\\ttfamily\\scriptsize,
+  basicstyle=\\ttfamily,
+  columns=fullflexible,
+  keepspaces=true,
   keywordstyle=\\color{blue}\\bfseries,
   commentstyle=\\color{green!50!black},
   stringstyle=\\color{red},
@@ -122,6 +135,7 @@ export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
   stepnumber=1,
   tabsize=4
 }
+
 \\lstdefinelanguage{zsh}{
   morekeywords={ls, cd, pwd, echo, export, alias, unalias, function},
   sensitive=true,
@@ -130,6 +144,7 @@ export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
   morestring=[b]'
 }
 
+% 引用ボックス
 \\usepackage{tcolorbox}
 \\tcbuselibrary{breakable, skins}
 
@@ -156,6 +171,23 @@ export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
 \\renewenvironment{quotation}
   {\\begin{blockquote}\\list{}{\\leftmargin=0pt\\rightmargin=0pt}\\item\\relax\\small}
   {\\endlist\\end{blockquote}}
+\\makeatother
+
+% 見出し
+\\renewcommand{\\labelitemii}{\\textbullet}
+\\renewcommand{\\labelitemiii}{\\textbullet}
+\\renewcommand{\\labelitemiv}{\\textbullet}
+
+\\makeatletter
+\\renewcommand{\\paragraph}{\\@startsection{paragraph}{4}{\\z@}%
+  {3.25ex \\@plus 1ex \\@minus .2ex}%
+  {1em}%
+  {\\normalfont\\normalsize\\bfseries\\noindent}}
+
+\\renewcommand{\\subparagraph}{\\@startsection{subparagraph}{5}{\\z@}%
+  {3.25ex \\@plus 1ex \\@minus .2ex}%
+  {1em}%
+  {\\normalfont\\normalsize\\bfseries\\noindent}}
 \\makeatother`.trim();
 
 /**
