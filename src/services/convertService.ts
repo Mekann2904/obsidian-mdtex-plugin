@@ -102,6 +102,14 @@ function detectDraftInFrontmatter(markdown: string): boolean {
   return false;
 }
 
+function resolveResourcePath(profile: ProfileSettings, vaultBasePath: string): string {
+  const configured = profile.searchDirectory?.trim();
+  if (configured) {
+    return path.isAbsolute(configured) ? configured : path.join(vaultBasePath, configured);
+  }
+  return vaultBasePath;
+}
+
 export async function convertCurrentPage(
   ctx: PluginContext,
   deps: ConvertDeps,
@@ -132,17 +140,20 @@ export async function convertCurrentPage(
 
   const activeProfile = ctx.getActiveProfileSettings();
   const fileAdapter = ctx.app.vault.adapter as FileSystemAdapter;
+  const vaultBasePath = fileAdapter.getBasePath();
   const inputFilePath = fileAdapter.getFullPath(activeFile.path);
   const baseName = path.basename(inputFilePath, ".md");
   const sourceDir = path.dirname(inputFilePath);
 
-  const outputDir = activeProfile.outputDirectory || fileAdapter.getBasePath();
+  const outputDir = activeProfile.outputDirectory || vaultBasePath;
   try {
     await fs.access(outputDir);
   } catch (err) {
     new Notice(t("notice_output_dir_missing", [outputDir]));
     return;
   }
+
+  const resourcePath = resolveResourcePath(activeProfile, vaultBasePath);
 
   const tempFileName = `${baseName.replace(/\s/g, "_")}.temp.md`;
   // lint 実行時の workingDir を元ノートと揃えるため、中間ファイルをソース側に置く
@@ -266,7 +277,8 @@ export async function convertCurrentPage(
         format,
         headerFilePath,
         pandocExtraArgs,
-        sourceDir
+        sourceDir,
+        resourcePath
       );
 
       if (success && activeProfile.deleteIntermediateFiles) {
@@ -286,7 +298,8 @@ export async function convertCurrentPage(
         format,
         path.dirname(inputFilePath),
         headerFilePath,
-        pandocExtraArgs
+        pandocExtraArgs,
+        resourcePath
       );
 
       if (success && activeProfile.deleteIntermediateFiles) {
@@ -332,7 +345,8 @@ async function runPandoc(
   format: OutputFormat,
   headerFilePath: string,
   pandocExtraArgs: string[],
-  workingDirOverride?: string
+  workingDirOverride?: string,
+  resourcePathOverride?: string
 ): Promise<boolean> {
   const plan = await buildPandocExecutionPlan({
     profile: activeProfile,
@@ -342,6 +356,7 @@ async function runPandoc(
     workingDir: workingDirOverride ?? path.dirname(inputFile),
     inputPath: inputFile,
     pandocExtraArgs,
+    resourcePath: resourcePathOverride,
   });
 
   try {
@@ -359,7 +374,8 @@ async function runPandocWithStdin(
   format: OutputFormat,
   workingDir: string,
   headerFilePath: string,
-  pandocExtraArgs: string[]
+  pandocExtraArgs: string[],
+  resourcePathOverride?: string
 ): Promise<boolean> {
   const plan = await buildPandocExecutionPlan({
     profile: activeProfile,
@@ -369,6 +385,7 @@ async function runPandocWithStdin(
     workingDir,
     pandocExtraArgs,
     useStdin: true,
+    resourcePath: resourcePathOverride,
   });
 
   try {
@@ -401,6 +418,7 @@ async function buildPandocExecutionPlan(params: {
   pandocExtraArgs: string[];
   inputPath?: string;
   useStdin?: boolean;
+  resourcePath?: string;
 }): Promise<PandocExecutionPlan> {
   const tempFiles: string[] = [];
   const luaFilters: string[] = [];
@@ -423,7 +441,7 @@ async function buildPandocExecutionPlan(params: {
     workingDir: params.workingDir,
     extraArgs: params.pandocExtraArgs,
     luaFilters,
-    resourcePath: params.profile.searchDirectory.trim() || params.workingDir,
+    resourcePath: (params.resourcePath ?? params.profile.searchDirectory.trim()) || params.workingDir,
     useStdin: params.useStdin,
   });
 
