@@ -112,7 +112,7 @@ export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
 \\lstset{
   frame=single,
   framesep=3pt,
-  basicstyle=\\ttfamily\\scriptsize,
+  basicstyle=\\ttfamily\\fontsize{8pt}{9.6pt}\\selectfont, % 8pt, 行送り 9.6pt
   keywordstyle=\\color{blue}\\bfseries,
   commentstyle=\\color{green!50!black},
   stringstyle=\\color{red},
