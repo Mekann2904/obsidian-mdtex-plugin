@@ -14,6 +14,7 @@ export interface LatexCommand {
 export const LATEX_COMMANDS: LatexCommand[] = [
   { cmd: "\\clearpage", desc: "Flush floats and new page" },
   { cmd: "\\newpage", desc: "New page" },
+  { cmd: "\\pagebreak", desc: "Page break with allowed stretch" },
   { cmd: "\\bigskip", desc: "Large vertical space" },
   { cmd: "\\medskip", desc: "Medium vertical space" },
   { cmd: "\\smallskip", desc: "Small vertical space" },
@@ -29,6 +30,8 @@ export const DEFAULT_LATEX_COMMANDS_YAML = `
   desc: "Flush floats and new page (改ページ・図表配置)"
 - cmd: "\\newpage"
   desc: "New page (改ページ)"
+- cmd: "\\pagebreak"
+  desc: "Page break with allowed stretch (ページ分割: 伸縮可)"
 - cmd: "\\bigskip"
   desc: "Large vertical space (大スペース)"
 - cmd: "\\medskip"
