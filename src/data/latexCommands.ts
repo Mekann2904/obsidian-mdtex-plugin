@@ -48,6 +48,28 @@ export const DEFAULT_LATEX_COMMANDS_YAML = `
 - cmd: "\\\\"
   desc: "Line break (強制改行)"`;
 
+function escapeBareBackslashes(yamlText: string): string {
+  // YAML のダブルクォート文字列はバックスラッシュをエスケープとして扱うため、
+  // LaTeX コマンドのような先頭 1 文字バックスラッシュは "\c" と解釈されてパースに失敗する。
+  // 既にエスケープ済みの "\\" ペアはそのまま残し、単発 "\" だけを "\\" に二重化する。
+  let out = "";
+  for (let i = 0; i < yamlText.length; i++) {
+    const ch = yamlText[i];
+    if (ch === "\\") {
+      const next = yamlText[i + 1];
+      if (next === "\\") {
+        out += "\\\\";
+        i += 1; // ペアをまるごと進める
+      } else {
+        out += "\\\\";
+      }
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
 function sanitizeCommand(raw: any): LatexCommand | null {
   if (!raw || typeof raw.cmd !== "string" || typeof raw.desc !== "string") return null;
   const offset = typeof raw.cursorOffset === "number" ? raw.cursorOffset : undefined;
@@ -56,8 +78,9 @@ function sanitizeCommand(raw: any): LatexCommand | null {
 
 export function buildLatexCommands(yamlText?: string): LatexCommand[] {
   const source = yamlText?.trim().length ? yamlText : DEFAULT_LATEX_COMMANDS_YAML;
+  const safeYaml = escapeBareBackslashes(source);
   try {
-    const parsed = parseYaml(source);
+    const parsed = parseYaml(safeYaml);
     if (!Array.isArray(parsed)) return LATEX_COMMANDS;
     const mapped = parsed
       .map((item) => sanitizeCommand(item))
