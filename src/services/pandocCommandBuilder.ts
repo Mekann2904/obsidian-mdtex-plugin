@@ -4,6 +4,7 @@
 // Related: src/services/convertService.ts, src/utils/processRunner.ts, src/MdTexPluginSettings.ts, vitest.config.ts
 
 import { ProfileSettings } from "../MdTexPluginSettings";
+import { normalizeFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
 
 export type OutputFormat = "pdf" | "latex" | "docx";
 
@@ -30,16 +31,16 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   const args: string[] = [];
 
   if (!options.useStdin && options.inputPath) {
-    args.push(options.inputPath);
+    args.push(normalizeFsPath(options.inputPath));
   }
 
   args.push(...getInputFormatArgs(options.format));
 
   if (options.headerPath) {
-    args.push("--include-in-header", options.headerPath);
+    args.push("--include-in-header", normalizeFsPath(options.headerPath));
   }
 
-  args.push("-o", options.outputPath);
+  args.push("-o", normalizeFsPath(options.outputPath));
 
   if (options.format === "pdf") {
     args.push(`--pdf-engine=${profile.latexEngine}`);
@@ -53,14 +54,14 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
 
   if (options.luaFilters?.length) {
     for (const luaPath of options.luaFilters) {
-      if (luaPath) args.push("--lua-filter", luaPath);
+      if (luaPath) args.push("--lua-filter", normalizeFsPath(luaPath));
     }
   }
 
   args.push("--listings");
 
   const resourcePath = (options.resourcePath ?? profile.searchDirectory ?? "").trim() || options.workingDir;
-  args.push("--resource-path", resourcePath);
+  args.push("--resource-path", normalizeResourcePathList(resourcePath));
 
   if (profile.usePandocCrossref) {
     const crossrefFilter = profile.pandocCrossrefPath.trim() || "pandoc-crossref";

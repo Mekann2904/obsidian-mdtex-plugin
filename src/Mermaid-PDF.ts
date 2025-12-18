@@ -5,7 +5,7 @@
 
 import { spawn } from "child_process";
 import { promises as fs } from "fs";
-import * as path from "path";
+import { joinFsPath } from "./utils/pathHelpers";
 
 /**
  * Markdown内のMermaidブロックをPDFへ変換し、
@@ -63,11 +63,11 @@ async function convertMermaidBlock(
   // 一意なファイル名
   const uniqueId = `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
   const pdfFilename = `mermaid-${uniqueId}.pdf`;
-  const outputFilename = path.join(outputDir, pdfFilename);
+  const outputFilename = joinFsPath(outputDir, pdfFilename);
 
   try {
     // 一時的な .mmd ファイルを作成
-    const mmdFilename = path.join(outputDir, `mermaid-${uniqueId}.mmd`);
+    const mmdFilename = joinFsPath(outputDir, `mermaid-${uniqueId}.mmd`);
     await fs.writeFile(mmdFilename, code, "utf8");
 
     // mmdc で PDF を生成（--pdfFit）

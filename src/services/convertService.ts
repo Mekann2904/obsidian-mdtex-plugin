@@ -18,6 +18,7 @@ import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
 import { t } from "../lang/helpers";
 import { buildPandocCommand, OutputFormat, PandocCommandResult } from "./pandocCommandBuilder";
 import { runCommand } from "../utils/processRunner";
+import { joinFsPath, normalizeFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
@@ -26,7 +27,7 @@ export interface ConvertDeps {
 // Luaフィルタを一時生成
 async function createTempLuaFilter(workingDir: string): Promise<string> {
   const fileName = `callout-${Date.now()}-${Math.random().toString(16).slice(2)}.lua`;
-  const luaPath = path.join(workingDir, fileName);
+  const luaPath = joinFsPath(workingDir, fileName);
   await fs.writeFile(luaPath, CALLOUT_LUA_FILTER, "utf8");
   return luaPath;
 }
@@ -105,9 +106,10 @@ function detectDraftInFrontmatter(markdown: string): boolean {
 function resolveResourcePath(profile: ProfileSettings, vaultBasePath: string): string {
   const configured = profile.searchDirectory?.trim();
   if (configured) {
-    return path.isAbsolute(configured) ? configured : path.join(vaultBasePath, configured);
+    const resolved = path.isAbsolute(configured) ? configured : joinFsPath(vaultBasePath, configured);
+    return normalizeResourcePathList(resolved);
   }
-  return vaultBasePath;
+  return normalizeResourcePathList(vaultBasePath);
 }
 
 export async function convertCurrentPage(
@@ -157,13 +159,13 @@ export async function convertCurrentPage(
 
   const tempFileName = `${baseName.replace(/\s/g, "_")}.temp.md`;
   // lint 実行時の workingDir を元ノートと揃えるため、中間ファイルをソース側に置く
-  const intermediateFilename = path.join(sourceDir, tempFileName);
+  const intermediateFilename = joinFsPath(sourceDir, tempFileName);
   const headerFileName = `${baseName.replace(/\s/g, "_")}.preamble.tex`;
-  const headerFilePath = path.join(outputDir, headerFileName);
+  const headerFilePath = joinFsPath(outputDir, headerFileName);
   const mermaidTempDirs: string[] = [];
 
   const ext = format === "latex" ? ".tex" : `.${format}`;
-  const outputFilename = path.join(outputDir, `${baseName.replace(/\s/g, "_")}${ext}`);
+  const outputFilename = joinFsPath(outputDir, `${baseName.replace(/\s/g, "_")}${ext}`);
 
   const cache = new Map<string, string>();
 
