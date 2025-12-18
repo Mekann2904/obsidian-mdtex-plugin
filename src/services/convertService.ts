@@ -205,6 +205,21 @@ export async function convertCurrentPage(
       mermaidTempDirs.push(...mermaidResult.cleanupDirs);
     }
 
+    // markdownlint --fix は Markdown フェンス構造を保ったまま走らせたいので、
+    // LaTeX 置換より先に実行する。
+    const lintEnabled = ctx.settings.enableMarkdownlintFix;
+    if (lintEnabled) {
+      await fs.writeFile(intermediateFilename, content, "utf8");
+      try {
+        await deps.runMarkdownlintFix(ctx, intermediateFilename);
+        content = await fs.readFile(intermediateFilename, "utf8");
+      } catch (e: any) {
+        console.error(e);
+        new Notice(t("notice_markdownlint_failed_continue"));
+        // lint 失敗時は元の content をそのまま使う
+      }
+    }
+
     // ユーザー設定プリアンブルにコールアウト定義を付与し、listing名の上書きを加える
     const baseHeader = activeProfile.headerIncludes || "";
     const withCallout = baseHeader.includes("obsidiancallout")
@@ -267,16 +282,9 @@ export async function convertCurrentPage(
         .replace(/\\noindent/g, '');
     }
 
-    const lintEnabled = ctx.settings.enableMarkdownlintFix;
-
     if (lintEnabled) {
+      // markdownlint 後の内容を Pandoc に渡すため、再度中間ファイルへ書き戻す
       await fs.writeFile(intermediateFilename, content, "utf8");
-      try {
-        await deps.runMarkdownlintFix(ctx, intermediateFilename);
-      } catch (e: any) {
-        console.error(e);
-        new Notice(t("notice_markdownlint_failed_continue"));
-      }
 
       const success = await runPandoc(
         ctx,
