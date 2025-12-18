@@ -6,7 +6,7 @@
 import { App, Component, MarkdownRenderer } from "obsidian";
 import { promises as fs } from "fs";
 import * as os from "os";
-import * as path from "path";
+import { joinFsPath, toPosixPath } from "./pathHelpers";
 
 interface RasterizeOptions {
   app: App;
@@ -41,7 +41,7 @@ export async function rasterizeMermaidBlocks(
     return { content: markdown, cleanupDirs: [], used: false };
   }
 
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-mermaid-"));
+  const tempDir = await fs.mkdtemp(joinFsPath(os.tmpdir(), "mdtex-mermaid-"));
   const cleanupDirs = [tempDir];
   const replacements: { original: string; replacement: string }[] = [];
   const container = createHiddenContainer();
@@ -56,7 +56,7 @@ export async function rasterizeMermaidBlocks(
         const pngBuffer = await svgToPngBuffer(svg, 2);
         const pngPath = await writePng(tempDir, pngBuffer);
         const attrBlock = buildAttributeBlock(attrContent, options.imageScale);
-        const posixPath = pngPath.split(path.sep).join("/");
+        const posixPath = toPosixPath(pngPath);
         const caption = figCaptionRaw ? figCaptionRaw.replace(/^\[|\]$/g, "").trim() : "";
         // ブロック画像として扱わせるため、前後に空行を必ず入れる
         const replacement = `\n\n![${caption}](<${posixPath}>)${attrBlock}\n\n`;
@@ -394,7 +394,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 
 async function writePng(dir: string, data: Buffer): Promise<string> {
   const uniqueId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  const pngPath = path.join(dir, `mermaid-${uniqueId}.png`);
+  const pngPath = joinFsPath(dir, `mermaid-${uniqueId}.png`);
   await fs.writeFile(pngPath, data);
   return pngPath;
 }
