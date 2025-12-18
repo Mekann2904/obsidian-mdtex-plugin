@@ -5,6 +5,7 @@
 
 import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
 import * as path from "path";
+import * as os from "os";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import { ProfileSettings } from "../MdTexPluginSettings";
@@ -24,12 +25,18 @@ export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
 }
 
-// Luaフィルタを一時生成
-async function createTempLuaFilter(workingDir: string): Promise<string> {
-  const fileName = `callout-${Date.now()}-${Math.random().toString(16).slice(2)}.lua`;
-  const luaPath = joinFsPath(workingDir, fileName);
-  await fs.writeFile(luaPath, CALLOUT_LUA_FILTER, "utf8");
-  return luaPath;
+// Luaフィルタを一時生成（ディレクトリも返し、失敗時は片付ける）
+async function createTempLuaFilter(): Promise<{ luaPath: string; tempDir: string }> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-lua-"));
+  try {
+    const fileName = `callout-${Date.now()}-${Math.random().toString(16).slice(2)}.lua`;
+    const luaPath = joinFsPath(tempDir, fileName);
+    await fs.writeFile(luaPath, CALLOUT_LUA_FILTER, "utf8");
+    return { luaPath, tempDir };
+  } catch (error) {
+    await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
+    throw error;
+  }
 }
 
 function parseDraftFlag(extraArgs: string): { extras: string[]; isDraft: boolean } {
@@ -319,9 +326,29 @@ export async function convertCurrentPage(
   } catch (error: any) {
     new Notice(t("notice_error_generating", [error?.message || error]));
   } finally {
+    const tempRoot = path.resolve(os.tmpdir());
+    const tempRootReal = await fs.realpath(tempRoot).catch(() => tempRoot);
+
     for (const dir of mermaidTempDirs) {
       try {
-        await fs.rm(dir, { recursive: true, force: true });
+        const resolved = path.resolve(dir);
+        const insideTemp = await isInsideBaseDir(resolved, tempRootReal);
+        if (!insideTemp) {
+          console.warn(`Skip removing non-temp directory: ${dir}`);
+          continue;
+        }
+        const base = path.basename(resolved);
+        if (!base.startsWith("mdtex-mermaid-") || resolved === tempRootReal) {
+          console.warn(`Skip removing suspicious temp dir: ${dir}`);
+          continue;
+        }
+        const stat = await fs.lstat(resolved).catch(() => null);
+        if (!stat || !stat.isDirectory() || stat.isSymbolicLink()) {
+          console.warn(`Skip removing non-directory or symlink: ${dir}`);
+          continue;
+        }
+        // OSの一時領域に限定して安全に削除する
+        await fs.rm(resolved, { recursive: true, force: false, maxRetries: 3, retryDelay: 100 });
       } catch (err) {
         console.warn(`Failed to remove temporary Mermaid dir: ${dir}`, err);
       }
@@ -350,21 +377,23 @@ async function runPandoc(
   workingDirOverride?: string,
   resourcePathOverride?: string
 ): Promise<boolean> {
-  const plan = await buildPandocExecutionPlan({
-    profile: activeProfile,
-    format,
-    headerFilePath,
-    outputFile,
-    workingDir: workingDirOverride ?? path.dirname(inputFile),
-    inputPath: inputFile,
-    pandocExtraArgs,
-    resourcePath: resourcePathOverride,
-  });
+  let plan: PandocExecutionPlan | null = null;
 
   try {
+    plan = await buildPandocExecutionPlan({
+      profile: activeProfile,
+      format,
+      headerFilePath,
+      outputFile,
+      workingDir: workingDirOverride ?? path.dirname(inputFile),
+      inputPath: inputFile,
+      pandocExtraArgs,
+      resourcePath: resourcePathOverride,
+    });
+
     return await executePandocCommand(plan, ctx, outputFile);
   } finally {
-    await cleanupTemporaryFiles(plan.tempFiles);
+    await cleanupTemporaryFiles(plan?.tempFiles ?? []);
   }
 }
 
@@ -379,21 +408,23 @@ async function runPandocWithStdin(
   pandocExtraArgs: string[],
   resourcePathOverride?: string
 ): Promise<boolean> {
-  const plan = await buildPandocExecutionPlan({
-    profile: activeProfile,
-    format,
-    headerFilePath,
-    outputFile,
-    workingDir,
-    pandocExtraArgs,
-    useStdin: true,
-    resourcePath: resourcePathOverride,
-  });
+  let plan: PandocExecutionPlan | null = null;
 
   try {
+    plan = await buildPandocExecutionPlan({
+      profile: activeProfile,
+      format,
+      headerFilePath,
+      outputFile,
+      workingDir,
+      pandocExtraArgs,
+      useStdin: true,
+      resourcePath: resourcePathOverride,
+    });
+
     return await executePandocCommand(plan, ctx, outputFile, inputContent);
   } finally {
-    await cleanupTemporaryFiles(plan.tempFiles);
+    await cleanupTemporaryFiles(plan?.tempFiles ?? []);
   }
 }
 
@@ -411,6 +442,25 @@ function resolveDocxLuaFilter(profile: ProfileSettings, format: OutputFormat): s
   return fsSync.existsSync(luaFilterPath) ? luaFilterPath : null;
 }
 
+async function isInsideBaseDir(target: string, base: string): Promise<boolean> {
+  const [realTarget, realBase] = await Promise.all([
+    fs.realpath(target).catch(() => path.resolve(target)),
+    fs.realpath(base).catch(() => path.resolve(base)),
+  ]);
+
+  const normalize = (p: string) => path.resolve(p).replace(/[/\\]+/g, path.sep);
+  const t = normalize(realTarget);
+  const b = normalize(realBase);
+
+  if (process.platform === "win32") {
+    const tl = t.toLowerCase();
+    const bl = b.toLowerCase();
+    return tl === bl || tl.startsWith(bl + path.sep);
+  }
+
+  return t === b || t.startsWith(b + path.sep);
+}
+
 async function buildPandocExecutionPlan(params: {
   profile: ProfileSettings;
   format: OutputFormat;
@@ -426,38 +476,59 @@ async function buildPandocExecutionPlan(params: {
   const luaFilters: string[] = [];
 
   if (params.format === "pdf" || params.format === "latex") {
-    const tempLuaPath = await createTempLuaFilter(params.workingDir);
-    luaFilters.push(tempLuaPath);
-    tempFiles.push(tempLuaPath);
+    const created = await createTempLuaFilter();
+    luaFilters.push(created.luaPath);
+    tempFiles.push(created.luaPath, created.tempDir);
   }
 
   const docxLua = resolveDocxLuaFilter(params.profile, params.format);
   if (docxLua) luaFilters.push(docxLua);
 
-  const command = buildPandocCommand({
-    profile: params.profile,
-    format: params.format,
-    inputPath: params.useStdin ? undefined : params.inputPath,
-    outputPath: params.outputFile,
-    headerPath: params.headerFilePath,
-    workingDir: params.workingDir,
-    extraArgs: params.pandocExtraArgs,
-    luaFilters,
-    resourcePath: (params.resourcePath ?? params.profile.searchDirectory.trim()) || params.workingDir,
-    useStdin: params.useStdin,
-  });
+  try {
+    const command = buildPandocCommand({
+      profile: params.profile,
+      format: params.format,
+      inputPath: params.useStdin ? undefined : params.inputPath,
+      outputPath: params.outputFile,
+      headerPath: params.headerFilePath,
+      workingDir: params.workingDir,
+      extraArgs: params.pandocExtraArgs,
+      luaFilters,
+      resourcePath: (params.resourcePath ?? params.profile.searchDirectory.trim()) || params.workingDir,
+      useStdin: params.useStdin,
+    });
 
-  return { command, tempFiles, workingDir: params.workingDir };
+    return { command, tempFiles, workingDir: params.workingDir };
+  } catch (error) {
+    await cleanupTemporaryFiles(tempFiles);
+    throw error;
+  }
 }
 
+const TEMP_PREFIXES = ["mdtex-lua-", "mdtex-mermaid-", "mdtex-"];
+
 async function cleanupTemporaryFiles(files: string[]) {
-  for (const file of files) {
-    try {
-      await fs.unlink(file);
-    } catch (err) {
-      console.warn(`Failed to delete temporary file: ${file}`, err);
-    }
-  }
+  if (!files?.length) return;
+
+  const uniq = Array.from(new Set(files.map((f) => path.resolve(f))));
+  const tempRoot = path.resolve(os.tmpdir());
+  const tempRootReal = await fs.realpath(tempRoot).catch(() => tempRoot);
+
+  await Promise.allSettled(
+    uniq.map(async (file) => {
+      try {
+        const resolved = path.resolve(file);
+        if (!(await isInsideBaseDir(resolved, tempRootReal))) return;
+        const base = path.basename(resolved);
+        if (!TEMP_PREFIXES.some((p) => base.startsWith(p))) return;
+        await fs.rm(resolved, { recursive: true, force: false, maxRetries: 2, retryDelay: 100 });
+      } catch (err: any) {
+        if (err?.code !== "ENOENT") {
+          console.warn(`Failed to delete temporary file: ${file}`, err);
+        }
+      }
+    })
+  );
 }
 
 function createPandocNoticeHandlers(ctx: PluginContext) {
