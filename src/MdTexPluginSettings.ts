@@ -105,6 +105,32 @@ export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
 \\usepackage{caption}
 \\captionsetup{labelsep=colon}
 
+% タイトルページ（beamer以外のデフォルトを上書き）
+\\usepackage{titling}
+
+\\makeatletter
+\\@ifclassloaded{beamer}{%
+  % beamer は既定のタイトルページを利用
+}{%
+  \\renewcommand{\\maketitle}{%
+    \\thispagestyle{empty}% タイトルページ番号を消す
+    \\begin{center}
+      \\vspace*{\\stretch{2}}
+      {\\Huge\\bfseries\\thetitle\\par}
+      \\vspace{0.8em}
+      \\rule{0.55\\textwidth}{0.6pt}\\par
+      \\vspace{1.2em}
+      \\ifdefined\\subtitle
+        {\\large\\subtitle\\par}\\vspace{0.6em}
+      \\fi
+      {\\large\\theauthor\\par}
+      \\ifx\\@date\\@empty\\else\\vspace{0.6em}{\\normalsize\\@date\\par}\\fi
+      \\vspace*{\\stretch{3}}
+    \\end{center}
+  }
+}
+\\makeatother
+
 % TikZ
 \\usepackage{tikz}
 
