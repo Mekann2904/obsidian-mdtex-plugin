@@ -16,6 +16,199 @@ export const escapeSpecialCharacters = (code: string): string =>
     .replace(/~/g, "\\textasciitilde")
     .replace(/&/g, "\\&");
 
+/**
+ * Obsidian の `%% ... %%` コメントを Pandoc へ渡す前に取り除く。
+ * コードフェンス内は手を付けない。
+ */
+export function stripObsidianComments(markdown: string): string {
+  const newline = markdown.includes("\r\n") ? "\r\n" : "\n"; // 元の改行を尊重
+  const lines = markdown.split(/\r?\n/);
+  const output: string[] = [];
+
+  let inFence = false;
+  let fenceMarker: "`" | "~" | null = null;
+  let fenceLen = 0;
+
+  let inComment = false;
+  let inMathBlock = false;
+
+  // 0–3空白 + （引用 > 可） + ``` または ~~~ をフェンスとみなす
+  const fenceRegex = /^\s{0,3}(?:>\s*)*([`~]{3,})/;
+
+  const buildProtectedRanges = (line: string): Array<[number, number]> => {
+    const ranges: Array<[number, number]> = [];
+
+    // インラインコード: 開きと同じ本数のバッククォートで閉じるものだけを保護
+    let i = 0;
+    while (i < line.length) {
+      if (line[i] !== "`") {
+        i += 1;
+        continue;
+      }
+      let j = i;
+      while (j < line.length && line[j] === "`") j += 1;
+      const openLen = j - i;
+      let k = j;
+      let closed = false;
+      while (k < line.length) {
+        if (line[k] !== "`") {
+          k += 1;
+          continue;
+        }
+        let l = k;
+        while (l < line.length && line[l] === "`") l += 1;
+        const closeLen = l - k;
+        if (closeLen === openLen) {
+          ranges.push([i, l]);
+          i = l;
+          closed = true;
+          break;
+        }
+        k = l;
+      }
+      if (!closed) i = j;
+    }
+
+    // 行内の $$...$$ を保護（同一行で閉じる場合）
+    let m: RegExpExecArray | null;
+    const displayMathInline = /\$\$[^$]*?\$\$/g;
+    while ((m = displayMathInline.exec(line))) {
+      ranges.push([m.index, m.index + m[0].length]);
+    }
+
+    // 行内の $...$ を保護（単ドル記号、$$ は除外）
+    const inlineMath = /\$(?!\$)[^$\n]*?(?<!\\)\$(?!\$)/g;
+    while ((m = inlineMath.exec(line))) {
+      ranges.push([m.index, m.index + m[0].length]);
+    }
+
+    return ranges.sort((a, b) => a[0] - b[0]);
+  };
+
+  const isInRanges = (pos: number, ranges: Array<[number, number]>): boolean =>
+    ranges.some(([s, e]) => pos >= s && pos < e);
+
+  for (let line of lines) {
+    const protectedRanges = buildProtectedRanges(line);
+
+    // 数式ブロック中は内容を素通ししつつ $$ を数えて閉じる
+    if (inMathBlock) {
+      let toggles = 0;
+      let idx = 0;
+      while (true) {
+        const pos = line.indexOf("$$", idx);
+        if (pos === -1) break;
+        if (!isInRanges(pos, protectedRanges)) toggles += 1;
+        idx = pos + 2;
+      }
+      if (toggles % 2 === 1) inMathBlock = false;
+      output.push(line);
+      continue;
+    }
+
+    // コメント中はフェンスを無視して漏れを防ぐ
+    let fenceHandled = false;
+    if (!inComment) {
+      const fenceMatch = fenceRegex.exec(line);
+      if (fenceMatch) {
+        const run = fenceMatch[1];
+        const marker = run[0] as "`" | "~";
+        const len = run.length;
+
+        if (!inFence) {
+          inFence = true;
+          fenceMarker = marker;
+          fenceLen = len;
+        } else if (fenceMarker === marker && len >= fenceLen) {
+          inFence = false;
+          fenceMarker = null;
+          fenceLen = 0;
+        }
+        output.push(line);
+        fenceHandled = true;
+        continue;
+      }
+
+      if (inFence) {
+        output.push(line);
+        continue;
+      }
+    }
+
+    let lineOut = "";
+    let cursor = 0;
+
+    while (cursor < line.length) {
+      const idx = line.indexOf("%%", cursor);
+      if (idx === -1) {
+        if (!inComment) lineOut += line.slice(cursor);
+        break;
+      }
+
+      if (isInRanges(idx, protectedRanges)) {
+        const range = protectedRanges.find(([s, e]) => idx >= s && idx < e)!;
+        if (!inComment && range[0] > cursor) {
+          lineOut += line.slice(cursor, range[0]);
+        }
+        cursor = range[1];
+        continue;
+      }
+
+      if (!inComment) {
+        lineOut += line.slice(cursor, idx);
+        inComment = true;
+        cursor = idx + 2;
+        continue;
+      }
+
+      // コメント中: 最初に見つかった %% を終了とみなし、その後を処理継続
+      inComment = false;
+      cursor = idx + 2;
+    }
+
+    if (!inComment) {
+      // コメントを閉じた同一行でフェンスが現れるケースをカバー
+      if (!fenceHandled) {
+        const fenceMatch = fenceRegex.exec(lineOut);
+        if (fenceMatch) {
+          const run = fenceMatch[1];
+          const marker = run[0] as "`" | "~";
+          const len = run.length;
+
+          if (!inFence) {
+            inFence = true;
+            fenceMarker = marker;
+            fenceLen = len;
+          } else if (fenceMarker === marker && len >= fenceLen) {
+            inFence = false;
+            fenceMarker = null;
+            fenceLen = 0;
+          }
+        }
+      }
+
+      // コメント除去後の lineOut に対して $$ トグル（フェンス外でのみ）
+      let toggles = 0;
+      let idx = 0;
+      const protectedAfter = buildProtectedRanges(lineOut);
+      while (true) {
+        const pos = lineOut.indexOf("$$", idx);
+        if (pos === -1) break;
+        if (!isInRanges(pos, protectedAfter)) toggles += 1;
+        idx = pos + 2;
+      }
+      if (toggles % 2 === 1) inMathBlock = !inMathBlock;
+
+      output.push(lineOut);
+    } else if (lineOut.length) {
+      // コメント開始前に出力した分は残す
+      output.push(lineOut);
+    }
+  }
+
+  return output.join(newline);
+}
+
 export async function replaceWikiLinksAndCodeAsync(
   markdown: string,
   app: App,

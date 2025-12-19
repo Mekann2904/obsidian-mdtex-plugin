@@ -9,7 +9,11 @@ import * as os from "os";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import { ProfileSettings } from "../MdTexPluginSettings";
-import { replaceWikiLinksRecursivelyAsync, unwrapValidWikiLinks } from "../utils/markdownTransforms";
+import {
+  replaceWikiLinksRecursivelyAsync,
+  unwrapValidWikiLinks,
+  stripObsidianComments,
+} from "../utils/markdownTransforms";
 import { cleanLatexPreamble, appendLabelOverrides } from "../utils/latexPreamble";
 import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
 import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
@@ -178,6 +182,9 @@ export async function convertCurrentPage(
 
   try {
     let content = await fs.readFile(inputFilePath, "utf8");
+
+    // Obsidianコメント (%% ... %%) をPDF等に出さないよう事前に除去
+    content = stripObsidianComments(content);
 
     // 実験的Mermaidを使わない場合は、Pandoc listings が unknown language を吐かないよう
     // フェンス言語を外してプレーンコードとして扱う
