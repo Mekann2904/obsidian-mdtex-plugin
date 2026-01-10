@@ -294,9 +294,10 @@ export async function replaceWikiLinksAndCodeAsync(
       const labelPart = imageLabel ? `#${imageLabel.startsWith("fig:") ? "" : "fig:"}${imageLabel}` : "";
       const rawCaption = imageCaption || pipeCaption || " ";
       const captionPart = rawCaption.trim() ? escapeSpecialCharacters(rawCaption) : " ";
-      const scalePart = profile.imageScale ? ` ${profile.imageScale}` : "";
+      const scalePart = profile.imageScale ? profile.imageScale : "";
+      const separator = labelPart && scalePart ? " " : "";
 
-      const imageMarkdown = `![${captionPart}](${latexPath}){${labelPart}${scalePart}}`;
+      const imageMarkdown = `![${captionPart}](${latexPath}){${labelPart}${separator}${scalePart}}`;
       result += applyBlockquotePrefix(imageMarkdown, blockquotePrefix);
       continue;
     }
