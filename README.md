@@ -8,360 +8,227 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 
 ---
 
+## 目次
+
+- [特徴](#特徴)
+- [クイックスタート](#クイックスタート)
+- [インストール方法](#インストール方法)
+- [使い方](#使い方)
+- [設定ガイド](#設定ガイド)
+- [依存関係](#依存関係一覧)
+- [トラブルシューティング](#トラブルシューティング)
+
+---
+
 ## 特徴
-- MarkdownファイルをPandocとLuaLaTeXを使用してPDFに変換。
-- カスタムLaTeXヘッダーを使用してPDFのフォーマットを調整可能。
-- pandoc-crossrefを用いた自動クロスリファレンス対応。
+
+- **PDF変換**: MarkdownファイルをPandocとLuaLaTeXを使用して高品質なPDFに変換
+- **多言語対応**: 日本語を含む多言語ドキュメントの処理に最適化
+- **柔軟な出力形式**: PDF、LaTeXソース、Word(docx)への変換に対応
+- **プロファイル管理**: 複数の設定プロファイルを保存・切り替え可能
+- **LaTeXコマンドパレット**: よく使うLaTeXコマンドを簡単に挿入
+- **自動補完**: LaTeXコマンドのインライン補完とゴーストテキスト
+- **Lint統合**: markdownlint-cli2による自動整形機能
+- **クロスリファレンス**: pandoc-crossrefによる図・表・数式の自動参照
+- **Beamer対応**: プレゼンテーションPDFの生成に対応
+
+---
+
+## クイックスタート
+
+5分で始めるMdTex：[詳細ガイドはこちら](./docs/quickstart.md)
+
+1. **依存関係をインストール**
+   ```bash
+   # macOS
+   brew install pandoc
+   brew install --cask mactex
+   pip install pandoc-crossref
+   
+   # 確認
+   pandoc --version
+   lualatex --version
+   ```
+
+2. **プラグインを有効化**
+   - Obsidianの設定 → コミュニティプラグイン → MdTexプラグインを有効化
+
+3. **最初の変換**
+   - Markdownファイルを開く
+   - リボンアイコンをクリック、またはコマンドパレットで「PDFへ変換」を実行
 
 ---
 
 ## インストール方法
 
+### **BRAT経由（推奨）**
+1. [BRAT](https://github.com/TfTHacker/obsidian42-brat)プラグインをインストール
+2. 「Add Beta plugin」で `Mekann2904/obsidian-mdtex-plugin` を追加
+
 ### **手動インストール**
-1. [GitHubのリリースページ](https://github.com/Mekann2904/obsidian-mdtex-plugin/releases) から最新バージョンをダウンロードしてください。
-2. ダウンロードしたファイルを解凍します。
-3. 解凍したフォルダをObsidianのボルト内にある `.obsidian/plugins/` フォルダにコピーします。
-4. Obsidianを開き、`設定 > コミュニティプラグイン` から `MdTexプラグイン` を有効化してください。
+1. [GitHubのリリースページ](https://github.com/Mekann2904/obsidian-mdtex-plugin/releases) から最新バージョンをダウンロード
+2. 解凍したフォルダを `.obsidian/plugins/` にコピー
+3. Obsidianの設定でプラグインを有効化
 
 ---
 
 ## 使い方
-1. **Markdownファイルを準備**  
-   Obsidian内でMarkdownファイルを作成し、内容を記述します。
 
-2. **PDFを生成**  
-   リボンアイコンやコマンドパレットを使用して、アクティブなMarkdownファイルをPDFに変換します。生成されたPDFは指定した出力ディレクトリに保存されます。
+### 基本的な変換
 
-3. **出力をカスタマイズ**  
-   プラグイン設定でLaTeXヘッダーをカスタマイズし、PDFのフォーマットを変更できます。
+1. **PDFを生成**
+   - リボンアイコンをクリック
+   - またはコマンドパレット（Cmd/Ctrl+P）→「現在のファイルをPDFへ変換」
 
-4. **beamerを使用する**
-   プラグイン設定で`documentClass`を`beamer`に設定すると、beamerを使用してPDFを生成できます。
-   beamerのサンプルは[こちら](./sample-beamer.md)です。
-   beamerは競合が起こりやすいため、エラーが出る場合は以下のように設定してください。
+2. **他の形式に変換**
+   - 設定で「出力フォーマット」を変更：
+     - `pdf` - PDFドキュメント（デフォルト）
+     - `latex` - LaTeXソースファイル
+     - `docx` - Microsoft Word文書
 
-    4.1 LaTeXヘッダーの設定は以下のようになります。
+### 利用可能なコマンド
 
-    ```yaml
-    ---
-    header-includes:
-      - |
-        \usepackage{microtype}
-        \usepackage{luatexja}
+| コマンド | 説明 | ショートカット |
+|---------|------|--------------|
+| PDFへ変換 | アクティブファイルをPDFに変換 | - |
+| LaTeXへ変換 | LaTeXソースを生成 | - |
+| LaTeXコマンドパレット | コマンドを検索して挿入 | - |
+| Lint実行 | markdownlintでチェック | - |
+| 自動修正適用 | markdownlint --fixを実行 | - |
 
-        \usepackage[noto-otf]{luatexja-preset}
+### プロファイルの切り替え
 
-        \usepackage{luatexja-fontspec} 
-        \setmainfont{Noto Sans CJK JP}
-        \setsansfont{Noto Sans CJK JP}
-        \setmonofont{Ricty Diminished}
+複数の設定を使い分けできます：
+- 論文用プロファイル（A4、12pt、余白広め）
+- スライド用プロファイル（Beamer、8pt）
+- レポート用プロファイル（A4、11pt、カラー）
 
-    ---
-
-    ```
-
-    4,2 pandoc-crossref, 余白サイズを無効にする。
-
-    ![image.png](./Pasted%20image%2020250601145408.png)
-
-    4.3 最終的なdata.jsonは以下のようになります。あくまで一例ですが...
-
-    ```json
-    {
-      "activeProfile": "スライド",
-      "profilesArray": [
-        {
-          "name": "スライド",
-          "pandocPath": "/opt/homebrew/bin/pandoc",
-          "pandocExtraArgs": "",
-          "searchDirectory": "",
-          "headerIncludes": "---\\nheader-includes:\\n  - |\\n    \\\\usepackage{microtype}\\n    \\\\usepackage{luatexja}\\n\\n    \\\\usepackage[noto-otf]{luatexja-preset}\\n\\n    \\\\usepackage{luatexja-fontspec} \\n    \\\\setmainfont{Noto Sans CJK JP}\\n    \\\\setsansfont{Noto Sans CJK JP}\\n    \\\\setmonofont{Ricty Diminished}\\n\\n---",
-          "outputDirectory": "",
-          "deleteIntermediateFiles": false,
-          "pandocCrossrefPath": "/opt/homebrew/bin/pandoc-crossref",
-          "usePandocCrossref": false,
-          "imageScale": "width=0.8\\textwidth",
-          "usePageNumber": false,
-          "marginSize": "1in",
-          "useMarginSize": false,
-          "fontSize": "8pt",
-          "outputFormat": "pdf",
-          "latexEngine": "/Library/TeX/texbin/lualatex",
-          "figureLabel": "Figure",
-          "figPrefix": "Figure",
-          "tableLabel": "Table",
-          "tblPrefix": "Table",
-          "codeLabel": "Code",
-          "lstPrefix": "Code",
-          "equationLabel": "Equation",
-          "eqnPrefix": "Eq.",
-          "documentClass": "beamer",
-          "documentClassOptions": "",
-          "useStandalone": true
-        }
-      ]
-    }
-    ```
-
-5. **設定のプロファイル管理について**
-   プラグイン設定で複数の設定を管理できるようになりました。
-   新しいプロファイルを作成すると、デフォルト値で新しいプロファイルが作成されます。
-   入力が大変なので@でのサジェスト機能を追加しました。pandocPath, pandocCrossrefPath, latexEngineなど各項目の設定を@でサジェストすることが可能です。有効活用してください。
+詳細：[プロファイル管理ガイド](./docs/profiles.md)
 
 ---
 
-# 依存関係一覧
+## 設定ガイド
 
-## 1. Pandoc  
-PandocはMarkdownをPDFや他の形式に変換するために必要です。以下の手順でインストールしてください。
+### 基本的な設定項目
 
-- **インストール方法**:
-  - macOS:
-    ```bash
-    brew install pandoc
-    ```
-  - Ubuntu/Debian:
-    ```bash
-    sudo apt install pandoc
-    ```
-  - その他の詳細: [Pandoc公式サイト](https://pandoc.org/)
+| 設定項目 | 説明 | デフォルト値 |
+|---------|------|------------|
+| Pandocのパス | pandoc実行ファイルのパス | `pandoc` |
+| 出力ディレクトリ | PDFの保存先 | Vaultルート |
+| 出力フォーマット | pdf / latex / docx | `pdf` |
+| LaTeXエンジン | lualatex / xelatex / pdflatex | `lualatex` |
+| ドキュメントクラス | LaTeXのdocumentclass | `ltjarticle` |
+| フォントサイズ | ベースフォントサイズ | `11pt` |
 
----
+### 高度な設定
 
-## 2. LuaLaTeX  
-LuaLaTeXはPDF生成用のエンジンとして使用されます。通常、TeX LiveまたはMikTeXに含まれています。
+詳細な設定オプションについては[設定リファレンス](./docs/configuration.md)を参照してください。
 
-- **インストール方法**:
-  - **TeX Live**（推奨）
-    - ダウンロード: [TeX Live公式サイト](https://www.tug.org/texlive/)
-    - macOSの場合:
-      ```bash
-      brew install --cask mactex
-      ```
-  - **MikTeX**（Windows向け）
-    - ダウンロード: [MikTeX公式サイト](https://miktex.org/)
-
-- **LuaLaTeX確認方法**:
-  ```bash
-  lualatex --version
-  ```
+主な高度設定：
+- **LaTeXプリアンブル**: カスタムLaTeXヘッダー
+- **クロスリファレンス**: pandoc-crossrefの設定
+- **LaTeXコマンドパレット**: カスタムコマンドの定義
+- **Lint設定**: 自動整形の有効化
 
 ---
 
-## 3. pandoc-crossref  
-Pandocでクロスリファレンスを解決するためのフィルターです。
+## 依存関係一覧
 
-- **インストール方法**:
-  ```bash
-  pip install pandoc-crossref
-  ```
+### 必須
 
-- **インストール確認**:
-  ```bash
-  pandoc --filter pandoc-crossref --version
-  ```
+| ツール | 用途 | インストール |
+|--------|------|------------|
+| **Pandoc** | Markdown変換エンジン | `brew install pandoc` |
+| **LuaLaTeX** | PDF生成 | `brew install --cask mactex` |
 
----
+### オプション
 
-## 4. LaTeXパッケージ  
-Markdownから正確にPDFを生成するためには以下のLaTeXパッケージが必要です。
+| ツール | 用途 | インストール |
+|--------|------|------------|
+| **pandoc-crossref** | クロスリファレンス | `pip install pandoc-crossref` |
+| **markdownlint-cli2** | Lint/自動修正 | `npm install -g markdownlint-cli2` |
 
-| パッケージ      | 用途                       |
-|-----------------|----------------------------|
-| `listings`      | コードブロックのレンダリング |
-| `setspace`      | 行間設定                   |
-| `geometry`      | PDFのマージン設定          |
-| `fontspec`      | フォント設定               |
-| `hyperref`      | クロスリファレンス対応      |
-| `xcolor`        | 色設定                     |
-| `ltjsarticle`   | 日本語対応（LuaLaTeX用）    |
+### LaTeXパッケージ
 
-- **インストール方法（TeX Liveの場合）**:
-  ```bash
-  tlmgr install listings setspace geometry fontspec hyperref xcolor
-  ```
+以下のパッケージが自動的に使用されます：
+- `luatexja` / `luatexja-fontspec` - 日本語処理
+- `unicode-math` - 数式フォント
+- `graphicx` / `caption` - 図表
+- `listings` - コードブロック
+- `hyperref` / `cleveref` / `autonum` - 参照
+- `tcolorbox` - 引用ボックス
+- `booktabs` / `makecell` / `multirow` - 表
+- `tikz` - 描画
 
 ---
 
-## 5. その他
-- **PATH設定**:
-  PandocやLuaLaTeXをシステムのPATHに追加する必要があります。
-  ```bash
-  export PATH=$PATH:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
-  ```
+## トラブルシューティング
 
-- **Node.jsとその組み込みモジュール**:
-  - Node.jsが必要です。
-    ```bash
-    brew install node # macOS
-    sudo apt install nodejs # Ubuntu/Debian
-    ```
-  - 必須モジュール:
-    - `fs/promises`: ファイル操作用
-    - `child_process`: コマンドの実行
+### よくある問題
 
----
+**Q: PDFが生成されない**
+- PandocとLuaLaTeXが正しくインストールされているか確認
+- パス設定が正しいか確認
 
-## プラグイン設定項目
+**Q: 日本語が文字化けする**
+- `luatexja`パッケージがインストールされているか確認
+- フォント設定を確認
 
-### 1. Pandocのパス
-- **説明**: Pandoc実行ファイルのフルパスを指定します。推奨:絶対パス
-- **デフォルト値**: `pandoc` (システムのPATHで検索)
-- **例**:
-  - macOS/Linux: `/usr/local/bin/pandoc`
-  - Windows: `C:\Program Files\Pandoc\pandoc.exe`
+**Q: Beamerでエラーが出る**
+- [Beamerガイド](./docs/beamer-guide.md)を参照
+- pandoc-crossrefと余白設定を無効化
 
-### 2. 追加オプション (Pandoc Extra Args)
-- **説明**: Pandocに渡す追加オプションをスペース区切りで指定します。
-- **用途**: 特定のフォーマットや設定を利用する場合に使用します。
-- **例**:
-  - `--toc --highlight-style=kate`
-  - `--number-sections`
-
-### 3. 検索ディレクトリ
-- **説明**: プラグインが画像を検索するディレクトリのルートパスを指定します。
-- **デフォルト値**: ObsidianのVaultディレクトリ
-- **注意**: 相対パスやフルパスを指定できます。
-
-### 4. カスタムヘッダー (LaTeX Header Includes)
-- **説明**: LaTeXのカスタムヘッダーをYAML形式で記述します。
-- **用途**: フォント設定、余白、スタイル、追加パッケージなどのカスタマイズに利用。
-
-
-### 5. 出力ディレクトリ
-- **説明**: 生成されたPDFを保存するディレクトリを指定します。
-- **デフォルト値**: Vaultのルートディレクトリ
-- **注意**: ディレクトリが存在しない場合はエラーになります。
-
-### 6. 中間ファイルの削除
-- **説明**: PDF生成後に一時Markdownファイルを削除するかどうかを指定します。
-- **デフォルト値**: 無効 (`false`)
-- **推奨設定**: 初心者は無効のまま使用し、必要に応じてオンにしてください。
-
-### 7. pandoc-crossrefのパス
-- **説明**: pandoc-crossrefフィルターの実行ファイルパスを指定します。推奨:絶対パス
-- **デフォルト値**: `pandoc-crossref` (システムのPATHで検索)
-- **例**:
-  - macOS/Linux: `/usr/local/bin/pandoc-crossref`
-  - Windows: `C:\Users\YourUser\AppData\Local\Pandoc\pandoc-crossref.exe`
-
-### 8. 画像のデフォルトスケール
-- **説明**: 画像のデフォルトスケールを指定します (例: `width=0.8\linewidth`)。
-- **デフォルト値**: `width=0.8\linewidth`
-- **用途**: ドキュメント内での画像サイズを統一できます。
-
-### 9. ページ番号の表示
-- **説明**: PDFにページ番号を付けるかどうかを指定します。
-- **デフォルト値**: 有効 (`true`)
-
-### 10. ページ余白サイズ
-- **説明**: PDFの余白サイズを指定します。
-- **デフォルト値**: `1in`
-- **例**: `20mm`, `0.5in`
-
-### 11. フォントサイズ
-- **説明**: LaTeXで使用するフォントサイズを指定します。
-- **デフォルト値**: `12pt`
-- **例**: `10pt`, `11pt`, `14pt`
-
-### 12. 出力形式
-- **説明**: PDF以外にもLaTeXやWord文書など、生成するドキュメント形式を指定します。(実験的)
-- **デフォルト値**: `pdf`
-- **選択肢**: `pdf`, `latex`, `docx` など
-- **DOCX変換**: `docx`を選択すると、Luaスクリプトが自動的に適用され、画像やテーブルのスタイルが調整されます。
-
-### 13. LaTeXエンジン
-- **説明**: LaTeXのコンパイルに使用するエンジンを指定します。(実験的)
-- **デフォルト値**: `lualatex`
-- **選択肢**: `lualatex`, `xelatex`, `pdflatex`
+詳細なトラブルシューティング：[troubleshooting.md](./docs/troubleshooting.md)
 
 ---
 
-### 14. Lua スクリプトを使った DOCX 変換
+## 機能詳細
 
-プラグインは **Lua フィルタ** を用いて Markdown を DOCX に変換できます。
+各機能の詳細な使い方：
 
-#### 使い方
-
-1. プラグインの「出力形式」を **`docx`** に設定する。
-2. 変換時に Lua スクリプトが自動適用され、DOCX が生成される。
-
-   * Lua スクリプトは **[lua-script.lua](./lua-script.lua)** を使用。
-   * 参照テンプレートは **[reference.docx](./reference.docx)** を使用。
-
-> 自分でテンプレートを作る場合:
->
-> ```bash
-> pandoc --print-default-data-file reference.docx > ~/reference.docx
-> ```
->
-> 生成したファイルを Word で開いて保存し、必要ならスタイルを調整してください。
-
-#### Pandoc 追加オプション
-
-プラグインの「Pandoc 追加オプション」に以下を指定してください。
-
-```
---reference-doc=reference.docx
-```
-
-（環境によっては相対パスではなく絶対パス推奨）
-
-#### コマンドライン例（参考）
-
-```bash
-pandoc input.md \
-  -f markdown+raw_tex+fenced_divs \
-  -t docx \
-  --lua-filter=lua-script.lua \
-  --reference-doc=reference.docx \
-  --standalone \
-  -o output.docx
-```
-
-#### Lua スクリプトでできること（例）
-
-* テーブルのスタイル調整
-* コードブロックの書式設定
-* 日本語フォント設定
-*（スクリプトの内容に依存します。必要な機能があるかは `lua-script.lua` を参照してください。）*
-
-#### 注意事項
-
-* DOCX 変換は **実験的** 機能です。
-* 一部の **LaTeX 専用コマンド** はそのままでは反映されません（Lua フィルタでの変換が必要）。
-* 画像の配置やサイズは Lua スクリプトのロジックに従います。
-* ルビなどを Lua で扱う場合は **Pandoc 2.12 以上** を推奨します。
-
-
+- [クイックスタートガイド](./docs/quickstart.md) - 5分で始める
+- [設定リファレンス](./docs/configuration.md) - 全設定項目の詳細
+- [プロファイル管理](./docs/profiles.md) - 複数設定の管理
+- [LaTeXコマンドパレット](./docs/latex-palette.md) - コマンド補完機能
+- [機能一覧](./docs/features.md) - 各機能の詳細説明
+- [Beamerガイド](./docs/beamer-guide.md) - スライド作成
+- [トラブルシューティング](./docs/troubleshooting.md) - 問題解決
 
 ---
 
 ## 既知の問題
-- 複雑なLaTeX設定には追加パッケージが必要になる場合があります。
+
+- 複雑なLaTeX設定には追加パッケージが必要になる場合があります
+- DOCX変換は実験的機能です（一部のLaTeXコマンドは変換されません）
+- Mermaid図の実験的機能は処理に時間がかかる場合があります
 
 ---
 
 ## 貢献について
-貢献は歓迎します！  
-バグ報告や新機能の提案がある場合は、[GitHub Issues](https://github.com/Mekann2904/obsidian-mdtex-plugin/issues) を通じてお知らせください。プルリクエストも受け付けています。
+
+貢献は歓迎します！
+
+- バグ報告や新機能の提案：[GitHub Issues](https://github.com/Mekann2904/obsidian-mdtex-plugin/issues)
+- プルリクエストも受け付けています
 
 ---
 
 ## ライセンス
+
 このプラグインは [MITライセンス](LICENSE) の下で公開されています。
 
 ---
 
 ## 謝辞
-- [Pandoc](https://pandoc.org/): 汎用的なドキュメントコンバーター。
-- [LuaLaTeX](https://www.latex-project.org/): 多言語組版に対応した強力なTeXエンジン。
-- [Obsidian](https://obsidian.md/): ローカルのMarkdownファイルを使用するナレッジベースツール。
-- [Pandoc-crossref](https://github.com/lierdakil/pandoc-crossref): 図、方程式、 表とその相互参照を実現するためのフィルター。
+
+- [Pandoc](https://pandoc.org/): 汎用的なドキュメントコンバーター
+- [LuaLaTeX](https://www.latex-project.org/): 多言語組版に対応した強力なTeXエンジン
+- [Obsidian](https://obsidian.md/): ローカルのMarkdownファイルを使用するナレッジベースツール
+- [Pandoc-crossref](https://github.com/lierdakil/pandoc-crossref): 図、方程式、表とその相互参照を実現するためのフィルター
 
 ---
 
 ### 開発者情報
-開発者: **Mekann**  
-GitHub: [Mekann2904](https://github.com/Mekann2904)# obsidian-mdtex-plugin
 
+開発者: **Mekann**  
+GitHub: [Mekann2904](https://github.com/Mekann2904)
