@@ -64,12 +64,12 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
     const allSuggestions: MyCompletion[] = [
       { label: "{#fig:}", detail: "Figure Label" },
       { label: "{#tbl:}", detail: "Table Label" },
-      { label: "{#lst: caption=\"\"}", detail: "Listing Label" },
+      { label: '{#lst: caption=""}', detail: "Listing Label" },
       { label: "{#eq:}", detail: "Equation Label" },
     ];
 
     const queryWithoutCurly = context.query.replace(/\}$/, "");
-    return allSuggestions.filter((item) => item.label.startsWith(queryWithoutCurly));
+    return allSuggestions.filter(item => item.label.startsWith(queryWithoutCurly));
   }
 
   renderSuggestion(suggestion: MyCompletion, el: HTMLElement): void {

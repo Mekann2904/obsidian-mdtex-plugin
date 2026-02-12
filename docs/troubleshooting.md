@@ -1,4 +1,17 @@
+---
+title: トラブルシューティング
+category: ユーザードキュメント
+audience: 全ユーザー
+last_updated: 2026-02-12
+tags: [トラブルシューティング, エラー, デバッグ]
+related: [docs/quickstart.md, docs/configuration.md, docs/beamer-guide.md]
+---
+
 # トラブルシューティング
+
+[ドキュメントインデックス](./index.md) > トラブルシューティング
+
+## 概要
 
 MdTexプラグインの使用中に発生する可能性のある問題と解決方法をまとめます。
 
@@ -83,7 +96,7 @@ PDF生成中にLaTeXエラーが発生する。
    ```
 
 2. **プリアンブルの構文エラー**
-   **対処**: 
+   **対処**:
    - LaTeXプリアンブルの構文を確認
    - 「デフォルトにリセット」ボタンで元に戻す
    - 段階的に変更して問題の箇所を特定
@@ -522,9 +535,13 @@ date: 2025-01-31
 
 ---
 
-## 関連ドキュメント
+## 関連トピック
 
 - [クイックスタート](./quickstart.md)
 - [設定リファレンス](./configuration.md)
 - [機能一覧](./features.md)
 - [Beamerガイド](./beamer-guide.md)
+
+## 次のトピック
+
+- [チュートリアル](./tutorial.md)

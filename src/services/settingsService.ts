@@ -6,16 +6,21 @@
 import { PandocPluginSettings } from "../MdTexPluginSettings";
 import { migrateSettings } from "./profileManager";
 
-export async function loadSettings(loadData: () => Promise<any>): Promise<PandocPluginSettings> {
+export async function loadSettings(
+  loadData: () => Promise<unknown>,
+): Promise<PandocPluginSettings> {
   const loadedData = await loadData();
   return migrateSettings(loadedData);
 }
 
 export async function saveSettings(
   settings: PandocPluginSettings,
-  saveData: (data: any) => Promise<void>
+  saveData: (data: unknown) => Promise<void>,
 ): Promise<void> {
-  const profilesArray = Object.entries(settings.profiles).map(([name, data]) => ({ name, ...data }));
+  const profilesArray = Object.entries(settings.profiles).map(([name, data]) => ({
+    name,
+    ...data,
+  }));
   const savePayload = { ...settings, profilesArray };
   await saveData(savePayload);
 }

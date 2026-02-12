@@ -37,12 +37,12 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(t("setting_active_profile_name"))
       .setDesc(t("setting_active_profile_desc"))
-      .addDropdown((dropdown) => {
-        Object.keys(settings.profiles).forEach((key) => {
+      .addDropdown(dropdown => {
+        Object.keys(settings.profiles).forEach(key => {
           dropdown.addOption(key, key);
         });
         dropdown.setValue(activeProfileKey);
-        dropdown.onChange(async (value) => {
+        dropdown.onChange(async value => {
           settings.activeProfile = value;
           await this.plugin.saveSettings();
           this.display(); // 再描画して値を更新
@@ -54,14 +54,12 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(t("setting_create_profile_name"))
       .setDesc(t("setting_create_profile_desc"))
-      .addText((text) =>
-        text
-          .setPlaceholder(t("placeholder_new_profile"))
-          .onChange((value) => {
-            newProfileName = value;
-          })
+      .addText(text =>
+        text.setPlaceholder(t("placeholder_new_profile")).onChange(value => {
+          newProfileName = value;
+        }),
       )
-      .addButton((button) =>
+      .addButton(button =>
         button
           .setButtonText(t("button_add_profile"))
           .setCta()
@@ -75,7 +73,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
             const nextState = addProfile(
               { profiles: settings.profiles, activeProfile: settings.activeProfile },
               createdName,
-              currentProfile
+              currentProfile,
             );
             settings.profiles = nextState.profiles;
             settings.activeProfile = nextState.activeProfile;
@@ -83,14 +81,14 @@ export class PandocPluginSettingTab extends PluginSettingTab {
             newProfileName = "";
             this.display();
             new Notice(t("notice_profile_created", [createdName]));
-          })
+          }),
       );
 
     // プロファイル削除
     new Setting(containerEl)
       .setName(t("setting_delete_profile_name"))
       .setDesc(t("setting_delete_profile_desc"))
-      .addButton((button) => {
+      .addButton(button => {
         button
           .setButtonText(t("button_delete_profile"))
           .setWarning()
@@ -101,7 +99,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
 
             const nextState = removeProfile(
               { profiles: settings.profiles, activeProfile: settings.activeProfile },
-              activeProfileKey
+              activeProfileKey,
             );
             settings.profiles = nextState.profiles;
             settings.activeProfile = nextState.activeProfile;
@@ -119,61 +117,54 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(t("setting_output_format_name"))
       .setDesc(t("setting_output_format_desc"))
-      .addDropdown((dropdown) => {
+      .addDropdown(dropdown => {
         dropdown.addOption("pdf", t("option_pdf"));
         dropdown.addOption("docx", t("option_docx"));
         dropdown.addOption("latex", t("option_latex"));
-        dropdown.setValue(currentProfile.outputFormat)
-        .onChange(async (value) => {
-            currentProfile.outputFormat = value;
-            await this.plugin.saveSettings();
+        dropdown.setValue(currentProfile.outputFormat).onChange(async value => {
+          currentProfile.outputFormat = value;
+          await this.plugin.saveSettings();
         });
       });
 
     new Setting(containerEl)
       .setName(t("setting_pandoc_path_name"))
       .setDesc(t("setting_pandoc_path_desc"))
-      .addText((text) =>
-        text
-          .setValue(currentProfile.pandocPath)
-          .onChange(async (value) => {
-            currentProfile.pandocPath = value;
-            await this.plugin.saveSettings();
-          })
+      .addText(text =>
+        text.setValue(currentProfile.pandocPath).onChange(async value => {
+          currentProfile.pandocPath = value;
+          await this.plugin.saveSettings();
+        }),
       );
-    
-    new Setting(containerEl)
-        .setName(t("setting_output_dir_name"))
-        .setDesc(t("setting_output_dir_desc"))
-        .addText((text) =>
-            text.setValue(currentProfile.outputDirectory)
-            .onChange(async (value) => {
-                currentProfile.outputDirectory = value;
-                await this.plugin.saveSettings();
-            })
-        );
 
     new Setting(containerEl)
-        .setName(t("setting_resource_dir_name"))
-        .setDesc(t("setting_resource_dir_desc"))
-        .addText((text) => 
-            text.setValue(currentProfile.searchDirectory)
-            .onChange(async (value) => {
-                currentProfile.searchDirectory = value;
-                await this.plugin.saveSettings();
-            })
-        );
+      .setName(t("setting_output_dir_name"))
+      .setDesc(t("setting_output_dir_desc"))
+      .addText(text =>
+        text.setValue(currentProfile.outputDirectory).onChange(async value => {
+          currentProfile.outputDirectory = value;
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    new Setting(containerEl)
+      .setName(t("setting_resource_dir_name"))
+      .setDesc(t("setting_resource_dir_desc"))
+      .addText(text =>
+        text.setValue(currentProfile.searchDirectory).onChange(async value => {
+          currentProfile.searchDirectory = value;
+          await this.plugin.saveSettings();
+        }),
+      );
 
     new Setting(containerEl)
       .setName(t("setting_delete_intermediate_name"))
       .setDesc(t("setting_delete_intermediate_desc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(currentProfile.deleteIntermediateFiles)
-          .onChange(async (value) => {
-            currentProfile.deleteIntermediateFiles = value;
-            await this.plugin.saveSettings();
-          })
+      .addToggle(toggle =>
+        toggle.setValue(currentProfile.deleteIntermediateFiles).onChange(async value => {
+          currentProfile.deleteIntermediateFiles = value;
+          await this.plugin.saveSettings();
+        }),
       );
 
     // =================================================================
@@ -184,102 +175,91 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(t("setting_latex_engine_name"))
       .setDesc(t("setting_latex_engine_desc"))
-      .addText((text) =>
-        text
-          .setValue(currentProfile.latexEngine)
-          .onChange(async (value) => {
-            currentProfile.latexEngine = value;
-            await this.plugin.saveSettings();
-          })
+      .addText(text =>
+        text.setValue(currentProfile.latexEngine).onChange(async value => {
+          currentProfile.latexEngine = value;
+          await this.plugin.saveSettings();
+        }),
       );
 
     new Setting(containerEl)
       .setName(t("setting_document_class_name"))
       .setDesc(t("setting_document_class_desc"))
-      .addText((text) =>
-        text
-          .setValue(currentProfile.documentClass)
-          .onChange(async (value) => {
-            currentProfile.documentClass = value;
-            await this.plugin.saveSettings();
-          })
+      .addText(text =>
+        text.setValue(currentProfile.documentClass).onChange(async value => {
+          currentProfile.documentClass = value;
+          await this.plugin.saveSettings();
+        }),
       );
-    
+
     new Setting(containerEl)
-        .setName(t("setting_document_class_opts_name"))
-        .setDesc(t("setting_document_class_opts_desc"))
-        .addText((text) =>
-            text.setValue(currentProfile.documentClassOptions)
-            .onChange(async (value) => {
-                currentProfile.documentClassOptions = value;
-                await this.plugin.saveSettings();
-            })
-        );
+      .setName(t("setting_document_class_opts_name"))
+      .setDesc(t("setting_document_class_opts_desc"))
+      .addText(text =>
+        text.setValue(currentProfile.documentClassOptions).onChange(async value => {
+          currentProfile.documentClassOptions = value;
+          await this.plugin.saveSettings();
+        }),
+      );
 
     new Setting(containerEl)
       .setName(t("setting_font_size_name"))
       .setDesc(t("setting_font_size_desc"))
-      .addText((text) =>
-        text
-          .setValue(currentProfile.fontSize)
-          .onChange(async (value) => {
-            currentProfile.fontSize = value;
-            await this.plugin.saveSettings();
-          })
+      .addText(text =>
+        text.setValue(currentProfile.fontSize).onChange(async value => {
+          currentProfile.fontSize = value;
+          await this.plugin.saveSettings();
+        }),
       );
 
     new Setting(containerEl)
-        .setName(t("setting_use_margin_name"))
-        .setDesc(t("setting_use_margin_desc"))
-        .addToggle((toggle) => 
-            toggle.setValue(currentProfile.useMarginSize)
-            .onChange(async (value) => {
-                currentProfile.useMarginSize = value;
-                await this.plugin.saveSettings();
-                this.display(); // 再描画でMargin Size入力を有効/無効化
-            })
-        );
-    
+      .setName(t("setting_use_margin_name"))
+      .setDesc(t("setting_use_margin_desc"))
+      .addToggle(toggle =>
+        toggle.setValue(currentProfile.useMarginSize).onChange(async value => {
+          currentProfile.useMarginSize = value;
+          await this.plugin.saveSettings();
+          this.display(); // 再描画でMargin Size入力を有効/無効化
+        }),
+      );
+
     if (currentProfile.useMarginSize) {
-        new Setting(containerEl)
-            .setName(t("setting_margin_size_name"))
-            .setDesc(t("setting_margin_size_desc"))
-            .addText((text) =>
-                text.setValue(currentProfile.marginSize)
-                .onChange(async (value) => {
-                    currentProfile.marginSize = value;
-                    await this.plugin.saveSettings();
-                })
-            );
+      new Setting(containerEl)
+        .setName(t("setting_margin_size_name"))
+        .setDesc(t("setting_margin_size_desc"))
+        .addText(text =>
+          text.setValue(currentProfile.marginSize).onChange(async value => {
+            currentProfile.marginSize = value;
+            await this.plugin.saveSettings();
+          }),
+        );
     }
 
     new Setting(containerEl)
-        .setName(t("setting_page_numbers_name"))
-        .setDesc(t("setting_page_numbers_desc"))
-        .addToggle((toggle) => 
-            toggle.setValue(currentProfile.usePageNumber)
-            .onChange(async (value) => {
-                currentProfile.usePageNumber = value;
-                await this.plugin.saveSettings();
-            })
-        );
+      .setName(t("setting_page_numbers_name"))
+      .setDesc(t("setting_page_numbers_desc"))
+      .addToggle(toggle =>
+        toggle.setValue(currentProfile.usePageNumber).onChange(async value => {
+          currentProfile.usePageNumber = value;
+          await this.plugin.saveSettings();
+        }),
+      );
 
     new Setting(containerEl)
-        .setName(t("setting_image_scale_name"))
-        .setDesc(t("setting_image_scale_desc"))
-        .addText((text) =>
-            text.setValue(currentProfile.imageScale)
-            .onChange(async (value) => {
-                currentProfile.imageScale = value;
-                await this.plugin.saveSettings();
-            })
-        );
+      .setName(t("setting_image_scale_name"))
+      .setDesc(t("setting_image_scale_desc"))
+      .addText(text =>
+        text.setValue(currentProfile.imageScale).onChange(async value => {
+          currentProfile.imageScale = value;
+          await this.plugin.saveSettings();
+        }),
+      );
 
     // =================================================================
     // 4. LaTeX Preamble (Custom Header) - Improved UI
     // =================================================================
     containerEl.createEl("h3", { text: t("heading_preamble") });
-    
+
     const preambleDesc = containerEl.createDiv({ cls: "setting-item-description" });
     preambleDesc.setText(t("preamble_desc"));
     preambleDesc.style.marginBottom = "8px";
@@ -287,23 +267,23 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // Create a container for the textarea to give it specific styling
     const editorContainer = containerEl.createDiv();
     editorContainer.style.width = "100%";
-    
+
     const textArea = editorContainer.createEl("textarea");
     textArea.style.width = "100%";
     textArea.style.height = "400px"; // 十分な高さを確保
     textArea.style.fontFamily = "var(--font-monospace)"; // 等幅フォント
     textArea.style.fontSize = "13px";
     textArea.style.whiteSpace = "pre"; // 自動折り返しを無効化（コードとして表示）
-    textArea.style.overflow = "auto";  // スクロールバー
+    textArea.style.overflow = "auto"; // スクロールバー
     textArea.style.resize = "vertical"; // 縦方向のみリサイズ可
     textArea.spellcheck = false; // スペルチェック無効
-    
+
     textArea.value = currentProfile.headerIncludes;
     textArea.placeholder = t("placeholder_preamble");
-    
+
     textArea.addEventListener("change", async () => {
-        currentProfile.headerIncludes = textArea.value;
-        await this.plugin.saveSettings();
+      currentProfile.headerIncludes = textArea.value;
+      await this.plugin.saveSettings();
     });
 
     // Reset / Copy / Fullscreen Buttons
@@ -316,7 +296,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     const fullscreenBtn = btnContainer.createEl("button", { text: t("button_open_fullscreen") });
     fullscreenBtn.onclick = async () => {
       await this.plugin.saveSettings();
-      const modal = new PreambleModal(this.app, currentProfile.headerIncludes, async (val) => {
+      const modal = new PreambleModal(this.app, currentProfile.headerIncludes, async val => {
         currentProfile.headerIncludes = val;
         textArea.value = val;
         await this.plugin.saveSettings();
@@ -326,12 +306,12 @@ export class PandocPluginSettingTab extends PluginSettingTab {
 
     const resetBtn = btnContainer.createEl("button", { text: t("button_reset_preamble") });
     resetBtn.addEventListener("click", async () => {
-        if(confirm(t("confirm_reset_preamble"))) {
-            currentProfile.headerIncludes = DEFAULT_LATEX_PREAMBLE;
-            textArea.value = DEFAULT_LATEX_PREAMBLE;
-            await this.plugin.saveSettings();
-            new Notice(t("notice_preamble_reset"));
-        }
+      if (confirm(t("confirm_reset_preamble"))) {
+        currentProfile.headerIncludes = DEFAULT_LATEX_PREAMBLE;
+        textArea.value = DEFAULT_LATEX_PREAMBLE;
+        await this.plugin.saveSettings();
+        new Notice(t("notice_preamble_reset"));
+      }
     });
 
     const copyBtn = btnContainer.createEl("button", { text: t("button_copy") });
@@ -344,30 +324,29 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // 5. LaTeX Command Palette (YAML)
     // =================================================================
     containerEl.createEl("h3", { text: t("heading_latex_palette") });
-    containerEl.createEl("p", { text: t("setting_latex_yaml_desc"), cls: "setting-item-description" });
+    containerEl.createEl("p", {
+      text: t("setting_latex_yaml_desc"),
+      cls: "setting-item-description",
+    });
 
     new Setting(containerEl)
       .setName(t("setting_enable_latex_palette_name"))
       .setDesc(t("setting_enable_latex_palette_desc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(settings.enableLatexPalette)
-          .onChange(async (value) => {
-            settings.enableLatexPalette = value;
-            await this.plugin.saveSettings();
-          })
+      .addToggle(toggle =>
+        toggle.setValue(settings.enableLatexPalette).onChange(async value => {
+          settings.enableLatexPalette = value;
+          await this.plugin.saveSettings();
+        }),
       );
 
     new Setting(containerEl)
       .setName(t("setting_enable_latex_ghost_name"))
       .setDesc(t("setting_enable_latex_ghost_desc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(settings.enableLatexGhost)
-          .onChange(async (value) => {
-            settings.enableLatexGhost = value;
-            await this.plugin.saveSettings();
-          })
+      .addToggle(toggle =>
+        toggle.setValue(settings.enableLatexGhost).onChange(async value => {
+          settings.enableLatexGhost = value;
+          await this.plugin.saveSettings();
+        }),
       );
 
     const yamlArea = containerEl.createEl("textarea");
@@ -379,9 +358,13 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     yamlArea.style.overflow = "auto";
     yamlArea.spellcheck = false;
     yamlArea.value = settings.latexCommandsYaml;
-    const saveYaml = debounce(async () => {
-      await this.plugin.saveSettings();
-    }, 400, false);
+    const saveYaml = debounce(
+      async () => {
+        await this.plugin.saveSettings();
+      },
+      400,
+      false,
+    );
 
     yamlArea.addEventListener("input", () => {
       settings.latexCommandsYaml = yamlArea.value;
@@ -405,49 +388,56 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // 5. Localization (Labels & Prefixes)
     // =================================================================
     containerEl.createEl("h3", { text: t("heading_localization") });
-    containerEl.createEl("p", { text: t("heading_localization_desc"), cls: "setting-item-description" });
+    containerEl.createEl("p", {
+      text: t("heading_localization_desc"),
+      cls: "setting-item-description",
+    });
 
     // Helper to create label settings pair
-    const createLabelSetting = (name: string, labelKey: keyof ProfileSettings, prefixKey: keyof ProfileSettings) => {
-        const div = containerEl.createDiv({ cls: "setting-item" });
-        div.style.display = "flex";
-        div.style.justifyContent = "space-between";
-        div.style.alignItems = "center";
-        div.style.padding = "0.75em 0";
-        div.style.borderTop = "1px solid var(--background-modifier-border)";
+    const createLabelSetting = (
+      name: string,
+      labelKey: keyof ProfileSettings,
+      prefixKey: keyof ProfileSettings,
+    ) => {
+      const div = containerEl.createDiv({ cls: "setting-item" });
+      div.style.display = "flex";
+      div.style.justifyContent = "space-between";
+      div.style.alignItems = "center";
+      div.style.padding = "0.75em 0";
+      div.style.borderTop = "1px solid var(--background-modifier-border)";
 
-        const info = div.createDiv({ cls: "setting-item-info" });
-        info.createDiv({ cls: "setting-item-name", text: name });
+      const info = div.createDiv({ cls: "setting-item-info" });
+      info.createDiv({ cls: "setting-item-name", text: name });
 
-        const control = div.createDiv({ cls: "setting-item-control" });
-        control.style.gap = "10px";
+      const control = div.createDiv({ cls: "setting-item-control" });
+      control.style.gap = "10px";
 
-        // Label Input
-        const labelInput = document.createElement("input");
-        labelInput.type = "text";
-        labelInput.placeholder = t("placeholder_label");
-        labelInput.value = String(currentProfile[labelKey]);
-        labelInput.style.width = "120px";
-        labelInput.onchange = async () => {
-             // @ts-ignore
-            currentProfile[labelKey] = labelInput.value;
-            await this.plugin.saveSettings();
-        };
+      // Label Input
+      const labelInput = document.createElement("input");
+      labelInput.type = "text";
+      labelInput.placeholder = t("placeholder_label");
+      labelInput.value = String(currentProfile[labelKey]);
+      labelInput.style.width = "120px";
+      labelInput.onchange = async () => {
+        // @ts-ignore
+        currentProfile[labelKey] = labelInput.value;
+        await this.plugin.saveSettings();
+      };
 
-        // Prefix Input
-        const prefixInput = document.createElement("input");
-        prefixInput.type = "text";
-        prefixInput.placeholder = t("placeholder_prefix");
-        prefixInput.value = String(currentProfile[prefixKey]);
-        prefixInput.style.width = "120px";
-        prefixInput.onchange = async () => {
-             // @ts-ignore
-            currentProfile[prefixKey] = prefixInput.value;
-            await this.plugin.saveSettings();
-        };
+      // Prefix Input
+      const prefixInput = document.createElement("input");
+      prefixInput.type = "text";
+      prefixInput.placeholder = t("placeholder_prefix");
+      prefixInput.value = String(currentProfile[prefixKey]);
+      prefixInput.style.width = "120px";
+      prefixInput.onchange = async () => {
+        // @ts-ignore
+        currentProfile[prefixKey] = prefixInput.value;
+        await this.plugin.saveSettings();
+      };
 
-        control.appendChild(labelInput);
-        control.appendChild(prefixInput);
+      control.appendChild(labelInput);
+      control.appendChild(prefixInput);
     };
 
     createLabelSetting(t("label_figures"), "figureLabel", "figPrefix");
@@ -463,77 +453,71 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(t("setting_use_crossref_name"))
       .setDesc(t("setting_use_crossref_desc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(currentProfile.usePandocCrossref)
-          .onChange(async (value) => {
-            currentProfile.usePandocCrossref = value;
-            await this.plugin.saveSettings();
-            this.display();
-          })
+      .addToggle(toggle =>
+        toggle.setValue(currentProfile.usePandocCrossref).onChange(async value => {
+          currentProfile.usePandocCrossref = value;
+          await this.plugin.saveSettings();
+          this.display();
+        }),
       );
-    
+
     if (currentProfile.usePandocCrossref) {
-        new Setting(containerEl)
-            .setName(t("setting_crossref_path_name"))
-            .setDesc(t("setting_crossref_path_desc"))
-            .addText((text) =>
-                text.setValue(currentProfile.pandocCrossrefPath)
-                .onChange(async (value) => {
-                    currentProfile.pandocCrossrefPath = value;
-                    await this.plugin.saveSettings();
-                })
-            );
+      new Setting(containerEl)
+        .setName(t("setting_crossref_path_name"))
+        .setDesc(t("setting_crossref_path_desc"))
+        .addText(text =>
+          text.setValue(currentProfile.pandocCrossrefPath).onChange(async value => {
+            currentProfile.pandocCrossrefPath = value;
+            await this.plugin.saveSettings();
+          }),
+        );
     }
 
     new Setting(containerEl)
       .setName(t("setting_enable_advtex_name"))
       .setDesc(t("setting_enable_advtex_desc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(currentProfile.enableAdvancedTexCommands)
-          .onChange(async (value) => {
-            currentProfile.enableAdvancedTexCommands = value;
-            await this.plugin.saveSettings();
-            this.display();
-          })
+      .addToggle(toggle =>
+        toggle.setValue(currentProfile.enableAdvancedTexCommands).onChange(async value => {
+          currentProfile.enableAdvancedTexCommands = value;
+          await this.plugin.saveSettings();
+          this.display();
+        }),
       );
 
     if (currentProfile.enableAdvancedTexCommands) {
-        new Setting(containerEl)
-            .setName(t("setting_lua_filter_name"))
-            .setDesc(t("setting_lua_filter_desc"))
-            .addText((text) => 
-                text.setValue(currentProfile.luaFilterPath)
-                .onChange(async (value) => {
-                    currentProfile.luaFilterPath = value;
-                    await this.plugin.saveSettings();
-                })
-            );
+      new Setting(containerEl)
+        .setName(t("setting_lua_filter_name"))
+        .setDesc(t("setting_lua_filter_desc"))
+        .addText(text =>
+          text.setValue(currentProfile.luaFilterPath).onChange(async value => {
+            currentProfile.luaFilterPath = value;
+            await this.plugin.saveSettings();
+          }),
+        );
     }
 
     new Setting(containerEl)
-        .setName(t("setting_pandoc_extra_args_name"))
-        .setDesc(t("setting_pandoc_extra_args_desc"))
-        .addText((text) =>
-            text.setValue(currentProfile.pandocExtraArgs)
-            .setPlaceholder(t("placeholder_pandoc_extra_args"))
-            .onChange(async (value) => {
-                currentProfile.pandocExtraArgs = value;
-                await this.plugin.saveSettings();
-            })
-        );
-    
+      .setName(t("setting_pandoc_extra_args_name"))
+      .setDesc(t("setting_pandoc_extra_args_desc"))
+      .addText(text =>
+        text
+          .setValue(currentProfile.pandocExtraArgs)
+          .setPlaceholder(t("placeholder_pandoc_extra_args"))
+          .onChange(async value => {
+            currentProfile.pandocExtraArgs = value;
+            await this.plugin.saveSettings();
+          }),
+      );
+
     new Setting(containerEl)
-        .setName(t("setting_use_standalone_name"))
-        .setDesc(t("setting_use_standalone_desc"))
-        .addToggle((toggle) => 
-            toggle.setValue(currentProfile.useStandalone)
-            .onChange(async (value) => {
-                currentProfile.useStandalone = value;
-                await this.plugin.saveSettings();
-            })
-        );
+      .setName(t("setting_use_standalone_name"))
+      .setDesc(t("setting_use_standalone_desc"))
+      .addToggle(toggle =>
+        toggle.setValue(currentProfile.useStandalone).onChange(async value => {
+          currentProfile.useStandalone = value;
+          await this.plugin.saveSettings();
+        }),
+      );
 
     // =================================================================
     // 7. Global Settings
@@ -541,52 +525,46 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     containerEl.createEl("h3", { text: t("heading_global") });
 
     new Setting(containerEl)
-        .setName(t("setting_enable_lint_fix_name"))
-        .setDesc(t("setting_enable_lint_fix_desc"))
-        .addToggle((toggle) => 
-            toggle.setValue(settings.enableMarkdownlintFix)
-            .onChange(async (value) => {
-                settings.enableMarkdownlintFix = value;
-                await this.plugin.saveSettings();
-                this.display();
-            })
-        );
-    
+      .setName(t("setting_enable_lint_fix_name"))
+      .setDesc(t("setting_enable_lint_fix_desc"))
+      .addToggle(toggle =>
+        toggle.setValue(settings.enableMarkdownlintFix).onChange(async value => {
+          settings.enableMarkdownlintFix = value;
+          await this.plugin.saveSettings();
+          this.display();
+        }),
+      );
+
     if (settings.enableMarkdownlintFix) {
-        new Setting(containerEl)
-            .setName(t("setting_markdownlint_path_name"))
-            .setDesc(t("setting_markdownlint_path_desc"))
-            .addText((text) =>
-                text.setValue(settings.markdownlintCli2Path)
-                .onChange(async (value) => {
-                    settings.markdownlintCli2Path = value;
-                    await this.plugin.saveSettings();
-                })
-            );
+      new Setting(containerEl)
+        .setName(t("setting_markdownlint_path_name"))
+        .setDesc(t("setting_markdownlint_path_desc"))
+        .addText(text =>
+          text.setValue(settings.markdownlintCli2Path).onChange(async value => {
+            settings.markdownlintCli2Path = value;
+            await this.plugin.saveSettings();
+          }),
+        );
     }
 
     new Setting(containerEl)
       .setName(t("setting_suppress_logs_name"))
       .setDesc(t("setting_suppress_logs_desc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(settings.suppressDeveloperLogs)
-          .onChange(async (value) => {
-            settings.suppressDeveloperLogs = value;
-            await this.plugin.saveSettings();
-          })
+      .addToggle(toggle =>
+        toggle.setValue(settings.suppressDeveloperLogs).onChange(async value => {
+          settings.suppressDeveloperLogs = value;
+          await this.plugin.saveSettings();
+        }),
       );
 
     new Setting(containerEl)
       .setName(t("setting_enable_mermaid_name"))
       .setDesc(t("setting_enable_mermaid_desc"))
-      .addToggle((toggle) =>
-        toggle
-          .setValue(settings.enableExperimentalMermaid)
-          .onChange(async (value) => {
-            settings.enableExperimentalMermaid = value;
-            await this.plugin.saveSettings();
-          })
+      .addToggle(toggle =>
+        toggle.setValue(settings.enableExperimentalMermaid).onChange(async value => {
+          settings.enableExperimentalMermaid = value;
+          await this.plugin.saveSettings();
+        }),
       );
   }
 }

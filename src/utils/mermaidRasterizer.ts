@@ -27,7 +27,7 @@ interface RasterizeResult {
  */
 export async function rasterizeMermaidBlocks(
   markdown: string,
-  options: RasterizeOptions
+  options: RasterizeOptions,
 ): Promise<RasterizeResult> {
   if (!options.app || !options.sourcePath) {
     throw new Error("rasterizeMermaidBlocks requires app and sourcePath.");
@@ -50,9 +50,14 @@ export async function rasterizeMermaidBlocks(
     mermaidRegex.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = mermaidRegex.exec(markdown)) !== null) {
-      const [fullMatch, _indent, _fence, mermaidCode, attrContent, figCaptionRaw] = match;
+      const [fullMatch, _indent, _fence, mermaidCode, attrContent, figCaptionRaw] = match; // eslint-disable-line @typescript-eslint/no-unused-vars
       try {
-        const svg = await renderMermaidInDom(options.app, mermaidCode, container, options.sourcePath);
+        const svg = await renderMermaidInDom(
+          options.app,
+          mermaidCode,
+          container,
+          options.sourcePath,
+        );
         const pngBuffer = await svgToPngBuffer(svg, 2);
         const pngPath = await writePng(tempDir, pngBuffer);
         const attrBlock = buildAttributeBlock(attrContent, options.imageScale);
@@ -96,12 +101,18 @@ async function renderMermaidInDom(
   app: App,
   code: string,
   container: HTMLDivElement,
-  sourcePath: string
+  sourcePath: string,
 ): Promise<SVGSVGElement> {
   const component = new Component();
   clearContainer(container);
 
-  await MarkdownRenderer.render(app, `\`\`\`mermaid\n${code}\n\`\`\``, container, sourcePath, component);
+  await MarkdownRenderer.render(
+    app,
+    `\`\`\`mermaid\n${code}\n\`\`\``,
+    container,
+    sourcePath,
+    component,
+  );
 
   const svg = await waitForStableSvg(container, 5000, 100);
   component.unload();
@@ -125,7 +136,7 @@ function clearContainer(container: HTMLElement) {
 async function waitForStableSvg(
   root: HTMLElement,
   timeoutMs = 5000,
-  stableThresholdMs = 100
+  stableThresholdMs = 100,
 ): Promise<SVGSVGElement> {
   const start = Date.now();
 
@@ -137,11 +148,11 @@ async function waitForStableSvg(
     if (Date.now() - start > timeoutMs) {
       throw new Error("Timeout waiting for SVG element to appear.");
     }
-    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise(resolve => requestAnimationFrame(resolve));
   }
 
   // Phase 2: DOM 変更が止まるまで待つ
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     let lastMutation = Date.now();
 
     const observer = new MutationObserver(() => {
@@ -197,7 +208,10 @@ async function svgToPngBuffer(svg: SVGSVGElement, scale = 2): Promise<Buffer> {
 
     const pngBlob = await new Promise<Blob>((resolve, reject) => {
       try {
-        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Failed to create PNG blob (canvas empty?)."))), "image/png");
+        canvas.toBlob(
+          b => (b ? resolve(b) : reject(new Error("Failed to create PNG blob (canvas empty?)."))),
+          "image/png",
+        );
       } catch (e) {
         reject(e);
       }
@@ -206,8 +220,14 @@ async function svgToPngBuffer(svg: SVGSVGElement, scale = 2): Promise<Buffer> {
     const buffer = Buffer.from(await pngBlob.arrayBuffer());
     return buffer;
   } catch (error) {
-    console.warn("[MdTex] Mermaid rasterization failed (SecurityError likely). Using fallback image.", error);
-    return createFallbackImageBuffer(Math.max(1, Math.round(width * scale)), Math.max(1, Math.round(height * scale)));
+    console.warn(
+      "[MdTex] Mermaid rasterization failed (SecurityError likely). Using fallback image.",
+      error,
+    );
+    return createFallbackImageBuffer(
+      Math.max(1, Math.round(width * scale)),
+      Math.max(1, Math.round(height * scale)),
+    );
   }
 }
 
@@ -290,12 +310,12 @@ function injectSafeStyles(clonedSvg: SVGSVGElement, _originalSvg: SVGSVGElement)
     }
   }
 
-  nodesToRemove.forEach((el) => {
+  nodesToRemove.forEach(el => {
     if (el.parentNode) el.parentNode.removeChild(el);
   });
 
   const existingStyles = clonedSvg.querySelectorAll("style");
-  existingStyles.forEach((s) => {
+  existingStyles.forEach(s => {
     if (s.isSameNode(styleEl)) return;
     if (s.textContent) {
       s.textContent = s.textContent
@@ -361,8 +381,8 @@ function createFallbackImageBuffer(width: number, height: number): Buffer {
 function getSvgSize(svg: SVGSVGElement): { width: number; height: number; viewBox?: string } {
   const viewBox = svg.getAttribute("viewBox");
   if (viewBox) {
-    const parts = viewBox.split(/\s+|,/).map((v) => Number(v));
-    if (parts.length === 4 && parts.every((n) => Number.isFinite(n))) {
+    const parts = viewBox.split(/\s+|,/).map(v => Number(v));
+    if (parts.length === 4 && parts.every(n => Number.isFinite(n))) {
       return {
         width: Math.max(1, Math.round(parts[2])),
         height: Math.max(1, Math.round(parts[3])),
@@ -387,7 +407,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => resolve(img);
-    img.onerror = (err) => reject(err);
+    img.onerror = err => reject(err);
     img.src = src;
   });
 }
@@ -429,7 +449,7 @@ function buildAttributeBlock(attrContent?: string, imageScale?: string): string 
   }
 
   // Mermaidクラスを付けておくと後段でスタイル指定しやすい
-  if (!attrs.some((t) => t === ".mermaid" || t === "mermaid" || t === ".mermaid-rendered")) {
+  if (!attrs.some(t => t === ".mermaid" || t === "mermaid" || t === ".mermaid-rendered")) {
     attrs.push(".mermaid");
   }
 

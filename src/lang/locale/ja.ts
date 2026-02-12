@@ -3,7 +3,7 @@
 // Reason: ユーザー環境のロケールに応じて日本語 UI を提供するため。
 // Related: src/lang/locale/en.ts, src/lang/helpers.ts, src/MdTexPlugin.ts, src/MdTexPluginSettingTab.ts
 
-import en, { TranslationKeys } from "./en";
+import type { TranslationKeys } from "./en";
 
 const ja: Record<TranslationKeys, string> = {
   ribbon_convert_active: "現在のファイルを変換（アクティブプロファイル）",
@@ -13,13 +13,15 @@ const ja: Record<TranslationKeys, string> = {
   cmd_fix: "開いているノートに markdownlint --fix を実行",
   cmd_open_latex_palette: "LaTeX コマンドを検索して挿入",
   heading_latex_palette: "LaTeX コマンドパレット",
-  setting_latex_yaml_desc: "YAML でパレットに出すコマンドを定義します。フィールド: cmd, desc, cursorOffset(任意)。",
+  setting_latex_yaml_desc:
+    "YAML でパレットに出すコマンドを定義します。フィールド: cmd, desc, cursorOffset(任意)。",
   button_reset_latex_yaml: "デフォルトコマンドに戻す",
   notice_latex_yaml_reset: "コマンド一覧をデフォルトに戻しました。",
   setting_enable_latex_palette_name: "LaTeX パレットとインライン補完を有効",
   setting_enable_latex_palette_desc: "LaTeX コマンドパレットとインライン補完をオン/オフします。",
   setting_enable_latex_ghost_name: "インラインゴースト補完を有効（実験的）",
-  setting_enable_latex_ghost_desc: "インラインのゴーストサジェストを表示します。Tab/→ で確定できます。",
+  setting_enable_latex_ghost_desc:
+    "インラインのゴーストサジェストを表示します。Tab/→ で確定できます。",
   notice_latex_palette_disabled: "設定で LaTeX コマンドパレットが無効になっています。",
 
   notice_convert_done: "{0} 変換が完了しました。",
@@ -44,7 +46,8 @@ const ja: Record<TranslationKeys, string> = {
   notice_markdownlint_missing: "markdownlint-cli2 が見つかりません。設定でパスを指定してください。",
   notice_lint_ok: "Lint 完了: 問題なし",
   notice_lint_warn_code: "Lint 完了: 指摘あり (code={0})",
-  notice_markdownlint_launch_failed: "markdownlint-cli2 の起動に失敗しました。パスと Node のインストールを確認してください。",
+  notice_markdownlint_launch_failed:
+    "markdownlint-cli2 の起動に失敗しました。パスと Node のインストールを確認してください。",
   notice_lint_error: "Lint エラー: {0}",
 
   status_ready: "MdTex: 待機中",
@@ -63,12 +66,12 @@ const ja: Record<TranslationKeys, string> = {
   placeholder_new_profile: "新しいプロファイル名",
   button_add_profile: "プロファイルを追加",
   notice_invalid_profile: "無効または重複したプロファイル名です。",
-  notice_profile_created: "プロファイル \"{0}\" を作成しました。",
+  notice_profile_created: 'プロファイル "{0}" を作成しました。',
   setting_delete_profile_name: "現在のプロファイルを削除",
   setting_delete_profile_desc: "アクティブなプロファイルを削除します（1件のみの場合は削除不可）。",
   button_delete_profile: "プロファイルを削除",
-  confirm_delete_profile: "プロファイル \"{0}\" を削除してもよいですか？",
-  notice_profile_deleted: "プロファイル \"{0}\" を削除しました。",
+  confirm_delete_profile: 'プロファイル "{0}" を削除してもよいですか？',
+  notice_profile_deleted: 'プロファイル "{0}" を削除しました。',
 
   heading_general_output: "出力設定",
   setting_output_format_name: "出力フォーマット",
@@ -81,7 +84,8 @@ const ja: Record<TranslationKeys, string> = {
   setting_output_dir_name: "出力ディレクトリ",
   setting_output_dir_desc: "生成物を保存するディレクトリ。空なら Vault ルートを使用。",
   setting_resource_dir_name: "リソース検索ディレクトリ",
-  setting_resource_dir_desc: "画像などを探すディレクトリ (--resource-path)。空なら入力ファイルの場所を使用。",
+  setting_resource_dir_desc:
+    "画像などを探すディレクトリ (--resource-path)。空なら入力ファイルの場所を使用。",
   setting_delete_intermediate_name: "中間ファイルを削除",
   setting_delete_intermediate_desc: ".tex や .temp.md を成功時に削除します。",
 
@@ -104,11 +108,13 @@ const ja: Record<TranslationKeys, string> = {
   setting_image_scale_desc: "デフォルトの画像スケール（例: width=0.8\\textwidth）。",
 
   heading_preamble: "LaTeX プリアンブル",
-  preamble_desc: "LaTeX コードのみ入力してください。YAML の --- と header-includes は自動付与されます。全角入力にも対応します。",
+  preamble_desc:
+    "LaTeX コードのみ入力してください。YAML の --- と header-includes は自動付与されます。全角入力にも対応します。",
   placeholder_preamble: "\\usepackage{...}",
   button_open_fullscreen: "全画面で開く",
   button_reset_preamble: "デフォルトにリセット",
-  confirm_reset_preamble: "プリアンブルをデフォルトに戻します。現在の内容は上書きされます。よろしいですか？",
+  confirm_reset_preamble:
+    "プリアンブルをデフォルトに戻します。現在の内容は上書きされます。よろしいですか？",
   notice_preamble_reset: "プリアンブルをデフォルトに戻しました。",
   button_copy: "コピー",
   notice_preamble_copied: "プリアンブルをコピーしました。",
@@ -145,7 +151,8 @@ const ja: Record<TranslationKeys, string> = {
   setting_suppress_logs_name: "開発ログを非表示",
   setting_suppress_logs_desc: "デベロッパーコンソールの詳細ログを隠します。",
   setting_enable_mermaid_name: "Mermaid 実験機能を有効",
-  setting_enable_mermaid_desc: "Mermaid ブロックを DOM→PNG で描画します（実験的・低速の場合あり）。",
+  setting_enable_mermaid_desc:
+    "Mermaid ブロックを DOM→PNG で描画します（実験的・低速の場合あり）。",
 
   modal_preamble_title: "LaTeX プリアンブルを編集",
   modal_note: "LaTeX のみ入力してください。YAML は自動付与されます。",

@@ -9,7 +9,8 @@ import os from "os";
 import path from "path";
 import { convertCurrentPage } from "./convertService";
 import { DEFAULT_PROFILE, DEFAULT_SETTINGS } from "../MdTexPluginSettings";
-import { Notice, App, FileSystemAdapter } from "obsidian";
+import { Notice, App, FileSystemAdapter, TFile } from "obsidian";
+import type { PluginContext } from "./lintService";
 
 vi.mock("../utils/processRunner", () => {
   return {
@@ -25,7 +26,9 @@ const noopLintFix = vi.fn(async () => {});
 
 describe("convertCurrentPage", () => {
   beforeEach(() => {
-    (global as any).window = { moment: { locale: () => "en" } };
+    (global as unknown as { window?: { moment: { locale: () => string } } }).window = {
+      moment: { locale: () => "en" },
+    };
     Notice.messages.length = 0;
     mockedRunCommand.mockReset();
   });
@@ -37,13 +40,13 @@ describe("convertCurrentPage", () => {
   it("アクティブファイルが無い場合は早期リターンする", async () => {
     const app = new App();
     app.workspace.getActiveFile = () => null;
-    const ctx = {
+    const ctx: PluginContext = {
       app,
       settings: { ...DEFAULT_SETTINGS },
       getActiveProfileSettings: () => DEFAULT_PROFILE,
     };
 
-    await convertCurrentPage(ctx as any, { runMarkdownlintFix: noopLintFix }, "pdf");
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
 
     expect(mockedRunCommand).not.toHaveBeenCalled();
     expect(Notice.messages.pop()).toContain("No active file selected.");
@@ -56,19 +59,24 @@ describe("convertCurrentPage", () => {
 
     const app = new App();
     app.vault.adapter = new FileSystemAdapter(tmpDir);
-    app.workspace.getActiveFile = () => ({ path: "note.md" });
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
     app.workspace.activeLeaf = null;
 
     const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir };
-    const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      profiles: { Default: profile },
+      activeProfile: "Default",
+    };
+    const ctx: PluginContext = {
+      app,
+      settings,
+      getActiveProfileSettings: () => profile,
+    };
 
     mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
 
-    await convertCurrentPage(
-      { app, settings, getActiveProfileSettings: () => profile } as any,
-      { runMarkdownlintFix: noopLintFix },
-      "pdf"
-    );
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
 
     expect(mockedRunCommand).toHaveBeenCalledTimes(1);
     const [cmd, args, opts] = mockedRunCommand.mock.calls[0];
@@ -89,18 +97,23 @@ describe("convertCurrentPage", () => {
 
     const app = new App();
     app.vault.adapter = new FileSystemAdapter(tmpDir);
-    app.workspace.getActiveFile = () => ({ path: "note.md" });
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
 
     const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir };
-    const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      profiles: { Default: profile },
+      activeProfile: "Default",
+    };
+    const ctx: PluginContext = {
+      app,
+      settings,
+      getActiveProfileSettings: () => profile,
+    };
 
     mockedRunCommand.mockResolvedValue({ exitCode: 1, stdout: "", stderr: "boom" });
 
-    await convertCurrentPage(
-      { app, settings, getActiveProfileSettings: () => profile } as any,
-      { runMarkdownlintFix: noopLintFix },
-      "pdf"
-    );
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
 
     const lastNotice = Notice.messages.pop() || "";
     expect(lastNotice.toLowerCase()).toContain("pandoc");

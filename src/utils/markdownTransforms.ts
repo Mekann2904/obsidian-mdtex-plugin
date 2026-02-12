@@ -88,13 +88,14 @@ export function stripObsidianComments(markdown: string): string {
   const isInRanges = (pos: number, ranges: Array<[number, number]>): boolean =>
     ranges.some(([s, e]) => pos >= s && pos < e);
 
-  for (let line of lines) {
+  for (const line of lines) {
     const protectedRanges = buildProtectedRanges(line);
 
     // 数式ブロック中は内容を素通ししつつ $$ を数えて閉じる
     if (inMathBlock) {
       let toggles = 0;
       let idx = 0;
+      // eslint-disable-next-line no-constant-condition
       while (true) {
         const pos = line.indexOf("$$", idx);
         if (pos === -1) break;
@@ -191,6 +192,7 @@ export function stripObsidianComments(markdown: string): string {
       let toggles = 0;
       let idx = 0;
       const protectedAfter = buildProtectedRanges(lineOut);
+      // eslint-disable-next-line no-constant-condition
       while (true) {
         const pos = lineOut.indexOf("$$", idx);
         if (pos === -1) break;
@@ -215,12 +217,14 @@ export async function replaceWikiLinksAndCodeAsync(
   profile: ProfileSettings,
   sourcePath: string,
   cache: Map<string, string>,
-  inBlockquote = false
+  inBlockquote = false,
 ): Promise<string> {
-  const regex = /(^[ \t]*> ?)?!\[\[([^\]]+)\]\](?:\{#([^}]+)\})?(?:\[(.*?)\])?|```(?:([\w-]+))?(?:\s*\{([^}]*)\})?\n([\s\S]*?)```/gm;
+  const regex =
+    /(^[ \t]*> ?)?!\[\[([^\]]+)\]\](?:\{#([^}]+)\})?(?:\[(.*?)\])?|```(?:([\w-]+))?(?:\s*\{([^}]*)\})?\n([\s\S]*?)```/gm;
   let result = "";
   let lastIndex = 0;
 
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     const match = regex.exec(markdown);
     if (!match) break;
@@ -270,11 +274,11 @@ export async function replaceWikiLinksAndCodeAsync(
             profile,
             vaultRelative,
             cache,
-            inBlockquote || !!blockquotePrefix
+            inBlockquote || !!blockquotePrefix,
           );
           result += applyBlockquotePrefix(inlined, blockquotePrefix);
           continue;
-        } catch (err) {
+        } catch {
           const linkText = (imageCaption || pipeCaption || targetLink || "").trim() || targetLink;
           const fallback = `[${escapeSpecialCharacters(linkText)}](${latexPath})`;
           result += applyBlockquotePrefix(fallback, blockquotePrefix);
@@ -291,7 +295,9 @@ export async function replaceWikiLinksAndCodeAsync(
         continue;
       }
 
-      const labelPart = imageLabel ? `#${imageLabel.startsWith("fig:") ? "" : "fig:"}${imageLabel}` : "";
+      const labelPart = imageLabel
+        ? `#${imageLabel.startsWith("fig:") ? "" : "fig:"}${imageLabel}`
+        : "";
       const rawCaption = imageCaption || pipeCaption || " ";
       const captionPart = rawCaption.trim() ? escapeSpecialCharacters(rawCaption) : " ";
       const scalePart = profile.imageScale ? profile.imageScale : "";
@@ -310,7 +316,9 @@ export async function replaceWikiLinksAndCodeAsync(
 
       const rawCode = codeBody.trimEnd();
       const resolvedLang = normalizeListingLanguage(codeLang);
-      let labelOption = "", captionOption = "", langOption = "";
+      let labelOption = "",
+        captionOption = "",
+        langOption = "";
       if (codeAttrs) {
         const labelMatch = codeAttrs.match(/#lst:([\w-]+)/);
         if (labelMatch) labelOption = `,label={lst:${labelMatch[1]}}`;
@@ -318,7 +326,9 @@ export async function replaceWikiLinksAndCodeAsync(
         if (captionMatch) captionOption = `,caption={${escapeSpecialCharacters(captionMatch[1])}}`;
       }
       if (resolvedLang) langOption = `language=${resolvedLang}`;
-      const options = [langOption, labelOption.slice(1), captionOption.slice(1)].filter(Boolean).join(",");
+      const options = [langOption, labelOption.slice(1), captionOption.slice(1)]
+        .filter(Boolean)
+        .join(",");
       const optWrapped = options ? `[${options}]` : "";
       result += `\\begin{lstlisting}${optWrapped}\n${rawCode}\n\\end{lstlisting}`;
       continue;
@@ -336,7 +346,7 @@ function applyBlockquotePrefix(text: string, blockquotePrefix?: string): string 
   const prefix = blockquotePrefix.endsWith(" ") ? blockquotePrefix : `${blockquotePrefix} `;
   return text
     .split("\n")
-    .map((line) => `${prefix}${line}`)
+    .map(line => `${prefix}${line}`)
     .join("\n");
 }
 
@@ -351,14 +361,29 @@ export async function replaceWikiLinksRecursivelyAsync(
   sourcePath: string,
   cache: Map<string, string>,
   inBlockquote = false,
-  depth = 0
+  depth = 0,
 ): Promise<string> {
   if (depth > 5) return markdown;
 
-  const transformed = await replaceWikiLinksAndCodeAsync(markdown, app, profile, sourcePath, cache, inBlockquote);
+  const transformed = await replaceWikiLinksAndCodeAsync(
+    markdown,
+    app,
+    profile,
+    sourcePath,
+    cache,
+    inBlockquote,
+  );
   if (transformed === markdown) return transformed;
 
-  return replaceWikiLinksRecursivelyAsync(transformed, app, profile, sourcePath, cache, inBlockquote, depth + 1);
+  return replaceWikiLinksRecursivelyAsync(
+    transformed,
+    app,
+    profile,
+    sourcePath,
+    cache,
+    inBlockquote,
+    depth + 1,
+  );
 }
 
 /**
@@ -366,7 +391,7 @@ export async function replaceWikiLinksRecursivelyAsync(
  */
 export function unwrapValidWikiLinks(markdown: string, app: App, sourcePath: string): string {
   // ![[...]]（埋め込み・画像）を除外するため否定後読みを付ける
-  const wikiLinkRegex = /(?<!\!)\[\[(.*?)\]\]/g;
+  const wikiLinkRegex = /(?<!!)\[\[(.*?)\]\]/g;
   const lines = markdown.split("\n");
   let inFence = false;
 
@@ -421,7 +446,7 @@ function resolveLinkFile(
   app: App,
   linktext: string,
   sourcePath: string,
-  searchDirectory?: string
+  searchDirectory?: string,
 ): TFile | null {
   const cached = app.metadataCache.getFirstLinkpathDest(linktext, sourcePath);
   if (cached instanceof TFile) return cached;
@@ -431,7 +456,7 @@ function resolveLinkFile(
 
   const targetName = path.posix.basename(linktext).toLowerCase();
   const files = app.vault.getFiles();
-  const match = files.find((file) => {
+  const match = files.find(file => {
     if (searchDirectory && !file.path.startsWith(searchDirectory)) return false;
     return file.name.toLowerCase() === targetName;
   });

@@ -3,19 +3,8 @@
 // Reason: StateField 競合や前方重複、コードブロック閉じカッコでの誤反応を解消し、画像・表・数式・コードフェンスにも安定してラベルサジェストを出すため。
 // Related: src/data/latexCommands.ts, src/MdTexPlugin.ts
 
-import {
-  Extension,
-  StateField,
-  EditorState,
-} from "@codemirror/state";
-import {
-  Decoration,
-  DecorationSet,
-  EditorView,
-  keymap,
-  WidgetType,
-} from "@codemirror/view";
-import { syntaxTree } from "@codemirror/language";
+import { Extension, StateField, EditorState } from "@codemirror/state";
+import { Decoration, DecorationSet, EditorView, keymap, WidgetType } from "@codemirror/view";
 import MdTexPlugin from "../MdTexPlugin";
 import { buildLatexCommands } from "../data/latexCommands";
 
@@ -64,7 +53,11 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension {
     return cachedCommands;
   };
 
-  const detectContext = (state: EditorState, line: any, head: number): TriggerContext | null => {
+  const detectContext = (
+    state: EditorState,
+    line: { from: number; to: number; text: string; number: number },
+    head: number,
+  ): TriggerContext | null => {
     const text = line.text;
     const relHead = head - line.from;
 
@@ -98,7 +91,7 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension {
         head,
         query: "",
         kind: "context",
-          candidateText: ' {#lst:caption=""}',
+        candidateText: ' {#lst:caption=""}',
       };
     }
 
@@ -142,12 +135,12 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension {
         // すでに {#tbl: ...} が含まれているなら出さない
         if (/\{#\s*tbl\s*:[^}]*\}/.test(text)) return null;
         if (trimmedCurrent.startsWith(":")) {
-	return {
+          return {
             start: line.from + text.length, // 常に末尾追記
             head,
             query: "",
             kind: "context",
-          candidateText: " {#tbl:}",
+            candidateText: " {#tbl:}",
           };
         }
       }
@@ -183,7 +176,7 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension {
     const matchLabel = prefix.match(/\{#([A-Za-z0-9:_-]*)$/);
     if (matchLabel && matchLabel.index !== undefined) {
       const typed = matchLabel[1];
-      const candidate = labelSuggestions.find((s) => s.startsWith(typed)) ?? labelSuggestions[0];
+      const candidate = labelSuggestions.find(s => s.startsWith(typed)) ?? labelSuggestions[0];
       return {
         start: line.from + matchLabel.index + 2,
         head,
@@ -207,7 +200,7 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension {
     let fullCandidate = "";
     if (ctx.kind === "command") {
       const commands = getCommands();
-      const match = commands.find((c) => c.cmd.startsWith("\\" + ctx.query));
+      const match = commands.find(c => c.cmd.startsWith("\\" + ctx.query));
       if (!match) return null;
       fullCandidate = match.cmd;
     } else {
@@ -276,13 +269,13 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension {
         }).range(ghost.pos),
       ]);
     },
-    provide: (f) => EditorView.decorations.from(f),
+    provide: f => EditorView.decorations.from(f),
   });
 
   const ghostKeymap = keymap.of([
     {
       key: "Tab",
-      run: (view) => {
+      run: view => {
         const ghost = calculateGhostState(view);
         if (!ghost) return false;
 
@@ -298,7 +291,7 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension {
     },
     {
       key: "ArrowRight",
-      run: (view) => {
+      run: view => {
         const ghost = calculateGhostState(view);
         if (!ghost) return false;
 

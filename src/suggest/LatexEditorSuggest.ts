@@ -25,7 +25,10 @@ interface LatexCommandMatch extends LatexCommand {
 export class LatexEditorSuggest extends EditorSuggest<LatexCommandMatch> {
   private commands: LatexCommand[] = [];
 
-  constructor(app: App, private plugin: MdTexPlugin) {
+  constructor(
+    app: App,
+    private plugin: MdTexPlugin,
+  ) {
     super(app);
     this.updateCommands();
   }
@@ -34,7 +37,11 @@ export class LatexEditorSuggest extends EditorSuggest<LatexCommandMatch> {
     this.commands = buildLatexCommands(this.plugin.settings?.latexCommandsYaml);
   }
 
-  onTrigger(cursor: EditorPosition, editor: Editor, _file: TFile | null): EditorSuggestTriggerInfo | null {
+  onTrigger(
+    cursor: EditorPosition,
+    editor: Editor,
+    _file: TFile | null,
+  ): EditorSuggestTriggerInfo | null {
     if (!this.plugin.settings?.enableLatexPalette) return null;
     const line = editor.getLine(cursor.line);
     const prefix = line.substring(0, cursor.ch);
@@ -51,7 +58,7 @@ export class LatexEditorSuggest extends EditorSuggest<LatexCommandMatch> {
   getSuggestions(context: EditorSuggestContext): LatexCommandMatch[] {
     if (!this.plugin.settings?.enableLatexPalette) return [];
     const query = context.query;
-    if (!query) return this.commands.map((c) => ({ ...c }));
+    if (!query) return this.commands.map(c => ({ ...c }));
 
     const searchFn = prepareFuzzySearch(query);
     const results: { item: LatexCommandMatch; match: SearchResult }[] = [];
@@ -66,7 +73,7 @@ export class LatexEditorSuggest extends EditorSuggest<LatexCommandMatch> {
     }
 
     sortSearchResults(results);
-    return results.map((r) => r.item);
+    return results.map(r => r.item);
   }
 
   renderSuggestion(item: LatexCommandMatch, el: HTMLElement): void {

@@ -47,7 +47,7 @@ export async function lintCurrentNote(ctx: PluginContext) {
       return;
     }
 
-    await new Promise<void>((resolve) => {
+    await new Promise<void>(resolve => {
       const envPath = buildEnvPath();
       const child = spawn(cli, [fullPath], {
         shell: false,
@@ -57,33 +57,36 @@ export async function lintCurrentNote(ctx: PluginContext) {
       });
       let out = "";
       let err = "";
-      child.stdout?.on("data", (d) => { out += d.toString(); });
-      child.stderr?.on("data", (d) => { err += d.toString(); });
-      child.on("close", (code) => {
+      child.stdout?.on("data", d => {
+        out += d.toString();
+      });
+      child.stderr?.on("data", d => {
+        err += d.toString();
+      });
+      child.on("close", code => {
         const exitCode = code ?? -1;
         if (out.trim()) console.log("markdownlint output:\n" + out);
         if (err.trim()) console.error("markdownlint error:\n" + err);
         new Notice(exitCode === 0 ? t("notice_lint_ok") : t("notice_lint_warn_code", [exitCode]));
         resolve();
       });
-      child.on("error", (e) => {
+      child.on("error", e => {
         console.error(e);
         new Notice(t("notice_markdownlint_launch_failed"));
         resolve();
       });
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error(e);
-    new Notice(t("notice_lint_error", [e?.message || e]));
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    new Notice(t("notice_lint_error", [errorMessage]));
   }
 }
 
 export async function runMarkdownlintFix(ctx: PluginContext, targetPath: string): Promise<void> {
   const fileAdapter = ctx.app.vault.adapter as FileSystemAdapter;
   const vaultRoot = fileAdapter.getBasePath();
-  const fullPath = path.isAbsolute(targetPath)
-    ? targetPath
-    : fileAdapter.getFullPath(targetPath);
+  const fullPath = path.isAbsolute(targetPath) ? targetPath : fileAdapter.getFullPath(targetPath);
 
   const cli = detectBrewMarkdownlintBin(ctx.settings);
   if (!cli) {
@@ -93,14 +96,16 @@ export async function runMarkdownlintFix(ctx: PluginContext, targetPath: string)
 
   const original = await fs.readFile(fullPath, "utf8");
   const yamlMatch = original.match(/^(---[\t\x20]*\n[\s\S]*?\n---[\t\x20]*\n?)/);
-  const tomlMatch = (!yamlMatch) ? original.match(/^(\+\+\+[\t\x20]*\n[\s\S]*?\n(\+\+\+|\.\.\.)[\t\x20]*\n?)/) : null;
+  const tomlMatch = !yamlMatch
+    ? original.match(/^(\+\+\+[\t\x20]*\n[\s\S]*?\n(\+\+\+|\.\.\.)[\t\x20]*\n?)/)
+    : null;
   const frontMatter = yamlMatch?.[1] || tomlMatch?.[1] || "";
   const body = original.slice(frontMatter.length);
 
   if (frontMatter) {
     const tempBody = `${fullPath}.lintbody.md`;
     await fs.writeFile(tempBody, body, "utf8");
-    await new Promise<void>((resolve) => {
+    await new Promise<void>(resolve => {
       const child = spawn(cli, ["--fix", tempBody], {
         shell: false,
         cwd: vaultRoot,
@@ -112,19 +117,31 @@ export async function runMarkdownlintFix(ctx: PluginContext, targetPath: string)
           const fixedBody = await fs.readFile(tempBody, "utf8");
           await fs.writeFile(fullPath, frontMatter + fixedBody, "utf8");
         } finally {
-          try { await fs.unlink(tempBody); } catch {}
+          // Intentionally empty: cleanup temp file on success or error
+          try {
+            await fs.unlink(tempBody);
+          } catch (e) {
+            // Ignore cleanup errors
+            console.debug("Failed to delete temp file:", e);
+          }
         }
         resolve();
       });
       child.on("error", async () => {
-        try { await fs.unlink(tempBody); } catch {}
+        // Intentionally empty: cleanup temp file on error
+        try {
+          await fs.unlink(tempBody);
+        } catch (e) {
+          // Ignore cleanup errors
+          console.debug("Failed to delete temp file:", e);
+        }
         resolve();
       });
     });
     return;
   }
 
-  await new Promise<void>((resolve) => {
+  await new Promise<void>(resolve => {
     const child = spawn(cli, ["--fix", fullPath], {
       shell: false,
       cwd: vaultRoot,
@@ -148,15 +165,18 @@ export function detectBrewMarkdownlintBin(settings: PandocPluginSettings): strin
   for (const p of candidates) {
     try {
       if (fsSync.existsSync(p)) return p;
-    } catch (_) {}
+    } catch {
+      // Ignore errors when checking file existence
+    }
   }
   return null;
 }
 
-const buildEnvPath = () => [
-  "/opt/homebrew/bin",
-  "/usr/local/bin",
-  "/opt/homebrew/opt/node/bin",
-  "/usr/local/opt/node/bin",
-  process.env.PATH || "",
-].join(":");
+const buildEnvPath = () =>
+  [
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+    "/opt/homebrew/opt/node/bin",
+    "/usr/local/opt/node/bin",
+    process.env.PATH || "",
+  ].join(":");
