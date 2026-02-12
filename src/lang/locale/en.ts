@@ -11,7 +11,8 @@ const en = {
   cmd_fix: "Apply markdownlint --fix to current note",
   cmd_open_latex_palette: "Insert LaTeX command (fuzzy palette)",
   heading_latex_palette: "LaTeX Command Palette",
-  setting_latex_yaml_desc: "Edit YAML to define commands shown in the fuzzy palette. Fields: cmd, desc, cursorOffset(optional).",
+  setting_latex_yaml_desc:
+    "Edit YAML to define commands shown in the fuzzy palette. Fields: cmd, desc, cursorOffset(optional).",
   button_reset_latex_yaml: "Reset to default commands",
   notice_latex_yaml_reset: "LaTeX command list reset to default.",
   setting_enable_latex_palette_name: "Enable LaTeX palette & inline suggest",
@@ -42,7 +43,8 @@ const en = {
   notice_markdownlint_missing: "markdownlint-cli2 not found. Specify the path in settings.",
   notice_lint_ok: "Lint completed: no issues.",
   notice_lint_warn_code: "Lint completed: issues found (code={0})",
-  notice_markdownlint_launch_failed: "Failed to launch markdownlint-cli2. Check the path and Node installation.",
+  notice_markdownlint_launch_failed:
+    "Failed to launch markdownlint-cli2. Check the path and Node installation.",
   notice_lint_error: "Lint error: {0}",
 
   status_ready: "MdTex: ready",
@@ -61,12 +63,13 @@ const en = {
   placeholder_new_profile: "New Profile Name",
   button_add_profile: "Add Profile",
   notice_invalid_profile: "Invalid or duplicate profile name.",
-  notice_profile_created: "Profile \"{0}\" created.",
+  notice_profile_created: 'Profile "{0}" created.',
   setting_delete_profile_name: "Delete Current Profile",
-  setting_delete_profile_desc: "Delete the currently active profile (cannot delete if it's the only one).",
+  setting_delete_profile_desc:
+    "Delete the currently active profile (cannot delete if it's the only one).",
   button_delete_profile: "Delete Profile",
-  confirm_delete_profile: "Are you sure you want to delete profile \"{0}\"?",
-  notice_profile_deleted: "Profile \"{0}\" deleted.",
+  confirm_delete_profile: 'Are you sure you want to delete profile "{0}"?',
+  notice_profile_deleted: 'Profile "{0}" deleted.',
 
   heading_general_output: "General Output Settings",
   setting_output_format_name: "Output Format",
@@ -77,9 +80,11 @@ const en = {
   setting_pandoc_path_name: "Pandoc Path",
   setting_pandoc_path_desc: "Absolute path to the pandoc executable (e.g. /usr/local/bin/pandoc).",
   setting_output_dir_name: "Output Directory",
-  setting_output_dir_desc: "Directory where generated files will be saved. Leave empty for Vault root.",
+  setting_output_dir_desc:
+    "Directory where generated files will be saved. Leave empty for Vault root.",
   setting_resource_dir_name: "Resource Search Directory",
-  setting_resource_dir_desc: "Directory to search for images and resources (--resource-path). If empty, uses the input file's directory.",
+  setting_resource_dir_desc:
+    "Directory to search for images and resources (--resource-path). If empty, uses the input file's directory.",
   setting_delete_intermediate_name: "Delete Intermediate Files",
   setting_delete_intermediate_desc: "Delete .tex or .temp.md files after successful conversion.",
 
@@ -102,11 +107,13 @@ const en = {
   setting_image_scale_desc: "Default image scaling (e.g. width=0.8\\textwidth).",
 
   heading_preamble: "LaTeX Preamble",
-  preamble_desc: "Enter pure LaTeX code only. YAML delimiters (---) and 'header-includes:' are injected automatically. This field supports full-width editing.",
+  preamble_desc:
+    "Enter pure LaTeX code only. YAML delimiters (---) and 'header-includes:' are injected automatically. This field supports full-width editing.",
   placeholder_preamble: "\\usepackage{...}",
   button_open_fullscreen: "Open Fullscreen",
   button_reset_preamble: "Reset Preamble to Default",
-  confirm_reset_preamble: "Are you sure you want to reset the LaTeX Preamble to the default template? This will overwrite your current changes.",
+  confirm_reset_preamble:
+    "Are you sure you want to reset the LaTeX Preamble to the default template? This will overwrite your current changes.",
   notice_preamble_reset: "LaTeX Preamble reset to default.",
   button_copy: "Copy",
   notice_preamble_copied: "Preamble copied to clipboard.",

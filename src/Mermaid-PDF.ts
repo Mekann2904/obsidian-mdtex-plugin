@@ -19,7 +19,7 @@ import { joinFsPath } from "./utils/pathHelpers";
 export async function replaceMermaidDiagrams(
   markdown: string,
   outputDir: string,
-  mermaidCliPath?: string
+  mermaidCliPath?: string,
 ): Promise<{ content: string; generatedPdfs: string[] }> {
   if (!mermaidCliPath) {
     console.warn("mermaidCliPath not provided; skipping Mermaid PDF conversion.");
@@ -28,7 +28,11 @@ export async function replaceMermaidDiagrams(
 
   // ```mermaid ... ``` のブロックを検出
   const mermaidRegex = /```mermaid\s*\n([\s\S]+?)```/g;
-  const promises: Promise<{ original: string; replacement: string; generatedPdf: string | null }>[] = [];
+  const promises: Promise<{
+    original: string;
+    replacement: string;
+    generatedPdf: string | null;
+  }>[] = [];
 
   let match: RegExpExecArray | null;
   while ((match = mermaidRegex.exec(markdown)) !== null) {
@@ -58,7 +62,7 @@ async function convertMermaidBlock(
   original: string,
   code: string,
   outputDir: string,
-  mermaidCliPath: string
+  mermaidCliPath: string,
 ): Promise<{ original: string; replacement: string; generatedPdf: string | null }> {
   // 一意なファイル名
   const uniqueId = `${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
@@ -90,7 +94,7 @@ async function convertMermaidBlock(
 function runMmdcWithPdfFit(
   inputFile: string,
   outputFile: string,
-  mermaidCliPath: string
+  mermaidCliPath: string,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     // --pdfFit -i input.mmd -o output.pdf
@@ -102,14 +106,14 @@ function runMmdcWithPdfFit(
       env: process.env,
     });
 
-    proc.stdout?.on("data", (data) => {
+    proc.stdout?.on("data", data => {
       console.log("mmdc stdout:", data.toString());
     });
-    proc.stderr?.on("data", (data) => {
+    proc.stderr?.on("data", data => {
       console.error("mmdc stderr:", data.toString());
     });
 
-    proc.on("close", (code) => {
+    proc.on("close", code => {
       if (code === 0) {
         resolve();
       } else {
@@ -117,7 +121,7 @@ function runMmdcWithPdfFit(
       }
     });
 
-    proc.on("error", (err) => {
+    proc.on("error", err => {
       reject(err);
     });
   });

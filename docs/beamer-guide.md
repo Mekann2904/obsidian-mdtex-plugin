@@ -1,4 +1,17 @@
+---
+title: Beamer使用ガイド
+category: ユーザードキュメント
+audience: 既存ユーザー, 上級ユーザー
+last_updated: 2026-02-12
+tags: [Beamer, プレゼンテーション, スライド]
+related: [docs/profiles.md, docs/configuration.md, docs/markdown-guide.md]
+---
+
 # Beamer使用ガイド
+
+[ドキュメントインデックス](./index.md) > Beamer使用ガイド
+
+## 概要
 
 MdTexを使用してプレゼンテーションPDF（Beamer）を作成する方法を解説します。
 
@@ -87,7 +100,7 @@ Markdownファイルの先頭に以下を追加：
 ---
 title: プレゼンテーションタイトル
 author: 発表者名
-date: 2025年1月31日
+date: 2025-01-31
 institute: 所属機関
 ---
 ```
@@ -130,8 +143,7 @@ Beamerでは、見出しレベル1（`#`）がフレーム（スライド）の�
 :::
 ```
 
-または、Beamerの`
-`コマンドを使用：
+または、Beamerの`\pause`コマンドを使用：
 
 ```markdown
 # LaTeXコマンドによる段階的表示
@@ -223,10 +235,10 @@ Table: サンプル表
 ```yaml
 - cmd: "\\newpage"
   desc: "新しいスライド"
-  
+
 - cmd: "\\pause"
   desc: "段階的表示の区切り"
-  
+
 - cmd: "\\vspace{0.5cm}"
   desc: "垂直スペース（調整用）"
   cursorOffset: -6
@@ -337,7 +349,7 @@ Table: サンプル表
 ---
 title: サンプルプレゼンテーション
 author: 発表者
-date: 2025年1月31日
+date: 2025-01-31
 ---
 
 # はじめに
@@ -384,9 +396,13 @@ date: 2025年1月31日
 
 ---
 
-## 関連ドキュメント
+## 関連トピック
 
 - [クイックスタート](./quickstart.md)
 - [設定リファレンス](./configuration.md)
 - [プロファイル管理](./profiles.md)
+- [トラブルシューティング](./troubleshooting.md)
+
+## 次のトピック
+
 - [トラブルシューティング](./troubleshooting.md)

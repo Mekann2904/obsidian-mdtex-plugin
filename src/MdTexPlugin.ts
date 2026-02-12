@@ -5,14 +5,22 @@
 
 import { Plugin, Notice } from "obsidian";
 import { Extension } from "@codemirror/state";
-import { PandocPluginSettings, ProfileSettings, DEFAULT_SETTINGS, DEFAULT_PROFILE } from "./MdTexPluginSettings";
+import {
+  PandocPluginSettings,
+  ProfileSettings,
+  DEFAULT_SETTINGS,
+  DEFAULT_PROFILE,
+} from "./MdTexPluginSettings";
 import { PandocPluginSettingTab } from "./MdTexPluginSettingTab";
 import { MyLabelEditorSuggest } from "./suggest/LabelEditorSuggest";
 import { MyLabelSuggest } from "./suggest/LabelReferenceSuggest";
 import { LatexEditorSuggest } from "./suggest/LatexEditorSuggest";
 import { convertCurrentPage } from "./services/convertService";
 import { lintCurrentNote, runMarkdownlintFix, PluginContext } from "./services/lintService";
-import { loadSettings as loadSettingsService, saveSettings as saveSettingsService } from "./services/settingsService";
+import {
+  loadSettings as loadSettingsService,
+  saveSettings as saveSettingsService,
+} from "./services/settingsService";
 import { t } from "./lang/helpers";
 import { LatexCommandModal } from "./modal/LatexCommandModal";
 import { buildLatexCommands } from "./data/latexCommands";
@@ -23,7 +31,7 @@ export default class MdTexPlugin extends Plugin {
   settings: PandocPluginSettings = DEFAULT_SETTINGS;
   private latexSuggest: LatexEditorSuggest | null = null;
   private ghostExtension: Extension | null = null;
-   private statusBarItem: HTMLElement | null = null;
+  private statusBarItem: HTMLElement | null = null;
 
   getActiveProfileSettings(): ProfileSettings {
     const activeProfileName = this.settings.activeProfile;
@@ -65,7 +73,7 @@ export default class MdTexPlugin extends Plugin {
       id: "mdtex-open-latex-command-palette",
       name: t("cmd_open_latex_palette"),
       icon: "function-square",
-      editorCallback: (editor) => {
+      editorCallback: editor => {
         if (!this.settings.enableLatexPalette) {
           new Notice(t("notice_latex_palette_disabled"));
           return;
@@ -119,7 +127,7 @@ export default class MdTexPlugin extends Plugin {
   }
 
   async saveSettings() {
-    await saveSettingsService(this.settings, (data) => this.saveData(data));
+    await saveSettingsService(this.settings, data => this.saveData(data));
     this.latexSuggest?.updateCommands();
   }
 

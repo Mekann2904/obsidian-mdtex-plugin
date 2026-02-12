@@ -60,7 +60,8 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
 
   args.push("--listings");
 
-  const resourcePath = (options.resourcePath ?? profile.searchDirectory ?? "").trim() || options.workingDir;
+  const resourcePath =
+    (options.resourcePath ?? profile.searchDirectory ?? "").trim() || options.workingDir;
   args.push("--resource-path", normalizeResourcePathList(resourcePath));
 
   if (profile.usePandocCrossref) {
@@ -86,7 +87,8 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
 
   args.push("-V", `fontsize=${profile.fontSize}`);
   args.push("-V", `documentclass=${profile.documentClass}`);
-  if (profile.documentClassOptions?.trim()) args.push("-V", `classoption=${profile.documentClassOptions}`);
+  if (profile.documentClassOptions?.trim())
+    args.push("-V", `classoption=${profile.documentClassOptions}`);
 
   args.push("--highlight-style=tango");
 
@@ -108,7 +110,7 @@ export function getInputFormatArgs(format: string): string[] {
 
 export function filterPandocExtrasForFormat(extras: string[], format: string): string[] {
   if (!extras.length) return [];
-  return extras.filter((arg) => {
+  return extras.filter(arg => {
     if (format !== "docx" && arg.startsWith("--reference-doc")) return false;
     return true;
   });

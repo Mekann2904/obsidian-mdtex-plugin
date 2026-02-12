@@ -32,7 +32,7 @@ export function toPosixPath(target: string): string {
 export function normalizeResourcePathList(list: string): string {
   return list
     .split(path.delimiter)
-    .map((part) => part.trim())
+    .map(part => part.trim())
     .filter(Boolean)
     .map(normalizeFsPath)
     .join(path.delimiter);

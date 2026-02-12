@@ -1,17 +1,19 @@
-# プロファイル管理ガイド
-
-MdTexでは、複数の設定プロファイルを作成・管理できます。異なる用途（論文、スライド、レポートなど）で異なる設定を使い分けることができます。
-
+---
+title: プロファイル管理ガイド
+category: ユーザードキュメント
+audience: 既存ユーザー, 上級ユーザー
+last_updated: 2026-02-12
+tags: [プロファイル, 設定管理]
+related: [docs/configuration.md, docs/quickstart.md]
 ---
 
-## 目次
+# プロファイル管理ガイド
 
-- [プロファイルとは](#プロファイルとは)
-- [プロファイルの作成](#プロファイルの作成)
-- [プロファイルの切り替え](#プロファイルの切り替え)
-- [プロファイルの削除](#プロファイルの削除)
-- [使用例](#使用例)
-- [ベストプラクティス](#ベストプラクティス)
+[ドキュメントインデックス](./index.md) > プロファイル管理ガイド
+
+## 概要
+
+MdTexでは、複数の設定プロファイルを作成・管理できます。異なる用途（論文、スライド、レポートなど）で異なる設定を使い分けることができます。
 
 ---
 
@@ -85,23 +87,6 @@ MdTexでは、複数の設定プロファイルを作成・管理できます。
 2. ドロップダウンメニューから目的のプロファイルを選択
 3. 設定が自動的に保存されます
 
-### ショートカットでの切り替え
-
-現在、プロファイルのショートカット切り替えは組み込まれていません。以下のワークアラウンドがあります：
-
-**方法1: QuickAddプラグインを使用**
-```javascript
-// QuickAddのMacroでの使用例
-const {update} = this.app.plugins.plugins["mdtex-plugin"].settings;
-this.app.plugins.plugins["mdtex-plugin"].settings.activeProfile = "論文用";
-await this.app.plugins.plugins["mdtex-plugin"].saveSettings();
-new Notice("プロファイルを「論文用」に切り替えました");
-```
-
-**方法2: コマンドパレットから設定画面を開く**
-- Cmd/Ctrl+P → "MdTexプラグイン設定"
-- プロファイルを選択
-
 ---
 
 ## プロファイルの削除
@@ -157,12 +142,7 @@ new Notice("プロファイルを「論文用」に切り替えました");
   LaTeXプリアンブル: |
     \usepackage{microtype}
     \usepackage{luatexja}
-    \usepackage[noto-otf]{luatexja-preset}
-    \setmainfont{Noto Sans CJK JP}
-    \setsansfont{Noto Sans CJK JP}
 ```
-
-**詳細**: [Beamerガイド](./beamer-guide.md)
 
 ### 例3: レポート用プロファイル
 
@@ -178,31 +158,6 @@ new Notice("プロファイルを「論文用」に切り替えました");
   ページ番号: 有効
   出力ディレクトリ: ./reports
   Pandoc追加引数: --toc
-```
-
-### 例4: LaTeXソース出力用
-
-**目的**: LaTeXソースファイルの生成（手動調整用）
-
-```yaml
-プロファイル名: LaTeXソース用
-設定:
-  出力フォーマット: latex
-  中間ファイルを削除: 無効（.texファイルを保持）
-  LaTeXプリアンブル: 最小限の設定
-```
-
-### 例5: DOCX出力用
-
-**目的**: Microsoft Word文書の生成
-
-```yaml
-プロファイル名: Word用
-設定:
-  出力フォーマット: docx
-  Pandoc追加引数: --reference-doc=reference.docx
-  高度なLaTeXコマンド: 有効
-  Luaフィルタのパス: tex-to-docx.lua
 ```
 
 ---
@@ -245,24 +200,6 @@ new Notice("プロファイルを「論文用」に切り替えました");
 - 注意: pandoc-crossrefは無効
 ```
 
-### 4. バージョン管理
-
-重要なプロファイル設定はバージョン管理することを検討：
-
-```bash
-# 設定ファイルのバックアップ
-cp .obsidian/plugins/obsidian-mdtex-plugin/data.json \
-   .obsidian/plugins/obsidian-mdtex-plugin/data.json.backup
-```
-
-### 5. 設定のエクスポート/インポート
-
-他のデバイスやVaultと設定を共有する場合：
-
-1. 設定ファイル（`data.json`）をコピー
-2. 新しい環境に配置
-3. Obsidianを再起動
-
 ---
 
 ## トラブルシューティング
@@ -294,9 +231,13 @@ cp .obsidian/plugins/obsidian-mdtex-plugin/data.json \
 
 ---
 
-## 関連ドキュメント
+## 関連トピック
 
 - [設定リファレンス](./configuration.md)
 - [クイックスタート](./quickstart.md)
 - [Beamerガイド](./beamer-guide.md)
 - [トラブルシューティング](./troubleshooting.md)
+
+## 次のトピック
+
+- [設定リファレンス](./configuration.md)

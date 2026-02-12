@@ -29,7 +29,7 @@ export async function expandTransclusions(
   app: App,
   sourcePath: string,
   cache: Map<string, string>,
-  visited: Set<string> = new Set()
+  visited: Set<string> = new Set(),
 ): Promise<string> {
   const regex = /!\[\[(.*?)\]\]/g;
   let lastIndex = 0;
@@ -104,7 +104,9 @@ export async function expandTransclusions(
     const newVisited = new Set(visited).add(targetPath);
     const expanded = await expandTransclusions(sliced, app, targetPath, cache, newVisited);
 
-    const withPrefix = blockquotePrefix ? applyBlockquotePrefix(expanded, blockquotePrefix) : expanded;
+    const withPrefix = blockquotePrefix
+      ? applyBlockquotePrefix(expanded, blockquotePrefix)
+      : expanded;
     result += withPrefix;
     lastIndex = regex.lastIndex;
   }
@@ -140,6 +142,6 @@ function applyBlockquotePrefix(text: string, prefix: string): string {
   const normalized = prefix.endsWith(" ") ? prefix : `${prefix} `;
   return text
     .split("\n")
-    .map((line) => `${normalized}${line}`)
+    .map(line => `${normalized}${line}`)
     .join("\n");
 }

@@ -3,7 +3,12 @@
 // Reason: 追加・削除・マイグレーションをテストしやすくし、重複実装を防ぐため。
 // Related: src/MdTexPluginSettings.ts, src/MdTexPluginSettingTab.ts, src/services/settingsService.ts, src/services/pandocCommandBuilder.ts
 
-import { DEFAULT_PROFILE, DEFAULT_SETTINGS, PandocPluginSettings, ProfileSettings } from "../MdTexPluginSettings";
+import {
+  DEFAULT_PROFILE,
+  DEFAULT_SETTINGS,
+  PandocPluginSettings,
+  ProfileSettings,
+} from "../MdTexPluginSettings";
 
 export interface ProfileState {
   profiles: Record<string, ProfileSettings>;
@@ -17,7 +22,7 @@ export function createDefaultProfile(): ProfileSettings {
 export function addProfile(
   state: ProfileState,
   newProfileName: string,
-  baseProfile?: ProfileSettings
+  baseProfile?: ProfileSettings,
 ): ProfileState {
   const name = newProfileName.trim();
   if (!name || state.profiles[name]) return state;
@@ -34,9 +39,10 @@ export function removeProfile(state: ProfileState, targetName: string): ProfileS
 
   const nextProfiles = { ...state.profiles } as Record<string, ProfileSettings>;
   delete nextProfiles[targetName];
-  const fallback = state.activeProfile === targetName
-    ? Object.keys(nextProfiles)[0] || "Default"
-    : state.activeProfile;
+  const fallback =
+    state.activeProfile === targetName
+      ? Object.keys(nextProfiles)[0] || "Default"
+      : state.activeProfile;
 
   return {
     profiles: nextProfiles,
@@ -44,7 +50,7 @@ export function removeProfile(state: ProfileState, targetName: string): ProfileS
   };
 }
 
-export function migrateSettings(raw: any): PandocPluginSettings {
+export function migrateSettings(raw: unknown): PandocPluginSettings {
   if (!raw) {
     return {
       ...DEFAULT_SETTINGS,
@@ -53,55 +59,79 @@ export function migrateSettings(raw: any): PandocPluginSettings {
     };
   }
 
-  const profiles = buildProfiles(raw);
-  const activeProfile = raw.currentProfileName
-    || raw.activeProfile
-    || Object.keys(profiles)[0]
-    || "Default";
+  const obj = raw as Record<string, unknown>;
+  const profiles = buildProfiles(obj);
+  const activeProfile =
+    (obj.currentProfileName as string) ||
+    (obj.activeProfile as string) ||
+    Object.keys(profiles)[0] ||
+    "Default";
 
   return {
     profiles,
     activeProfile,
-    suppressDeveloperLogs: valueOrDefault(raw.suppressDeveloperLogs, DEFAULT_SETTINGS.suppressDeveloperLogs),
-    enableMarkdownlintFix: valueOrDefault(raw.enableMarkdownlintFix, DEFAULT_SETTINGS.enableMarkdownlintFix),
-    markdownlintCli2Path: valueOrDefault(raw.markdownlintCli2Path, DEFAULT_SETTINGS.markdownlintCli2Path),
-    enableExperimentalMermaid: valueOrDefault(raw.enableExperimentalMermaid, DEFAULT_SETTINGS.enableExperimentalMermaid),
-    latexCommandsYaml: raw.latexCommandsYaml ?? DEFAULT_SETTINGS.latexCommandsYaml,
-    enableLatexPalette: valueOrDefault(raw.enableLatexPalette, DEFAULT_SETTINGS.enableLatexPalette),
-    enableLatexGhost: valueOrDefault(raw.enableLatexGhost, DEFAULT_SETTINGS.enableLatexGhost),
+    suppressDeveloperLogs: valueOrDefault(
+      obj.suppressDeveloperLogs as unknown as boolean,
+      DEFAULT_SETTINGS.suppressDeveloperLogs,
+    ),
+    enableMarkdownlintFix: valueOrDefault(
+      obj.enableMarkdownlintFix as unknown as boolean,
+      DEFAULT_SETTINGS.enableMarkdownlintFix,
+    ),
+    markdownlintCli2Path: valueOrDefault(
+      obj.markdownlintCli2Path as unknown as string,
+      DEFAULT_SETTINGS.markdownlintCli2Path,
+    ),
+    enableExperimentalMermaid: valueOrDefault(
+      obj.enableExperimentalMermaid as unknown as boolean,
+      DEFAULT_SETTINGS.enableExperimentalMermaid,
+    ),
+    latexCommandsYaml: (obj.latexCommandsYaml as string) ?? DEFAULT_SETTINGS.latexCommandsYaml,
+    enableLatexPalette: valueOrDefault(
+      obj.enableLatexPalette as unknown as boolean,
+      DEFAULT_SETTINGS.enableLatexPalette,
+    ),
+    enableLatexGhost: valueOrDefault(
+      obj.enableLatexGhost as unknown as boolean,
+      DEFAULT_SETTINGS.enableLatexGhost,
+    ),
   };
 }
 
-const buildProfiles = (raw: any): Record<string, ProfileSettings> => {
-  if (Array.isArray(raw.profilesArray)) {
-    return fromArray(raw.profilesArray);
+const buildProfiles = (raw: unknown): Record<string, ProfileSettings> => {
+  const obj = raw as Record<string, unknown>;
+  if (Array.isArray(obj.profilesArray)) {
+    return fromArray(obj.profilesArray);
   }
-  if (Array.isArray(raw.profiles)) {
-    return fromArray(raw.profiles);
+  if (Array.isArray(obj.profiles)) {
+    return fromArray(obj.profiles);
   }
-  if (raw.profiles && typeof raw.profiles === "object") {
-    const obj: Record<string, ProfileSettings> = {};
-    for (const [name, profile] of Object.entries(raw.profiles)) {
-      obj[name] = cloneProfile(profile as ProfileSettings);
+  if (obj.profiles && typeof obj.profiles === "object") {
+    const profilesObj: Record<string, ProfileSettings> = {};
+    for (const [name, profile] of Object.entries(obj.profiles)) {
+      profilesObj[name] = cloneProfile(profile as unknown as ProfileSettings);
     }
-    return ensureAtLeastDefault(obj);
+    return ensureAtLeastDefault(profilesObj);
   }
 
   return {
-    Default: cloneProfile(raw as ProfileSettings),
+    Default: cloneProfile(obj as unknown as ProfileSettings),
   };
 };
 
-const fromArray = (arr: any[]): Record<string, ProfileSettings> => {
+const fromArray = (arr: unknown[]): Record<string, ProfileSettings> => {
   const profilesObj: Record<string, ProfileSettings> = {};
   for (const p of arr) {
-    const name = (p as any)?.name || "Default";
+    const profile = p as { name?: string };
+    const name = profile?.name || "Default";
     profilesObj[name] = cloneProfile(p as ProfileSettings);
   }
   return ensureAtLeastDefault(profilesObj);
 };
 
-const ensureAtLeastDefault = (profiles: Record<string, ProfileSettings>): Record<string, ProfileSettings> => {
+const ensureAtLeastDefault = (
+  profiles: Record<string, ProfileSettings>,
+): Record<string, ProfileSettings> => {
   if (Object.keys(profiles).length > 0) return profiles;
   return { Default: createDefaultProfile() };
 };

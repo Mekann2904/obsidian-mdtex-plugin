@@ -39,7 +39,10 @@ export class LatexCommandModal extends FuzzySuggestModal<LatexCommand> {
     this.editor.replaceRange(item.cmd, cursor);
 
     if (typeof item.cursorOffset === "number") {
-      const insertEndOffset = this.editor.posToOffset({ line: cursor.line, ch: cursor.ch + item.cmd.length });
+      const insertEndOffset = this.editor.posToOffset({
+        line: cursor.line,
+        ch: cursor.ch + item.cmd.length,
+      });
       const targetOffset = Math.max(0, insertEndOffset + item.cursorOffset);
       const targetPos = this.editor.offsetToPos(targetOffset);
       this.editor.setCursor(targetPos);

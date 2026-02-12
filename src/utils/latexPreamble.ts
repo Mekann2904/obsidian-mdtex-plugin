@@ -9,12 +9,12 @@ export function cleanLatexPreamble(latexCode: string): string {
   const lines = latexCode.split("\n");
 
   const cleaned = lines
-    .map((line) => {
+    .map(line => {
       // 行中のエスケープされていない % 以降を削除（コメント扱い）
       const withoutComment = line.replace(/(?<!\\)%.*$/, "");
       return withoutComment.trim();
     })
-    .filter((line) => {
+    .filter(line => {
       if (line === "") return false;
       if (line.startsWith("---")) return false;
       if (line.startsWith("header-includes:")) return false;
@@ -33,17 +33,22 @@ export function wrapLatexInYaml(latexCode: string): string {
   if (!body) return "";
   const yamlItems = body
     .split("\n")
-    .map((line) => `    ${line}`)
+    .map(line => `    ${line}`)
     .join("\n");
   return `---\nheader-includes:\n  - |\n${yamlItems}\n---\n`;
 }
 
 export const escapeForLatexCommand = (text: string): string =>
   text
-    .replace(/\\/g, "\\textbackslash{}").replace(/\{/g, "\\{").replace(/\}/g, "\\}")
-    .replace(/\^/g, "\\^").replace(/\~/g, "\\~{}").
-    replace(/#/g, "\\#").replace(/%/g, "\\%")
-    .replace(/&/g, "\\&").replace(/\$/g, "\\$")
+    .replace(/\\/g, "\\textbackslash{}")
+    .replace(/\{/g, "\\{")
+    .replace(/\}/g, "\\}")
+    .replace(/\^/g, "\\^")
+    .replace(/~/g, "\\~{}")
+    .replace(/#/g, "\\#")
+    .replace(/%/g, "\\%")
+    .replace(/&/g, "\\&")
+    .replace(/\$/g, "\\$")
     .replace(/_/g, "\\_");
 
 export interface LabelOverrides {
@@ -72,12 +77,9 @@ export function appendLabelOverrides(latexCode: string, labels: LabelOverrides):
 
   if (!overrides.length) return latexCode.trim();
 
-  const block = [
-    latexCode.trim(),
-    "\\makeatletter",
-    ...overrides,
-    "\\makeatother",
-  ].filter(Boolean).join("\n\n");
+  const block = [latexCode.trim(), "\\makeatletter", ...overrides, "\\makeatother"]
+    .filter(Boolean)
+    .join("\n\n");
 
   return block.trim();
 }

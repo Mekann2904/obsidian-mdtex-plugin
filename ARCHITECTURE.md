@@ -1,0 +1,684 @@
+---
+title: アーキテクチャ
+category: 開発者ドキュメント
+audience: 開発者, メンテナー
+last_updated: 2026-02-12
+tags: [アーキテクチャ, 設計, コンポーネント]
+related: [./CONTRIBUTING.md, docs/development.md, docs/design-decisions.md]
+---
+
+# MdTexプラグインのアーキテクチャ
+
+[ドキュメントインデックス](docs/index.md) > ARCHITECTURE.md
+
+## 概要
+
+このドキュメントでは、MdTexプラグインのアーキテクチャについて包括的に説明します。コンポーネント、データフロー、設計原則を含みます。
+
+MdTexは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、DOCX形式に変換するObsidianプラグインです。責任の分離、テスト容易性、拡張性を考慮して設計されています。
+
+### コアの責任
+
+1. **形式変換**: 外部ツールを使用してMarkdownをPDF/LaTeX/DOCXに変換
+2. **Linting**: コード品質のためにmarkdownlint統合を提供
+3. **コマンド支援**: LaTeXコマンドパレットとインライン補完を提供
+4. **プロファイル管理**: 複数の設定プロファイルをサポート
+5. **I18n対応**: 英語と日本語のローカライズUIを提供
+
+---
+
+## 設計原則
+
+### 1. 責任の分離
+
+各コンポーネントは明確で単一の責任を持っています：
+
+- **MdTexPlugin.ts**: プラグインライフサイクルとコマンド登録
+- **convertService.ts**: 変換ロジックの調整
+- **pandocCommandBuilder.ts**: Pandocコマンド構築（純粋関数）
+- **lintService.ts**: Lint操作
+- **settingsService.ts**: 設定の永続化
+
+### 2. テスト容易性
+
+ビジネスロジックはObsidian API依存から分離されています：
+
+- 可能な限り純粋関数（例: `buildPandocCommand`）
+- サービスの依存性注入（例: `ConvertDeps`）
+- 外部プロセスのモック可能なインターフェース
+
+### 3. 拡張性
+
+- CodeMirror API経由のエディタ拡張
+- Pandoc用のカスタムLuaフィルタ
+- YAMLベースのコマンド定義
+- モジュール式ユーティリティ関数
+
+### 4. エラーハンドリング
+
+ユーザーフィードバックによる優雅なデグレード：
+
+- ユーザー向けエラーの通知
+- デバッグ用コンソールログ
+- 適切な場合、デフォルトへのフォールバック
+
+---
+
+## コンポーネントアーキテクチャ
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      MdTexPlugin                             │
+│  (エントリポイント - ライフサイクルとコマンド登録)           │
+└────────────────┬────────────────────────────────────────────┘
+                 │
+    ┌────────────┼────────────┬────────────┬────────────┐
+    │            │            │            │            │
+    ▼            ▼            ▼            ▼            ▼
+┌────────┐  ┌────────┐  ┌─────────┐  ┌────────┐  ┌─────────┐
+│Convert │  │ Lint   │  │Settings │  │Modal   │  │Suggest  │
+│Service │  │Service │  │Service  │  │(UI)    │  │(UI)     │
+└───┬────┘  └───┬────┘  └────┬────┘  └───┬────┘  └────┬────┘
+    │           │           │            │            │
+    ▼           ▼           ▼            ▼            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    ユーティリティ層                         │
+│  - pandocCommandBuilder                                      │
+│  - processRunner                                             │
+│  - markdownTransforms                                        │
+│  - latexPreamble                                             │
+│  - transclusion                                              │
+│  - mermaidRasterizer                                         │
+│  - pathHelpers                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## データフロー
+
+### PDF変換フロー
+
+```
+ユーザーアクション（コマンド）
+    │
+    ▼
+MdTexPlugin.runConversion()
+    │
+    ▼
+ConvertCurrentPage()
+    │
+    ├───► markdownTransforms
+    │       ├──► expandTransclusions()
+    │       ├──► replaceWikiLinks()
+    │       └──► stripObsidianComments()
+    │
+    ├───► mermaidRasterizer (有効な場合)
+    │       └──► DOM → PNG変換
+    │
+    ├───► lintService.runMarkdownlintFix()
+    │       └──► markdownlint-cli2 --fix
+    │
+    ├───► pandocCommandBuilder.buildPandocCommand()
+    │       └──► 引数配列の構築
+    │
+    └───► processRunner.runCommand()
+            └──► pandoc → lualatexの実行
+```
+
+### Lintフロー
+
+```
+ユーザーアクション（Lintコマンド）
+    │
+    ▼
+LintCurrentNote()
+    │
+    ├───► アクティブファイルのコンテンツを取得
+    │
+    ├───► 一時ファイルに書き込み
+    │
+    └───► diagnosticService.runDiagnostics()
+            └──► markdownlint-cli2
+            │
+            └───► 出力の解析 → 結果の表示
+```
+
+---
+
+## サービス層
+
+### ConvertService
+
+**場所**: `src/services/convertService.ts`
+
+**責任**:
+
+- 変換ワークフローの調整
+- Markdownコンテンツの変換（トランスクルージョン、WikiLinks）
+- Mermaid図のラスター化処理
+- 変換前のLint実行
+- processRunner経由のPandoc呼び出し
+
+**主要な関数**:
+
+```typescript
+export async function convertCurrentPage(
+  ctx: PluginContext,
+  deps: ConvertDeps,
+  format: OutputFormat
+): Promise<void>
+```
+
+**依存関係**:
+
+- `PluginContext` - アプリ状態と設定
+- `ConvertDeps` - 注入された依存関係（Lintサービス）
+- `pandocCommandBuilder` - コマンド構築
+- `processRunner` - 外部プロセス実行
+
+### LintService
+
+**場所**: `src/services/lintService.ts`
+
+**責任**:
+
+- アクティブファイルでのmarkdownlint実行
+- 診断結果の表示
+- 自動修正機能の提供
+
+**主要な関数**:
+
+```typescript
+export async function lintCurrentNote(ctx: PluginContext): Promise<void>
+export async function runMarkdownlintFix(ctx: PluginContext, targetPath: string): Promise<void>
+```
+
+### DiagnosticService
+
+**場所**: `src/services/diagnosticService.ts`
+
+**責任**:
+
+- markdownlint-cli2の実行
+- 出力を構造化形式に解析
+- エラーコードを人間が読めるメッセージにマッピング
+
+### SettingsService
+
+**場所**: `src/services/settingsService.ts`
+
+**責任**:
+
+- ストレージからの設定読み込み
+- ストレージへの設定保存
+- 設定構造の検証
+
+**主要な関数**:
+
+```typescript
+export async function loadSettings(loadFn: () => Promise<string>): Promise<PandocPluginSettings>
+export async function saveSettings(settings: PandocPluginSettings, saveFn: (data: string) => Promise<void>): Promise<void>
+```
+
+### ProfileManager
+
+**場所**: `src/services/profileManager.ts`
+
+**責任**:
+
+- プロファイルCRUD操作
+- プロファイル検証
+- アクティブプロファイル管理
+
+**主要な関数**:
+
+```typescript
+export function createProfile(profiles: Record<string, ProfileSettings>, name: string): Record<string, ProfileSettings>
+export function deleteProfile(profiles: Record<string, ProfileSettings>, name: string): Record<string, ProfileSettings>
+export function renameProfile(profiles: Record<string, ProfileSettings>, oldName: string, newName: string): Record<string, ProfileSettings>
+```
+
+---
+
+## ユーティリティ層
+
+### PandocCommandBuilder
+
+**場所**: `src/services/pandocCommandBuilder.ts`
+
+**責任**:
+
+- Pandocコマンド引数の構築
+- 形式固有オプションの処理
+- リソースパスの構築
+- クロスリファレンスラベルの適用
+
+**設計**: 副作用のない純粋関数、高テスト可能性
+
+**主要な関数**:
+
+```typescript
+export function buildPandocCommand(options: PandocCommandOptions): PandocCommandResult
+export function getInputFormatArgs(format: OutputFormat): string[]
+```
+
+### ProcessRunner
+
+**場所**: `src/utils/processRunner.ts`
+
+**責任**:
+
+- 外部コマンドの実行（pandoc, lualatex, markdownlint）
+- stdout/stderrストリームの処理
+- タイムアウト処理の提供
+
+**主要な関数**:
+
+```typescript
+export async function runCommand(options: ProcessOptions): Promise<ProcessResult>
+export async function killProcess(pid: number): Promise<void>
+```
+
+### MarkdownTransforms
+
+**場所**: `src/utils/markdownTransforms.ts`
+
+**責任**:
+
+- Obsidianトランスクルージョン（`![[file]]`）の展開
+- WikiLinksをMarkdownリンクに変換
+- Obsidian固有のコメントの削除
+- ドラフトモード変換の適用
+
+**主要な関数**:
+
+```typescript
+export async function expandTransclusions(app: App, content: string, basePath: string): Promise<string>
+export function replaceWikiLinks(content: string): string
+export function stripObsidianComments(content: string): string
+```
+
+### Transclusion
+
+**場所**: `src/utils/transclusion.ts`
+
+**責任**:
+
+- 再帰的トランスクルージョン展開
+- 循環参照検出
+- 深度制限
+
+### MermaidRasterizer
+
+**場所**: `src/utils/mermaidRasterizer.ts`
+
+**責任**:
+
+- Mermaid図をPNGに変換
+- ObsidianのDOM描画を使用
+- 図解析エラーの処理
+
+**主要な関数**:
+
+```typescript
+export async function rasterizeMermaidBlocks(app: App, content: string): Promise<string>
+```
+
+### PathHelpers
+
+**場所**: `src/utils/pathHelpers.ts`
+
+**責任**:
+
+- プラットフォーム間でのファイルパスの正規化
+- ObsidianパスとOSパス間の変換
+- リソースパスリストの処理
+
+**主要な関数**:
+
+```typescript
+export function normalizeFsPath(filePath: string): string
+export function joinFsPath(...parts: string[]): string
+export function normalizeResourcePathList(path: string): string
+```
+
+### LatexPreamble
+
+**場所**: `src/utils/latexPreamble.ts`
+
+**責任**:
+
+- LaTeXプリアンブルのクリーニングと検証
+- ラベルオーバーライドの適用
+- カスタムプリアンブルとデフォルトのマージ
+
+**主要な関数**:
+
+```typescript
+export function cleanLatexPreamble(preamble: string): string
+export function appendLabelOverrides(preamble: string, profile: ProfileSettings): string
+```
+
+### CalloutTheme
+
+**場所**: `src/utils/calloutTheme.ts`
+
+**責任**:
+
+- コールアウトボックスのLaTeXコード生成
+- ObsidianコールアウトタイプからLaTeX tcolorboxスタイルへのマッピング
+
+---
+
+## UIコンポーネント
+
+### SettingTab
+
+**場所**: `src/MdTexPluginSettingTab.ts`
+
+**責任**:
+
+- 設定UIの表示
+- プロファイル管理UIの処理
+- ユーザー入力の検証
+- 設定変更の保存
+
+**主要なクラス**:
+
+```typescript
+class PandocPluginSettingTab extends PluginSettingTab {
+  display(): void
+  save(): void
+}
+```
+
+### LatexCommandModal
+
+**場所**: `src/modal/LatexCommandModal.ts`
+
+**責任**:
+
+- 検索可能なコマンドパレットの表示
+- 検索クエリによるコマンドのフィルタリング
+- カーソル位置への選択コマンドの挿入
+
+---
+
+## 拡張システム
+
+### LatexGhostTextExtension
+
+**場所**: `src/extensions/latexGhostText.ts`
+
+**責任**:
+
+- インラインゴーストテキストサジェストの提供
+- 補完用のTab/Enter処理
+- CodeMirror 6との統合
+
+**主要な関数**:
+
+```typescript
+export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension
+```
+
+### Editor Suggesters
+
+**場所**:
+- `src/suggest/LatexEditorSuggest.ts` - LaTeXコマンドサジェスト
+- `src/suggest/LabelEditorSuggest.ts` - ラベルサジェスト（編集用）
+- `src/suggest/LabelReferenceSuggest.ts` - ラベルサジェスト（参照用）
+
+**責任**:
+
+- インライン補完の提供
+- トリガー文字（`@`, `#`）の処理
+- コンテストによるサジェストのフィルタリング
+
+---
+
+## 設定管理
+
+### 設定構造
+
+**場所**: `src/MdTexPluginSettings.ts`
+
+**型定義**:
+
+```typescript
+export interface PandocPluginSettings {
+  activeProfile: string;
+  profiles: Record<string, ProfileSettings>;
+  enableLatexPalette: boolean;
+  enableLatexGhost: boolean;
+  latexCommandsYaml: string;
+  enableMarkdownlintFix: boolean;
+  markdownlintPath: string;
+  hideDevLogs: boolean;
+  enableMermaidExperimental: boolean;
+}
+
+export interface ProfileSettings {
+  outputFormat: OutputFormat;
+  pandocPath: string;
+  outputDir: string;
+  latexEngine: string;
+  documentClass: string;
+  documentClassOptions: string;
+  fontSize: string;
+  useMarginSize: boolean;
+  marginSize: string;
+  showPageNumbers: boolean;
+  imageScale: string;
+  latexPreamble: string;
+  usePandocCrossref: boolean;
+  pandocCrossrefPath: string;
+  advancedLatexCommands: boolean;
+  luaFilterPath: string;
+  extraArgs: string;
+  standalone: boolean;
+  searchDirectory: string;
+  removeTempFiles: boolean;
+  figureLabel: string;
+  figPrefix: string;
+  tableLabel: string;
+  tblPrefix: string;
+  codeLabel: string;
+  lstPrefix: string;
+  equationLabel: string;
+  eqnPrefix: string;
+}
+```
+
+### 永続化
+
+設定はプラグインディレクトリ内の `data.json` に保存されます：
+
+```
+.obsidian/plugins/obsidian-mdtex-plugin/data.json
+```
+
+### 検証
+
+設定はロード時に検証され、デフォルトへのフォールバックされます：
+
+```typescript
+export const DEFAULT_SETTINGS: PandocPluginSettings = { ... };
+export const DEFAULT_PROFILE: ProfileSettings = { ... };
+```
+
+---
+
+## 国際化
+
+### アーキテクチャ
+
+- **ロケールファイル**: `src/lang/locale/{en,ja}.ts`
+- **ヘルパー**: `src/lang/helpers.ts`
+- **型安全性**: 共有の `TranslationKeys` 型
+
+### 新しい翻訳の追加
+
+1. `src/lang/locale/en.ts` にキーを追加
+2. `src/lang/locale/ja.ts` に翻訳を追加
+3. `t()` ヘルパー経由で使用：
+
+```typescript
+import { t } from "./lang/helpers";
+const message = t("setting_output_format_name");
+```
+
+### ロケール検出
+
+ロケールはObsidianの `moment.locale()` に基づいて決定されます：
+
+```typescript
+const locale = moment.locale();
+const lang = locale.startsWith("ja") ? "ja" : "en";
+```
+
+---
+
+## テスト戦略
+
+### ユニットテスト
+
+`src/**/*.test.ts` に配置：
+
+- `pandocCommandBuilder.test.ts` - コマンド構築ロジック
+- `convertService.test.ts` - 変換ワークフロー
+- `profileManager.test.ts` - プロファイルCRUD操作
+- `diagnosticService.test.ts` - 出力解析
+
+### テストフレームワーク
+
+- **フレームワーク**: Vitest
+- **カバレッジ**: `@vitest/coverage-v8`
+- **ランナー**: `npm test`
+
+### モック
+
+Obsidian APIは `vitest` と `jsdom` を使用してモックされます：
+
+```typescript
+import { describe, it, expect, vi } from "vitest";
+
+describe("Feature", () => {
+  it("should test something", () => {
+    const mockApp = createMockApp();
+    // テスト実装
+  });
+});
+```
+
+---
+
+## パフォーマンスの考慮事項
+
+### 変換時間の最適化
+
+- **ドラフトモード**: `--draft`フラグによる低品質画像埋め込み
+- **中間ファイル**: デバッグ用のオプションクリーンアップ
+- **並列処理**: バッチ変換の検討
+
+### メモリ管理
+
+- **一時ファイル**: 使用後にクリーンアップ（設定可能）
+- **大規模ファイル**: 可能な限り入力/出力のストリーミング
+- **キャッシュ**: トランスクルージョン結果のキャッシュを検討
+
+### 非同期操作
+
+長時間実行される操作はすべてasync/awaitを使用：
+
+```typescript
+export async function convertCurrentPage(...): Promise<void> {
+  // 非ブロッキング操作
+}
+```
+
+---
+
+## セキュリティの考慮事項
+
+### コマンドインジェクション防止
+
+- 配列ベースのコマンド実行を使用（テンプレート文字列は使用しない）
+- パス内のユーザー入力を検証
+- LaTeX内の特殊文字をエスケープ
+
+### パストラバーサル防止
+
+- 全パスを正規化
+- 可能な限りvaultディレクトリに制限
+- ファイル拡張子の検証
+
+### プロセス分離
+
+- 外部ツールは別プロセスとして実行
+- ハングしたプロセスのタイムアウト処理
+- リソース制限の考慮
+
+---
+
+## エラーハンドリング戦略
+
+### エラーカテゴリ
+
+1. **ユーザーエラー**（ファイル不在、設定無効） - ユーザーフレンドリーなメッセージを表示
+2. **外部ツールエラー**（pandoc失敗） - ドキュメントへのリンク付きstderrを表示
+3. **プラグインエラー**（予期しない状態） - 詳細をログ、一般的なメッセージを表示
+
+### エラーフロー
+
+```
+エラー発生
+    │
+    ├───► コンソールにログ（非表示でない場合）
+    │
+    ├───► エラーメッセージの解析
+    │
+    ├───► ユーザーフレンドリーな通知の作成
+    │
+    └───► ステータスバーの更新
+```
+
+### フォールバック動作
+
+- プロファイル不在: DEFAULT_PROFILEにフォールバック
+- 無効なコマンド: ビルトインデフォルトを使用
+- 依存関係不在: インストール手順をユーザーに提示
+
+---
+
+## 今後のアーキテクチャの考慮事項
+
+### 可能な改善
+
+1. **プラグインシステム**: ユーザー定義のコンバータ/フィルタを許可
+2. **イベントバス**: より良い拡張性のためのコンポーネント分離
+3. **状態管理**: UI更新のリアクティブ状態を検討
+4. **ワーカースレッド**: 計算量の多い処理をオフロード
+5. **進捗インジケーター**: 長時間操作のより良いフィードバック
+
+### 拡張ポイント
+
+- カスタムコンバータ（PDF/LaTeX/DOCXを超える）
+- ユーザー定義Markdown変換
+- カスタムサジェスター
+- テーマ可能なUIコンポーネント
+
+---
+
+## 関連トピック
+
+- [開発ガイド](docs/development.md)
+- [テストガイド](docs/testing.md)
+- [I18nガイド](docs/i18n.md)
+- [APIリファレンス](docs/API.md)
+- [設計決定](docs/design-decisions.md)
+
+## 次のトピック
+
+- [開発ガイド](docs/development.md)

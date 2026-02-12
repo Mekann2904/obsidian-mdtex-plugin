@@ -40,9 +40,9 @@ export interface ProfileSettings {
 }
 
 /**
-* プラグイン全体の設定インタフェース
-* 複数のプロファイルと、現在アクティブなプロファイル名を保持する
-*/
+ * プラグイン全体の設定インタフェース
+ * 複数のプロファイルと、現在アクティブなプロファイル名を保持する
+ */
 export interface PandocPluginSettings {
   profiles: { [key: string]: ProfileSettings };
   activeProfile: string;
@@ -56,8 +56,8 @@ export interface PandocPluginSettings {
 }
 
 /**
-* デフォルトのヘッダIncludes（YAMLを除去した純粋なLaTeXプリセット）
-*/
+ * デフォルトのヘッダIncludes（YAMLを除去した純粋なLaTeXプリセット）
+ */
 export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
 
 % LuaLaTeX + 日本語
@@ -217,47 +217,47 @@ export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
 \\makeatother`.trim();
 
 /**
-* デフォルトのプロファイル設定
-*/
+ * デフォルトのプロファイル設定
+ */
 export const DEFAULT_PROFILE: ProfileSettings = {
-pandocPath: "pandoc",
-pandocExtraArgs: "",
-searchDirectory: "", // ユーザー環境に依存するためデフォルトは空に
-headerIncludes: DEFAULT_LATEX_PREAMBLE,
-outputDirectory: "",
-deleteIntermediateFiles: false,
-pandocCrossrefPath: "pandoc-crossref", // PATHにあることを期待
-usePandocCrossref: true,
-imageScale: "width=0.8\\textwidth",
-usePageNumber: true,
-marginSize: "25mm",
-useMarginSize: true,
-fontSize: "11pt",
-outputFormat: "pdf",
-latexEngine: "lualatex",
-figureLabel: "Figure",
-figPrefix: "Fig.",
-tableLabel: "Table",
-tblPrefix: "Table",
-codeLabel: "Listing",
-lstPrefix: "Listing",
-equationLabel: "Equation",
-eqnPrefix: "Eq.",
-documentClass: "ltjarticle",
-documentClassOptions: "",
-useStandalone: true,
-enableAdvancedTexCommands: true,
-luaFilterPath: "tex-to-docx.lua",
+  pandocPath: "pandoc",
+  pandocExtraArgs: "",
+  searchDirectory: "", // ユーザー環境に依存するためデフォルトは空に
+  headerIncludes: DEFAULT_LATEX_PREAMBLE,
+  outputDirectory: "",
+  deleteIntermediateFiles: false,
+  pandocCrossrefPath: "pandoc-crossref", // PATHにあることを期待
+  usePandocCrossref: true,
+  imageScale: "width=0.8\\textwidth",
+  usePageNumber: true,
+  marginSize: "25mm",
+  useMarginSize: true,
+  fontSize: "11pt",
+  outputFormat: "pdf",
+  latexEngine: "lualatex",
+  figureLabel: "Figure",
+  figPrefix: "Fig.",
+  tableLabel: "Table",
+  tblPrefix: "Table",
+  codeLabel: "Listing",
+  lstPrefix: "Listing",
+  equationLabel: "Equation",
+  eqnPrefix: "Eq.",
+  documentClass: "ltjarticle",
+  documentClassOptions: "",
+  useStandalone: true,
+  enableAdvancedTexCommands: true,
+  luaFilterPath: "tex-to-docx.lua",
 };
 
 /**
-* プラグイン全体のデフォルト設定
-*/
+ * プラグイン全体のデフォルト設定
+ */
 export const DEFAULT_SETTINGS: PandocPluginSettings = {
   profiles: {
-      'Default': DEFAULT_PROFILE
+    Default: DEFAULT_PROFILE,
   },
-  activeProfile: 'Default',
+  activeProfile: "Default",
   suppressDeveloperLogs: true,
   enableMarkdownlintFix: false,
   markdownlintCli2Path: "",

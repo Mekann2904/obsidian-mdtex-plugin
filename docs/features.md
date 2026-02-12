@@ -1,21 +1,19 @@
-# 機能一覧
-
-MdTexプラグインの各機能を詳しく解説します。
-
+---
+title: 機能一覧
+category: ユーザードキュメント
+audience: 既存ユーザー
+last_updated: 2026-02-12
+tags: [機能, 機能一覧]
+related: [docs/quickstart.md, docs/configuration.md, docs/latex-palette.md]
 ---
 
-## 目次
+# 機能一覧
 
-- [PDF変換](#pdf変換)
-- [LaTeXソース出力](#latexソース出力)
-- [DOCX変換](#docx変換)
-- [LaTeXコマンドパレット](#latexコマンドパレット)
-- [Lint/自動修正](#lint自動修正)
-- [クロスリファレンス](#クロスリファレンス)
-- [トランスクルージョン](#トランスクルージョン)
-- [Mermaid図の変換](#mermaid図の変換)
-- [WikiLinkの処理](#wikilinkの処理)
-- [ステータスバー](#ステータスバー)
+[ドキュメントインデックス](./index.md) > 機能一覧
+
+## 概要
+
+MdTexプラグインの各機能を詳しく解説します。PDF変換、LaTeXコマンドパレット、Lint、クロスリファレンスなど、プラグインの全機能について説明します。
 
 ---
 
@@ -384,10 +382,14 @@ Pandocの追加引数を使用して、細かい制御が可能です：
 
 ---
 
-## 関連ドキュメント
+## 関連トピック
 
 - [クイックスタート](./quickstart.md)
 - [設定リファレンス](./configuration.md)
 - [プロファイル管理](./profiles.md)
 - [LaTeXコマンドパレット](./latex-palette.md)
 - [トラブルシューティング](./troubleshooting.md)
+
+## 次のトピック
+
+- [設定リファレンス](./configuration.md)

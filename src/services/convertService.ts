@@ -23,7 +23,7 @@ import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
 import { t } from "../lang/helpers";
 import { buildPandocCommand, OutputFormat, PandocCommandResult } from "./pandocCommandBuilder";
 import { runCommand } from "../utils/processRunner";
-import { joinFsPath, normalizeFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
+import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
@@ -47,20 +47,18 @@ function parseDraftFlag(extraArgs: string): { extras: string[]; isDraft: boolean
   if (!extraArgs || !extraArgs.trim()) return { extras: [], isDraft: false };
 
   let isDraft = false;
-  const extras = extraArgs
-    .split(/\s+/)
-    .filter((arg) => {
-      if (arg === "--draft") {
-        isDraft = true;
-        return false;
-      }
-      if (arg.startsWith("--draft=")) {
-        const value = arg.split("=")[1]?.toLowerCase();
-        isDraft = value !== "0" && value !== "false";
-        return false;
-      }
-      return !!arg;
-    });
+  const extras = extraArgs.split(/\s+/).filter(arg => {
+    if (arg === "--draft") {
+      isDraft = true;
+      return false;
+    }
+    if (arg.startsWith("--draft=")) {
+      const value = arg.split("=")[1]?.toLowerCase();
+      isDraft = value !== "0" && value !== "false";
+      return false;
+    }
+    return !!arg;
+  });
 
   return { extras, isDraft };
 }
@@ -117,7 +115,9 @@ function detectDraftInFrontmatter(markdown: string): boolean {
 function resolveResourcePath(profile: ProfileSettings, vaultBasePath: string): string {
   const configured = profile.searchDirectory?.trim();
   if (configured) {
-    const resolved = path.isAbsolute(configured) ? configured : joinFsPath(vaultBasePath, configured);
+    const resolved = path.isAbsolute(configured)
+      ? configured
+      : joinFsPath(vaultBasePath, configured);
     return normalizeResourcePathList(resolved);
   }
   return normalizeResourcePathList(vaultBasePath);
@@ -126,7 +126,7 @@ function resolveResourcePath(profile: ProfileSettings, vaultBasePath: string): s
 export async function convertCurrentPage(
   ctx: PluginContext,
   deps: ConvertDeps,
-  format: OutputFormat
+  format: OutputFormat,
 ) {
   const startedAt = Date.now();
 
@@ -161,7 +161,7 @@ export async function convertCurrentPage(
   const outputDir = activeProfile.outputDirectory || vaultBasePath;
   try {
     await fs.access(outputDir);
-  } catch (err) {
+  } catch {
     new Notice(t("notice_output_dir_missing", [outputDir]));
     return;
   }
@@ -220,7 +220,7 @@ export async function convertCurrentPage(
       try {
         await deps.runMarkdownlintFix(ctx, intermediateFilename);
         content = await fs.readFile(intermediateFilename, "utf8");
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error(e);
         new Notice(t("notice_markdownlint_failed_continue"));
         // lint 失敗時は元の content をそのまま使う
@@ -244,7 +244,7 @@ export async function convertCurrentPage(
       eqnPrefix: activeProfile.eqnPrefix,
     });
 
-    // 
+    //
     // LaTeX の \maketitle はタイトルページを強制的に plain スタイルにする。
     // ページ番号をオフにしても、plain スタイルのままだと1ページ目だけ数字が出る。
     // plain → empty に差し替えてタイトルページも無番号に統一する。
@@ -273,20 +273,26 @@ export async function convertCurrentPage(
     // 有効な WikiLink のみ [[ ]] を外してテキストにする
     content = unwrapValidWikiLinks(content, ctx.app, activeFile.path);
 
-    content = await replaceWikiLinksRecursivelyAsync(content, ctx.app, activeProfile, activeFile.path, cache);
+    content = await replaceWikiLinksRecursivelyAsync(
+      content,
+      ctx.app,
+      activeProfile,
+      activeFile.path,
+      cache,
+    );
 
     if (format === "docx") {
       content = content
-        .replace(/\\textbf\{([^}]+)\}/g, '**$1**')
-        .replace(/\\textit\{([^}]+)\}/g, '*$1*')
-        .replace(/\\footnote\{([^}]+)\}/g, '^[$1]')
+        .replace(/\\textbf\{([^}]+)\}/g, "**$1**")
+        .replace(/\\textit\{([^}]+)\}/g, "*$1*")
+        .replace(/\\footnote\{([^}]+)\}/g, "^[$1]")
         .replace(/\\centerline\{([^}]+)\}/g, '::: {custom-style="Center"}\n$1\n:::')
         .replace(/\\rightline\{([^}]+)\}/g, '::: {custom-style="Right"}\n$1\n:::')
-        .replace(/\\vspace\{[^}]+\}/g, '\n\n')
+        .replace(/\\vspace\{[^}]+\}/g, "\n\n")
         .replace(/\\kenten\{([^}]+)\}/g, '[$1]{custom-style="Kenten"}')
         .replace(/\\newpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
         .replace(/\\clearpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
-        .replace(/\\noindent/g, '');
+        .replace(/\\noindent/g, "");
     }
 
     if (lintEnabled) {
@@ -302,7 +308,7 @@ export async function convertCurrentPage(
         headerFilePath,
         pandocExtraArgs,
         sourceDir,
-        resourcePath
+        resourcePath,
       );
 
       if (success && activeProfile.deleteIntermediateFiles) {
@@ -323,7 +329,7 @@ export async function convertCurrentPage(
         path.dirname(inputFilePath),
         headerFilePath,
         pandocExtraArgs,
-        resourcePath
+        resourcePath,
       );
 
       if (success && activeProfile.deleteIntermediateFiles) {
@@ -338,8 +344,9 @@ export async function convertCurrentPage(
         new Notice(t("notice_pandoc_stdin_failed"));
       }
     }
-  } catch (error: any) {
-    new Notice(t("notice_error_generating", [error?.message || error]));
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    new Notice(t("notice_error_generating", [errorMessage]));
   } finally {
     const tempRoot = path.resolve(os.tmpdir());
     const tempRootReal = await fs.realpath(tempRoot).catch(() => tempRoot);
@@ -390,7 +397,7 @@ async function runPandoc(
   headerFilePath: string,
   pandocExtraArgs: string[],
   workingDirOverride?: string,
-  resourcePathOverride?: string
+  resourcePathOverride?: string,
 ): Promise<boolean> {
   let plan: PandocExecutionPlan | null = null;
 
@@ -421,7 +428,7 @@ async function runPandocWithStdin(
   workingDir: string,
   headerFilePath: string,
   pandocExtraArgs: string[],
-  resourcePathOverride?: string
+  resourcePathOverride?: string,
 ): Promise<boolean> {
   let plan: PandocExecutionPlan | null = null;
 
@@ -509,7 +516,8 @@ async function buildPandocExecutionPlan(params: {
       workingDir: params.workingDir,
       extraArgs: params.pandocExtraArgs,
       luaFilters,
-      resourcePath: (params.resourcePath ?? params.profile.searchDirectory.trim()) || params.workingDir,
+      resourcePath:
+        (params.resourcePath ?? params.profile.searchDirectory.trim()) || params.workingDir,
       useStdin: params.useStdin,
     });
 
@@ -525,24 +533,25 @@ const TEMP_PREFIXES = ["mdtex-lua-", "mdtex-mermaid-", "mdtex-"];
 async function cleanupTemporaryFiles(files: string[]) {
   if (!files?.length) return;
 
-  const uniq = Array.from(new Set(files.map((f) => path.resolve(f))));
+  const uniq = Array.from(new Set(files.map(f => path.resolve(f))));
   const tempRoot = path.resolve(os.tmpdir());
   const tempRootReal = await fs.realpath(tempRoot).catch(() => tempRoot);
 
   await Promise.allSettled(
-    uniq.map(async (file) => {
+    uniq.map(async file => {
       try {
         const resolved = path.resolve(file);
         if (!(await isInsideBaseDir(resolved, tempRootReal))) return;
         const base = path.basename(resolved);
-        if (!TEMP_PREFIXES.some((p) => base.startsWith(p))) return;
+        if (!TEMP_PREFIXES.some(p => base.startsWith(p))) return;
         await fs.rm(resolved, { recursive: true, force: false, maxRetries: 2, retryDelay: 100 });
-      } catch (err: any) {
-        if (err?.code !== "ENOENT") {
+      } catch (err: unknown) {
+        const errorObj = err as { code?: string };
+        if (errorObj.code !== "ENOENT") {
           console.warn(`Failed to delete temporary file: ${file}`, err);
         }
       }
-    })
+    }),
   );
 }
 
@@ -578,7 +587,7 @@ async function executePandocCommand(
   plan: PandocExecutionPlan,
   ctx: PluginContext,
   outputFile: string,
-  inputContent?: string
+  inputContent?: string,
 ): Promise<boolean> {
   const handlers = createPandocNoticeHandlers(ctx);
 
@@ -598,8 +607,9 @@ async function executePandocCommand(
 
     new Notice(t("notice_pandoc_exit_code", [result.exitCode]));
     return false;
-  } catch (error: any) {
-    new Notice(t("notice_pandoc_launch_error", [error?.message ?? error]));
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    new Notice(t("notice_pandoc_launch_error", [errorMessage]));
     return false;
   }
 }

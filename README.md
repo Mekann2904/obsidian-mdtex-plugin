@@ -1,4 +1,17 @@
+---
+title: MdTexプラグイン
+category: ユーザードキュメント
+audience: 新規ユーザー, 既存ユーザー, 開発者
+last_updated: 2026-02-12
+tags: [概要, インストール, 機能]
+related: [docs/quickstart.md, docs/features.md, CONTRIBUTING.md]
+---
+
 # MdTexプラグイン
+
+[ドキュメントインデックス](docs/index.md) > README
+
+## 概要
 
 MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-project.org/) を使用してMarkdownをPDFに変換するObsidian用プラグインです。特に日本語テキストの処理を得意としており、多言語ドキュメントを扱うユーザーに適しています。
 
@@ -44,7 +57,7 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
    brew install pandoc
    brew install --cask mactex
    pip install pandoc-crossref
-   
+
    # 確認
    pandoc --version
    lualatex --version
@@ -184,6 +197,8 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 
 ## 機能詳細
 
+ドキュメントインデックス：[ドキュメント一覧](./docs/index.md)
+
 各機能の詳細な使い方：
 
 - [クイックスタートガイド](./docs/quickstart.md) - 5分で始める
@@ -193,6 +208,11 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 - [機能一覧](./docs/features.md) - 各機能の詳細説明
 - [Beamerガイド](./docs/beamer-guide.md) - スライド作成
 - [トラブルシューティング](./docs/troubleshooting.md) - 問題解決
+
+### サンプルファイル
+
+- [sample.md](./sample.md) - Markdown サンプルファイル
+- [sample-beamer.md](./sample-beamer.md) - Beamer スライド サンプルファイル
 
 ---
 
@@ -208,8 +228,33 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 
 貢献は歓迎します！
 
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - 貢献ガイドライン
+- [開発ガイド](./docs/development.md) - 開発者向けガイド
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - アーキテクチャ解説
 - バグ報告や新機能の提案：[GitHub Issues](https://github.com/Mekann2904/obsidian-mdtex-plugin/issues)
 - プルリクエストも受け付けています
+
+---
+
+## 開発者向けドキュメント
+
+開発者向けの詳細なドキュメント：
+
+- [CONTRIBUTING.md](./CONTRIBUTING.md) - 貢献ガイドライン
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - プロジェクトアーキテクチャ
+- [docs/design-decisions.md](./docs/design-decisions.md) - 設計決定の記録
+
+### 開発ガイド
+
+- [docs/development.md](./docs/development.md) - 開発環境設定とワークフロー
+- [docs/testing.md](./docs/testing.md) - テストの書き方と実行
+- [APIリファレンス](./docs/API.md) - APIドキュメント
+
+### 各機能のドキュメント
+
+- [docs/i18n.md](./docs/i18n.md) - 国際化(i18n)ガイド
+- [docs/release-guide.md](./docs/release-guide.md) - リリースプロセス
+- [docs/dev-latex-palette.md](./docs/dev-latex-palette.md) - LaTeXコマンドパレット開発ノート
 
 ---
 
@@ -230,5 +275,18 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 
 ### 開発者情報
 
-開発者: **Mekann**  
+開発者: **Mekann**
 GitHub: [Mekann2904](https://github.com/Mekann2904)
+
+---
+
+## 関連トピック
+
+- [クイックスタートガイド](docs/quickstart.md)
+- [機能一覧](docs/features.md)
+- [設定リファレンス](docs/configuration.md)
+- [貢献ガイドライン](CONTRIBUTING.md)
+
+## 次のトピック
+
+- [クイックスタートガイド](docs/quickstart.md)

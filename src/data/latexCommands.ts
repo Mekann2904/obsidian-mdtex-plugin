@@ -73,10 +73,12 @@ function escapeBareBackslashes(yamlText: string): string {
   return out;
 }
 
-function sanitizeCommand(raw: any): LatexCommand | null {
-  if (!raw || typeof raw.cmd !== "string" || typeof raw.desc !== "string") return null;
-  const offset = typeof raw.cursorOffset === "number" ? raw.cursorOffset : undefined;
-  return { cmd: raw.cmd, desc: raw.desc, cursorOffset: offset };
+function sanitizeCommand(raw: unknown): LatexCommand | null {
+  if (!raw || typeof raw !== "object" || raw === null) return null;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.cmd !== "string" || typeof obj.desc !== "string") return null;
+  const offset = typeof obj.cursorOffset === "number" ? obj.cursorOffset : undefined;
+  return { cmd: obj.cmd, desc: obj.desc, cursorOffset: offset };
 }
 
 export function buildLatexCommands(yamlText?: string): LatexCommand[] {
@@ -86,7 +88,7 @@ export function buildLatexCommands(yamlText?: string): LatexCommand[] {
     const parsed = parseYaml(safeYaml);
     if (!Array.isArray(parsed)) return LATEX_COMMANDS;
     const mapped = parsed
-      .map((item) => sanitizeCommand(item))
+      .map(item => sanitizeCommand(item))
       .filter((v): v is LatexCommand => Boolean(v));
     return mapped.length ? mapped : LATEX_COMMANDS;
   } catch (error) {

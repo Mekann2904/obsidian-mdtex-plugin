@@ -8,7 +8,9 @@ import path from "path";
 export class Plugin {
   app: any;
   manifest: any;
-  constructor(app?: any) { this.app = app; }
+  constructor(app?: any) {
+    this.app = app;
+  }
   addCommand() {}
   addRibbonIcon() {}
   addSettingTab() {}
@@ -35,7 +37,9 @@ export class FileSystemAdapter {
   getFullPath(p: string) {
     return path.isAbsolute(p) ? p : path.join(this.basePath, p);
   }
-  getBasePath() { return this.basePath; }
+  getBasePath() {
+    return this.basePath;
+  }
 }
 
 export class App {
@@ -53,15 +57,29 @@ export class Modal {
 }
 
 export class Editor {}
-export class FuzzySuggestModal<T> { constructor(public app?: App) {} }
+export class FuzzySuggestModal<T> {
+  constructor(public app?: App) {}
+}
 export class EditorSuggest<T> {}
-export class EditorPosition { line = 0; ch = 0; }
-export class EditorSuggestContext { editor?: Editor; start?: EditorPosition; end?: EditorPosition; query?: string; }
-export class TFile { constructor(public path: string = "") {} }
+export class EditorPosition {
+  line = 0;
+  ch = 0;
+}
+export class EditorSuggestContext {
+  editor?: Editor;
+  start?: EditorPosition;
+  end?: EditorPosition;
+  query?: string;
+}
+export class TFile {
+  constructor(public path: string = "") {}
+}
 export class Component {}
 
 export class MarkdownRenderer {
-  static async render() { return ""; }
+  static async render() {
+    return "";
+  }
 }
 
 export const debounce = (fn: any) => fn;

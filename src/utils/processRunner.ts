@@ -23,7 +23,7 @@ export interface RunCommandResult {
 export async function runCommand(
   cmd: string,
   args: string[],
-  options: RunCommandOptions = {}
+  options: RunCommandOptions = {},
 ): Promise<RunCommandResult> {
   return new Promise<RunCommandResult>((resolve, reject) => {
     const child = spawn(cmd, args, {
@@ -36,13 +36,13 @@ export async function runCommand(
     let stdout = "";
     let stderr = "";
 
-    child.stdout?.on("data", (data) => {
+    child.stdout?.on("data", data => {
       const text = data.toString();
       stdout += text;
       options.onStdout?.(text);
     });
 
-    child.stderr?.on("data", (data) => {
+    child.stderr?.on("data", data => {
       const text = data.toString();
       stderr += text;
       options.onStderr?.(text);
@@ -53,9 +53,9 @@ export async function runCommand(
       child.stdin.end();
     }
 
-    child.on("error", (err) => reject(err));
+    child.on("error", err => reject(err));
 
-    child.on("close", (code) => {
+    child.on("close", code => {
       resolve({
         exitCode: code ?? -1,
         stdout,

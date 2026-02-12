@@ -26,7 +26,10 @@ export class MyLabelSuggest extends EditorSuggest<LabelCompletion> {
   private eventRefs: EventRef[] = [];
   private debouncedUpdateLabels: (file: TFile, editor?: Editor) => void;
 
-  constructor(public app: App, plugin?: PandocPluginLike) {
+  constructor(
+    public app: App,
+    plugin?: PandocPluginLike,
+  ) {
     super(app);
     this.plugin = plugin || null;
 
@@ -59,11 +62,15 @@ export class MyLabelSuggest extends EditorSuggest<LabelCompletion> {
   }
 
   public onunload() {
-    this.eventRefs.forEach((ref) => this.app.workspace.offref(ref));
+    this.eventRefs.forEach(ref => this.app.workspace.offref(ref));
     this.eventRefs = [];
   }
 
-  public onTrigger(cursor: EditorPosition, editor: Editor, file: TFile): EditorSuggestContext | null {
+  public onTrigger(
+    cursor: EditorPosition,
+    editor: Editor,
+    file: TFile,
+  ): EditorSuggestContext | null {
     const linePrefix = editor.getLine(cursor.line).substring(0, cursor.ch);
     const match = linePrefix.match(/\[@([a-zA-Z0-9:_\-./]*)$/);
     if (!match) return null;
@@ -85,7 +92,7 @@ export class MyLabelSuggest extends EditorSuggest<LabelCompletion> {
     const query = context.query.toLowerCase();
 
     return this.labels
-      .filter((item) => item.label.toLowerCase().includes(query))
+      .filter(item => item.label.toLowerCase().includes(query))
       .sort((a, b) => {
         const aLower = a.label.toLowerCase();
         const bLower = b.label.toLowerCase();
@@ -134,7 +141,7 @@ export class MyLabelSuggest extends EditorSuggest<LabelCompletion> {
       this.labels = extractLabels(content);
       if (!this.shouldSuppressLogs()) {
         console.log(
-          `[MyLabelSuggest:updateLabels] ${file.basename}: ${this.labels.length} labels (Source: ${editor ? "Editor" : "Vault"})`
+          `[MyLabelSuggest:updateLabels] ${file.basename}: ${this.labels.length} labels (Source: ${editor ? "Editor" : "Vault"})`,
         );
       }
     } catch (err) {
