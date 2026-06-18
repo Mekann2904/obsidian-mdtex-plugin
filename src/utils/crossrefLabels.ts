@@ -48,7 +48,7 @@ export function namespacedLabel(
 // {#fig:hoge} / {#lst:demo caption="..."} のような属性ブロックからラベルを抽出する。
 // capture: [0]=全体 [1]=prefix [2]=id [3]=caption(任意)
 const LABEL_ATTR_REGEX = new RegExp(
-  `\\{#(${PREFIX_ALTERNATIVES}):([a-zA-Z0-9:_-]+)(?:\\s+caption="(.*?)")?\\}`,
+  `\\{#(${PREFIX_ALTERNATIVES}):([a-zA-Z0-9:_-]+)(?:\\s+caption="([^"]*)")?(?=\\s|\\})`,
 );
 
 export interface ExtractedLabel {

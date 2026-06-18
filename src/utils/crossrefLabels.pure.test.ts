@@ -107,6 +107,14 @@ describe("extractRawLabels", () => {
     expect(labels[0].caption).toBe("Hello World");
   });
 
+  it("width 等の追加属性付きラベルも抽出する（回帰: replaceWikiLinksAndCodeAsync が width= を付与）", () => {
+    // 実パイプラインで replaceWikiLinksAndCodeAsync が {#fig:x} → {#fig:x width=0.8\\textwidth}
+    // へ変換するため、width= 付きでも抽出できなければならない（さもないと重複検出が壊れる）。
+    const md = "![cap](a.png){#fig:hoge width=0.8\\textwidth}";
+    const labels = extractRawLabels(md);
+    expect(labels.map(l => `${l.prefix}:${l.id}`)).toEqual(["fig:hoge"]);
+  });
+
   it("コードフェンス内の {#fig:...} は抽出しない", () => {
     const md = "```\n{#fig:inside}\n```\n{#fig:outside}";
     const labels = extractRawLabels(md);
