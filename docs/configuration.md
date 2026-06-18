@@ -243,21 +243,33 @@ YAML形式でパレットに表示するコマンドを定義します。
 
 ### 使用方法
 
-これらの設定は`\crefname`を通じてLaTeXに渡され、以下のように使用できます：
-
-```markdown
-![画像の説明](image.png){#fig:example}
-
-図\ref{fig:example}を参照
-```
-
-またはpandoc-crossrefを使用：
+これらの設定は Pandoc のメタデータ（pandoc-crossref の `figureTitle` / `figPrefix` / `tableTitle` / `tblPrefix` / `listingTitle` / `lstPrefix` / `eqnPrefix`）として渡されます。Pandoc Crossref が有効な場合は、図・表・コード・数式のキャプション語と参照接頭辞がこのメタデータから適用されます。
 
 ```markdown
 ![画像の説明](image.png){#fig:example}
 
 [@fig:example]を参照
 ```
+
+### 文書ごとに frontmatter で上書きする
+
+ラベルとプレフィックスは **文書の frontmatter で上書きできます**。優先順位は `frontmatter > プロファイル > デフォルト` です。プロファイル設定を変えずに、特定の文書だけキャプション語を切り替えたい場合に便利です。
+
+frontmatter に対応するメタデータキーを書くと、プロファイル設定より優先されます。
+
+```yaml
+---
+figureTitle: 図
+figPrefix: 図
+tableTitle: 表
+tblPrefix: 表
+listingTitle: コード
+lstPrefix: コード
+eqnPrefix: 式
+---
+```
+
+> **注意**: 数式キャプション語（`Equation`）は pandoc-crossref に対応する Title 系メタデータキーがなく、参照接頭辞の `eqnPrefix` のみ上書き可能です。Pandoc Crossref が無効の場合は frontmatter 上書きの効かない LaTeX ネイティブキャプション名のフォールバックが使われます。
 
 ---
 

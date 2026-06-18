@@ -120,7 +120,8 @@ const ja: Record<TranslationKeys, string> = {
   notice_preamble_copied: "プリアンブルをコピーしました。",
 
   heading_localization: "ラベルと言語設定",
-  heading_localization_desc: "キャプションや参照に使うラベルとプレフィックスを設定します。",
+  heading_localization_desc:
+    "キャプションや参照に使うラベルとプレフィックスを設定します。文書の frontmatter に figureTitle / figPrefix / tableTitle / tblPrefix / listingTitle / lstPrefix / eqnPrefix を書くと、このプロファイル設定より優先されます（文書ごとに上書き可能）。",
   placeholder_label: "ラベル",
   placeholder_prefix: "プレフィックス",
   label_figures: "図（ラベル / プレフィックス）",
