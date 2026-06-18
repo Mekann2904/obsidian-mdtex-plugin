@@ -7,14 +7,7 @@ import { FileSystemAdapter, App, TFile } from "obsidian";
 import * as path from "path";
 import { ProfileSettings } from "../MdTexPluginSettings";
 import { getLinkTargetFile } from "./linkUtils";
-
-export const escapeSpecialCharacters = (code: string): string =>
-  code
-    .replace(/\\/g, "\\textbackslash{}")
-    .replace(/%/g, "\\%")
-    .replace(/#/g, "\\#")
-    .replace(/~/g, "\\textasciitilde")
-    .replace(/&/g, "\\&");
+import { escapeLatex } from "./latexEscape";
 
 /**
  * Obsidian の `%% ... %%` コメントを Pandoc へ渡す前に取り除く。
@@ -280,7 +273,7 @@ export async function replaceWikiLinksAndCodeAsync(
           continue;
         } catch {
           const linkText = (imageCaption || pipeCaption || targetLink || "").trim() || targetLink;
-          const fallback = `[${escapeSpecialCharacters(linkText)}](${latexPath})`;
+          const fallback = `[${escapeLatex(linkText)}](${latexPath})`;
           result += applyBlockquotePrefix(fallback, blockquotePrefix);
           continue;
         }
@@ -290,7 +283,7 @@ export async function replaceWikiLinksAndCodeAsync(
       if (isBlockquote) {
         const widthOpt = profile.imageScale ? `{${profile.imageScale}}` : "{width=100%}";
         const caption = (imageCaption || pipeCaption || "").trim();
-        const imageMarkdown = `![${escapeSpecialCharacters(caption)}](${latexPath})${widthOpt}`;
+        const imageMarkdown = `![${escapeLatex(caption)}](${latexPath})${widthOpt}`;
         result += applyBlockquotePrefix(imageMarkdown, blockquotePrefix);
         continue;
       }
@@ -299,7 +292,7 @@ export async function replaceWikiLinksAndCodeAsync(
         ? `#${imageLabel.startsWith("fig:") ? "" : "fig:"}${imageLabel}`
         : "";
       const rawCaption = imageCaption || pipeCaption || " ";
-      const captionPart = rawCaption.trim() ? escapeSpecialCharacters(rawCaption) : " ";
+      const captionPart = rawCaption.trim() ? escapeLatex(rawCaption) : " ";
       const scalePart = profile.imageScale ? profile.imageScale : "";
       const separator = labelPart && scalePart ? " " : "";
 
@@ -323,7 +316,7 @@ export async function replaceWikiLinksAndCodeAsync(
         const labelMatch = codeAttrs.match(/#lst:([\w-]+)/);
         if (labelMatch) labelOption = `,label={lst:${labelMatch[1]}}`;
         const captionMatch = codeAttrs.match(/caption\s*=\s*"(.*?)"/);
-        if (captionMatch) captionOption = `,caption={${escapeSpecialCharacters(captionMatch[1])}}`;
+        if (captionMatch) captionOption = `,caption={${escapeLatex(captionMatch[1])}}`;
       }
       if (resolvedLang) langOption = `language=${resolvedLang}`;
       const options = [langOption, labelOption.slice(1), captionOption.slice(1)]
