@@ -6,7 +6,10 @@
 import { App, TFile } from "obsidian";
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&");
+  // 文字クラス内でエスケープが必要なのは ] と \ のみ（他は文字クラス内でリテラル扱い）。
+  // 従来は [\\]\\] と二重エスケープしており文字クラス解釈が壊れていた（環境によって
+  // ブロックID のメタ文字がリテラル扱いされずマッチ失敗するバグ）。
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function parseLink(linkText: string): { path: string; heading?: string; blockId?: string } {
