@@ -186,4 +186,72 @@ describe("convertCurrentPage", () => {
 
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
+
+  it("実験的 Mermaid 無効時は mermaid 言語削除 Lua フィルタが --lua-filter に含まれる", async () => {
+    // ADR-005: stripMermaidLanguage（TS 正規表現）を Lua フィルタへ移行した。
+    // enableExperimentalMermaid が false のとき pdf 出力で mermaid-filter が適用されることを検証。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-mermaid-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "```mermaid\ngraph LR\nA-->B\n```", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      profiles: { Default: profile },
+      activeProfile: "Default",
+      enableExperimentalMermaid: false,
+    };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    const [, args] = mockedRunCommand.mock.calls[0];
+    // --lua-filter が2つ（callout + mermaid）含まれること
+    const luaFilterArgs = args.filter((_: string, i: number) => args[i - 1] === "--lua-filter");
+    expect(luaFilterArgs.length).toBe(2);
+    // 2つめのフィルタパスに mdtex-mermaid- が含まれること
+    expect(luaFilterArgs[1]).toContain("mdtex-mermaid-");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("実験的 Mermaid 有効時は mermaid 言語削除 Lua フィルタが適用されない", async () => {
+    // enableExperimentalMermaid が true のときは mermaid を PNG 化するため言語削除フィルタ不要。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-mermaid-on-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "# Title", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      profiles: { Default: profile },
+      activeProfile: "Default",
+      enableExperimentalMermaid: true,
+    };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    const [, args] = mockedRunCommand.mock.calls[0];
+    const luaFilterArgs = args.filter((_: string, i: number) => args[i - 1] === "--lua-filter");
+    // mermaid-filter は適用されず callout のみ（1つ）
+    expect(luaFilterArgs.length).toBe(1);
+    expect(luaFilterArgs[0]).not.toContain("mdtex-mermaid-");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
 });

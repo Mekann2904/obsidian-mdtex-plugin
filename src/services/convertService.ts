@@ -17,6 +17,7 @@ import { appendLabelOverrides, ensureCodelistingEnvironment } from "../utils/lat
 import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
 import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
 import { DOCX_TEX_LUA_FILTER } from "../assets/docxTexFilter";
+import { MERMAID_STRIP_LUA_FILTER } from "../assets/mermaid-filter";
 import { expandTransclusions } from "../utils/transclusion";
 import type { PluginContext } from "./lintService";
 import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
@@ -210,11 +211,10 @@ export async function convertCurrentPage(
     // Obsidianコメント (%% ... %%) をPDF等に出さないよう事前に除去
     content = stripObsidianComments(content);
 
-    // 実験的Mermaidを使わない場合は、Pandoc listings が unknown language を吐かないよう
-    // フェンス言語を外してプレーンコードとして扱う
-    if (!ctx.settings.enableExperimentalMermaid) {
-      content = stripMermaidLanguage(content);
-    }
+    // Mermaid コードブロックの言語削除は TS 正規表現（stripMermaidLanguage）から
+    // Lua フィルタ（MERMAID_STRIP_LUA_FILTER）へ移行した（ADR-005）。
+    // 適用判定は buildPandocExecutionPlan の stripMermaid フラグで行うため、
+    // ここでの前処理は不要。
 
     // mdtex固有の --draft フラグをPandoc引数から分離してLaTeXにだけ伝える
     const { extras: pandocExtraArgs, isDraft } = parseDraftFlag(activeProfile.pandocExtraArgs);
@@ -411,11 +411,6 @@ export async function convertCurrentPage(
   }
 }
 
-// Mermaidフェンスをプレーンコードフェンスに落とし込む（listingsの unknown language 回避用）
-function stripMermaidLanguage(md: string): string {
-  return md.replace(/```mermaid[^\n]*\n([\s\S]*?)```/g, "```\n$1```");
-}
-
 async function runPandoc(
   ctx: PluginContext,
   activeProfile: ProfileSettings,
@@ -439,6 +434,7 @@ async function runPandoc(
       inputPath: inputFile,
       pandocExtraArgs,
       resourcePath: resourcePathOverride,
+      stripMermaid: !ctx.settings.enableExperimentalMermaid,
     });
 
     return await executePandocCommand(plan, ctx, outputFile);
@@ -470,6 +466,7 @@ async function runPandocWithStdin(
       pandocExtraArgs,
       useStdin: true,
       resourcePath: resourcePathOverride,
+      stripMermaid: !ctx.settings.enableExperimentalMermaid,
     });
 
     return await executePandocCommand(plan, ctx, outputFile, inputContent);
@@ -487,17 +484,31 @@ interface PandocExecutionPlan {
 // DOCX 出力用の AST ベース Lua フィルタ（DOCX_TEX_LUA_FILTER）を一時生成する。
 // 従来の loose ファイル（tex-to-docx.lua）依存は廃止し、配布物（main.js）に埋め込んだ
 // フィルタを実行時に一時ファイルへ書き出すことで、全環境で正しく適用されるようにする。
-async function createTempDocxFilter(): Promise<{ luaPath: string; tempDir: string }> {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-docx-"));
+// 同パターンで Mermaid 言語削除フィルタ（MERMAID_STRIP_LUA_FILTER）も生成する。
+async function createTempLuaFilterContent(
+  content: string,
+  prefix: string,
+): Promise<{ luaPath: string; tempDir: string }> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
   try {
-    const fileName = `docx-tex-${Date.now()}-${Math.random().toString(16).slice(2)}.lua`;
+    const fileName = `${prefix}${Date.now()}-${Math.random().toString(16).slice(2)}.lua`;
     const luaPath = joinFsPath(tempDir, fileName);
-    await fs.writeFile(luaPath, DOCX_TEX_LUA_FILTER, "utf8");
+    await fs.writeFile(luaPath, content, "utf8");
     return { luaPath, tempDir };
   } catch (error) {
     await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
     throw error;
   }
+}
+
+async function createTempDocxFilter(): Promise<{ luaPath: string; tempDir: string }> {
+  return createTempLuaFilterContent(DOCX_TEX_LUA_FILTER, "mdtex-docx-");
+}
+
+// Mermaid 言語削除フィルタ（pdf/latex 用）を一時生成する。
+// 適用条件（enableExperimentalMermaid が無効）は buildPandocExecutionPlan 側で判定する。
+async function createTempMermaidFilter(): Promise<{ luaPath: string; tempDir: string }> {
+  return createTempLuaFilterContent(MERMAID_STRIP_LUA_FILTER, "mdtex-mermaid-");
 }
 
 async function isInsideBaseDir(target: string, base: string): Promise<boolean> {
@@ -529,6 +540,9 @@ async function buildPandocExecutionPlan(params: {
   inputPath?: string;
   useStdin?: boolean;
   resourcePath?: string;
+  // Mermaid 言語削除フィルタを適用するか（enableExperimentalMermaid が無効な場合 true）。
+  // pdf/latex 出力でのみ意味を持ち、--listings の unknown language 警告を防ぐ（ADR-005）。
+  stripMermaid?: boolean;
 }): Promise<PandocExecutionPlan> {
   const tempFiles: string[] = [];
   const luaFilters: string[] = [];
@@ -537,6 +551,15 @@ async function buildPandocExecutionPlan(params: {
     const created = await createTempLuaFilter();
     luaFilters.push(created.luaPath);
     tempFiles.push(created.luaPath, created.tempDir);
+
+    // 実験的 Mermaid 無効時: Mermaid コードブロックの言語を削除し、--listings の
+    // unknown language 警告を防ぐ。従来の stripMermaidLanguage（TS 正規表現）に代わる
+    // AST ベース処理（ADR-005）。
+    if (params.stripMermaid) {
+      const mermaid = await createTempMermaidFilter();
+      luaFilters.push(mermaid.luaPath);
+      tempFiles.push(mermaid.luaPath, mermaid.tempDir);
+    }
   }
 
   if (params.format === "docx" && params.profile.enableAdvancedTexCommands) {
