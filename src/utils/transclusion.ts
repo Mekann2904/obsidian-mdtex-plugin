@@ -124,7 +124,7 @@ export async function expandTransclusions(
   return result;
 }
 
-function extractSection(content: string, heading?: string, blockId?: string): string | null {
+export function extractSection(content: string, heading?: string, blockId?: string): string | null {
   if (blockId) {
     const blockRe = new RegExp(`^(.*)\\^${escapeRegExp(blockId)}\\s*$`, "m");
     const m = content.match(blockRe);
@@ -146,7 +146,7 @@ function extractSection(content: string, heading?: string, blockId?: string): st
   return null;
 }
 
-function applyBlockquotePrefix(text: string, prefix: string): string {
+export function applyBlockquotePrefix(text: string, prefix: string): string {
   const normalized = prefix.endsWith(" ") ? prefix : `${prefix} `;
   return text
     .split("\n")

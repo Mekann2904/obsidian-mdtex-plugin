@@ -218,8 +218,6 @@ export async function replaceWikiLinksAndCodeAsync(
   app: App,
   profile: ProfileSettings,
   sourcePath: string,
-  cache: Map<string, string>,
-  inBlockquote = false,
 ): Promise<string> {
   // 画像(![[...]]) とコードフェンスを1つの正規表現で扱う。
   // コードフェンスは Pandoc（fenced_code_attributes + --listings）へ委譲するため
@@ -262,28 +260,14 @@ export async function replaceWikiLinksAndCodeAsync(
         : absPath.split(path.sep).join("/");
 
       if (resolvedFile.extension.toLowerCase() === "md") {
-        try {
-          const vaultRelative = resolvedFile.path;
-          const embedded = await readFileCached(app, resolvedFile, cache);
-          const inlined = await replaceWikiLinksRecursivelyAsync(
-            embedded,
-            app,
-            profile,
-            vaultRelative,
-            cache,
-            inBlockquote || !!blockquotePrefix,
-          );
-          result += applyBlockquotePrefix(inlined, blockquotePrefix);
-          continue;
-        } catch {
-          // 埋め込み読み込み失敗時は標準 Markdown リンクへフォールバック。
-          // エスケープは Pandoc が reader で Markdown として解釈し出力フォーマット向けに
-          // 再エスケープするため TS 側では行わない（ADR-005/Q4-3）。
-          const linkText = (imageCaption || pipeCaption || targetLink || "").trim() || targetLink;
-          const fallback = `[${linkText}](${latexPath})`;
-          result += applyBlockquotePrefix(fallback, blockquotePrefix);
-          continue;
-        }
+        // 到達不能: 実パイプラインでは上位の expandTransclusions（transclusion.ts）が
+        // すべての .md 埋め込みを先に展開済みのため、ここへ .md が来ることはない。
+        // 従来は独自の再帰展開（replaceWikiLinksRecursivelyAsync）を抱え expandTransclusions
+        // と重複していたが、Q5-1 でトランスクルージョン展開を transclusion.ts に集約し
+        // こちらは削除した。安全のため、万が一 .md が残っていた場合は元の埋め込み記法を
+        // そのまま出力して expandTransclusions の漏れを目立たせる（黙って誤展開しない）。
+        result += fullMatch;
+        continue;
       }
 
       // 画像（.md 以外）を標準 Markdown の画像記法へ変換する。
@@ -330,42 +314,6 @@ function applyBlockquotePrefix(text: string, blockquotePrefix?: string): string 
     .split("\n")
     .map(line => `${prefix}${line}`)
     .join("\n");
-}
-
-/**
- * ![[...]] とコードフェンスの置換を収束するまで繰り返す簡易ループ。
- * 最大5回で打ち切り、循環や極端なネストを防ぐ。
- */
-export async function replaceWikiLinksRecursivelyAsync(
-  markdown: string,
-  app: App,
-  profile: ProfileSettings,
-  sourcePath: string,
-  cache: Map<string, string>,
-  inBlockquote = false,
-  depth = 0,
-): Promise<string> {
-  if (depth > 5) return markdown;
-
-  const transformed = await replaceWikiLinksAndCodeAsync(
-    markdown,
-    app,
-    profile,
-    sourcePath,
-    cache,
-    inBlockquote,
-  );
-  if (transformed === markdown) return transformed;
-
-  return replaceWikiLinksRecursivelyAsync(
-    transformed,
-    app,
-    profile,
-    sourcePath,
-    cache,
-    inBlockquote,
-    depth + 1,
-  );
 }
 
 /**
@@ -423,11 +371,3 @@ function resolveLinkFile(
   return match || null;
 }
 
-async function readFileCached(app: App, file: TFile, cache: Map<string, string>): Promise<string> {
-  const cached = cache.get(file.path);
-  if (cached !== undefined) return cached;
-
-  const content = await app.vault.read(file);
-  cache.set(file.path, content);
-  return content;
-}

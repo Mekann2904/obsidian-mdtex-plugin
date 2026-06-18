@@ -9,7 +9,7 @@ import * as os from "os";
 import * as fs from "fs/promises";
 import { ProfileSettings } from "../MdTexPluginSettings";
 import {
-  replaceWikiLinksRecursivelyAsync,
+  replaceWikiLinksAndCodeAsync,
   unwrapValidWikiLinks,
   stripObsidianComments,
 } from "../utils/markdownTransforms";
@@ -310,12 +310,11 @@ export async function convertCurrentPage(
     // 有効な WikiLink のみ [[ ]] を外してテキストにする
     content = unwrapValidWikiLinks(content, ctx.app, activeFile.path);
 
-    content = await replaceWikiLinksRecursivelyAsync(
+    content = await replaceWikiLinksAndCodeAsync(
       content,
       ctx.app,
       activeProfile,
       activeFile.path,
-      cache,
     );
 
     // NOTE: docx 出力時の LaTeX コマンド処理は文字列の正規表現逆変換では行わない。

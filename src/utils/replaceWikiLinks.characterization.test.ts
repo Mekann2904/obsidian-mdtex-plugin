@@ -99,32 +99,31 @@ describe("replaceWikiLinksAndCodeAsync: characterization（現状振る舞いの
       app,
       profile(),
       "src.md",
-      new Map(),
     );
     expect(out).toMatchInlineSnapshot(`"before ![ ](assets/img.png){width=0.8\\textwidth} after"`);
   });
 
   it("V2: pipe キャプション ![[img.png|cap]]", async () => {
     const app = makeStubApp([{ path: "assets/img.png", extension: "png" }]);
-    const out = await replaceWikiLinksAndCodeAsync("![[img.png|図1]]", app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync("![[img.png|図1]]", app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`"![図1](assets/img.png){width=0.8\\textwidth}"`);
   });
 
   it("V3: 角括弧キャプション ![[img.png]][cap]", async () => {
     const app = makeStubApp([{ path: "assets/img.png", extension: "png" }]);
-    const out = await replaceWikiLinksAndCodeAsync("![[img.png]][Figure 1]", app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync("![[img.png]][Figure 1]", app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`"![Figure 1](assets/img.png){width=0.8\\textwidth}"`);
   });
 
   it("V4: ラベル ![[img.png]]{#lbl} に fig: 接頭辞を付与", async () => {
     const app = makeStubApp([{ path: "assets/img.png", extension: "png" }]);
-    const out = await replaceWikiLinksAndCodeAsync("![[img.png]]{#demo}", app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync("![[img.png]]{#demo}", app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`"![ ](assets/img.png){#fig:demo width=0.8\\textwidth}"`);
   });
 
   it("V5: ラベル fig: 付きは重複付与しない", async () => {
     const app = makeStubApp([{ path: "assets/img.png", extension: "png" }]);
-    const out = await replaceWikiLinksAndCodeAsync("![[img.png]]{#fig:demo}", app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync("![[img.png]]{#fig:demo}", app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`"![ ](assets/img.png){#fig:demo width=0.8\\textwidth}"`);
   });
 
@@ -135,7 +134,6 @@ describe("replaceWikiLinksAndCodeAsync: characterization（現状振る舞いの
       app,
       profile({ imageScale: "0.5" }),
       "src.md",
-      new Map(),
     );
     expect(out).toMatchInlineSnapshot(`"![タイトル](assets/img.png){#fig:lbl 0.5}"`);
   });
@@ -144,40 +142,40 @@ describe("replaceWikiLinksAndCodeAsync: characterization（現状振る舞いの
 
   it("W1: vault 内パスは vault 相対へ", async () => {
     const app = makeStubApp([{ path: "assets/img.png", extension: "png" }], "/vault");
-    const out = await replaceWikiLinksAndCodeAsync("![[img.png]]", app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync("![[img.png]]", app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`"![ ](assets/img.png){width=0.8\\textwidth}"`);
   });
 
   it("W3: 解決失敗はそのまま残す", async () => {
     const app = makeStubApp([]);
-    const out = await replaceWikiLinksAndCodeAsync("![[missing.png]]", app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync("![[missing.png]]", app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`"![[missing.png]]"`);
   });
 
   // ===== X. Markdown 埋め込み =====
 
-  it("X1: ![[note.md]] は中身を再帰展開する", async () => {
+  it("X1: ![[note.md]] は未処理で残す（トランスクルージョンは expandTransclusions に委譲）", async () => {
+    // Q5-1: .md 埋め込みの再帰展開は transclusion.ts の expandTransclusions に集約し、
+    // この関数では扱わない。実パイプラインでは上位の expandTransclusions が先に展開済み
+    // なので、ここへ .md が来ることは原理上ない。万が一残っていた場合は元の記法を残して
+    // expandTransclusions の漏れを目立たせる（黙って誤展開しない）。
     const app = makeStubApp([
       { path: "note.md", extension: "md", content: "# Title\nbody" },
     ]);
-    const out = await replaceWikiLinksAndCodeAsync("![[note.md]]", app, profile(), "src.md", new Map());
-    expect(out).toMatchInlineSnapshot(`
-      "# Title
-      body"
-    `);
+    const out = await replaceWikiLinksAndCodeAsync("![[note.md]]", app, profile(), "src.md");
+    expect(out).toMatchInlineSnapshot(`"![[note.md]]"`);
   });
 
-  it("X2: 埋め込み読み込み失敗はフォールバックリンクへ", async () => {
-    // read が例外を投ぐスタブ（content 未設定）
+  it("X2: .md は未処理で残す（キャプション/alias付きも含む）", async () => {
+    // X1 と同じ理由。フォールバック展開も .md 再帰も行わない。
     const app = makeStubApp([{ path: "note.md", extension: "md" }]);
     const out = await replaceWikiLinksAndCodeAsync(
       "![[note.md|参照名]]",
       app,
       profile(),
       "src.md",
-      new Map(),
     );
-    expect(out).toMatchInlineSnapshot(`"[参照名](note.md)"`);
+    expect(out).toMatchInlineSnapshot(`"![[note.md|参照名]]"`);
   });
 
   // ===== Y. 引用内 =====
@@ -187,27 +185,13 @@ describe("replaceWikiLinksAndCodeAsync: characterization（現状振る舞いの
     // 存在でデッドコード化しておりコメントと不一致だったため廃止（ADR-005）。
     // 現在は引用の有無にかかわらず一律の標準記法。applyBlockquotePrefix が > を行ごとに付与。
     const app = makeStubApp([{ path: "img.png", extension: "png" }]);
-    const out = await replaceWikiLinksAndCodeAsync("> ![[img.png]]", app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync("> ![[img.png]]", app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`"> ![ ](img.png){width=0.8\\textwidth}"`);
-  });
-
-  it("Y2: inBlockquote=true でも画像は引用分岐せず一律の標準記法", async () => {
-    // inBlockquote は .md 埋め込み再帰の引用継承用。画像ブランチでは効かない（統一記法）。
-    const app = makeStubApp([{ path: "img.png", extension: "png" }]);
-    const out = await replaceWikiLinksAndCodeAsync(
-      "![[img.png]]",
-      app,
-      profile({ imageScale: "0.5" }),
-      "src.md",
-      new Map(),
-      true,
-    );
-    expect(out).toMatchInlineSnapshot(`"![ ](img.png){0.5}"`);
   });
 
   it("Y3: ネスト引用 >> ![[img.png]]", async () => {
     const app = makeStubApp([{ path: "img.png", extension: "png" }]);
-    const out = await replaceWikiLinksAndCodeAsync(">> ![[img.png]]", app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync(">> ![[img.png]]", app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`">> ![ ](img.png){width=0.8\\textwidth}"`);
   });
 
@@ -220,14 +204,13 @@ describe("replaceWikiLinksAndCodeAsync: characterization（現状振る舞いの
       app,
       profile({ imageScale: "0.75" }),
       "src.md",
-      new Map(),
     );
     expect(out).toMatchInlineSnapshot(`"![ ](img.png){0.75}"`);
   });
 
   it("Z2: scale 設定なし", async () => {
     const app = makeStubApp([{ path: "img.png", extension: "png" }]);
-    const out = await replaceWikiLinksAndCodeAsync("![[img.png]]", app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync("![[img.png]]", app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`"![ ](img.png){width=0.8\\textwidth}"`);
   });
 
@@ -236,7 +219,7 @@ describe("replaceWikiLinksAndCodeAsync: characterization（現状振る舞いの
   it("AA1: コードフェンスはパススルー", async () => {
     const app = makeStubApp([{ path: "img.png", extension: "png" }]);
     const md = "```\ncode\n```";
-    const out = await replaceWikiLinksAndCodeAsync(md, app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync(md, app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`
       "\`\`\`
       code
@@ -247,7 +230,7 @@ describe("replaceWikiLinksAndCodeAsync: characterization（現状振る舞いの
   it("AA2: コードフェンス内の ![[...]] は保護される（最左最長マッチ）", async () => {
     const app = makeStubApp([{ path: "img.png", extension: "png" }]);
     const md = "```\n![[img.png]]\n```";
-    const out = await replaceWikiLinksAndCodeAsync(md, app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync(md, app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`
       "\`\`\`
       ![[img.png]]
@@ -262,13 +245,13 @@ describe("replaceWikiLinksAndCodeAsync: characterization（現状振る舞いの
       { path: "a.png", extension: "png" },
       { path: "b.png", extension: "png" },
     ]);
-    const out = await replaceWikiLinksAndCodeAsync("![[a.png]] and ![[b.png]]", app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync("![[a.png]] and ![[b.png]]", app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`"![ ](a.png){width=0.8\\textwidth} and ![ ](b.png){width=0.8\\textwidth}"`);
   });
 
   it("AB2: キャプション・ラベルともに無い画像（captionPart=空白）", async () => {
     const app = makeStubApp([{ path: "img.png", extension: "png" }]);
-    const out = await replaceWikiLinksAndCodeAsync("![[img.png]]", app, profile(), "src.md", new Map());
+    const out = await replaceWikiLinksAndCodeAsync("![[img.png]]", app, profile(), "src.md");
     expect(out).toMatchInlineSnapshot(`"![ ](img.png){width=0.8\\textwidth}"`);
   });
 });

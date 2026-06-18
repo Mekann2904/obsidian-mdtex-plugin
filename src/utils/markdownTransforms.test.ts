@@ -15,13 +15,12 @@ import { DEFAULT_PROFILE } from "../MdTexPluginSettings";
 import { replaceWikiLinksAndCodeAsync } from "./markdownTransforms";
 
 describe("replaceWikiLinksAndCodeAsync: コードブロックの Pandoc ネイティブ委譲", () => {
-  // コードブロックのみを扱うため WikiLink 解決は走らない。app/profile/cache は最低限のスタブ。
+  // コードブロックのみを扱うため WikiLink 解決は走らない。app/profile は最低限のスタブ。
   const app = new App();
   const profile = DEFAULT_PROFILE;
-  const cache = new Map<string, string>();
 
   async function run(md: string): Promise<string> {
-    return replaceWikiLinksAndCodeAsync(md, app, profile, "test.md", cache, false);
+    return replaceWikiLinksAndCodeAsync(md, app, profile, "test.md");
   }
 
   it("プレーンコードブロックをそのままパススルーする", async () => {
