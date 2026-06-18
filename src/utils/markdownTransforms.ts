@@ -219,8 +219,12 @@ export async function replaceWikiLinksAndCodeAsync(
   cache: Map<string, string>,
   inBlockquote = false,
 ): Promise<string> {
+  // 画像(![[...]]) とコードフェンスを1つの正規表現で扱う。
+  // コードフェンスは Pandoc（fenced_code_attributes + --listings）へ委譲するため
+  // 単独の capture を持たないが、パターンに含めておくことでコードブロック内の
+  // ![[...]] 画像/WikiLink が最左最長マッチで保護され置換対象にならない。
   const regex =
-    /(^[ \t]*> ?)?!\[\[([^\]]+)\]\](?:\{#([^}]+)\})?(?:\[(.*?)\])?|```(?:([\w-]+))?(?:\s*\{([^}]*)\})?\n([\s\S]*?)```/gm;
+    /(^[ \t]*> ?)?!\[\[([^\]]+)\]\](?:\{#([^}]+)\})?(?:\[(.*?)\])?|```(?:[\w-]+)?(?:\s*\{[^}]*\})?\n(?:[\s\S]*?)```/gm;
   let result = "";
   let lastIndex = 0;
 
@@ -229,16 +233,7 @@ export async function replaceWikiLinksAndCodeAsync(
     const match = regex.exec(markdown);
     if (!match) break;
 
-    const [
-      fullMatch,
-      blockquotePrefix,
-      imageLink,
-      imageLabel,
-      imageCaption,
-      codeLang,
-      codeAttrs,
-      codeBody,
-    ] = match;
+    const [fullMatch, blockquotePrefix, imageLink, imageLabel, imageCaption] = match;
     result += markdown.slice(lastIndex, match.index);
     lastIndex = regex.lastIndex;
 
@@ -308,32 +303,8 @@ export async function replaceWikiLinksAndCodeAsync(
       continue;
     }
 
-    if (codeBody) {
-      if (!codeLang && !codeAttrs) {
-        result += fullMatch;
-        continue;
-      }
-
-      const rawCode = codeBody.trimEnd();
-      const resolvedLang = normalizeListingLanguage(codeLang);
-      let labelOption = "",
-        captionOption = "",
-        langOption = "";
-      if (codeAttrs) {
-        const labelMatch = codeAttrs.match(/#lst:([\w-]+)/);
-        if (labelMatch) labelOption = `,label={lst:${labelMatch[1]}}`;
-        const captionMatch = codeAttrs.match(/caption\s*=\s*"(.*?)"/);
-        if (captionMatch) captionOption = `,caption={${escapeSpecialCharacters(captionMatch[1])}}`;
-      }
-      if (resolvedLang) langOption = `language=${resolvedLang}`;
-      const options = [langOption, labelOption.slice(1), captionOption.slice(1)]
-        .filter(Boolean)
-        .join(",");
-      const optWrapped = options ? `[${options}]` : "";
-      result += `\\begin{lstlisting}${optWrapped}\n${rawCode}\n\\end{lstlisting}`;
-      continue;
-    }
-
+    // コードフェンスは画像以外の一致（fullMatch に丸ごと含まれる）。
+    // lstlisting 生成は Pandoc へ委譲するため加工せずパススルーする。
     result += fullMatch;
   }
 
@@ -413,33 +384,6 @@ export function unwrapValidWikiLinks(markdown: string, app: App, sourcePath: str
   }
 
   return lines.join("\n");
-}
-
-function normalizeListingLanguage(codeLang: string | undefined): string | undefined {
-  if (!codeLang) return undefined;
-  const lang = codeLang.toLowerCase();
-  const mapping: Record<string, string> = {
-    python: "Python",
-    py: "Python",
-    bash: "bash",
-    sh: "bash",
-    zsh: "bash",
-    javascript: "JavaScript",
-    js: "JavaScript",
-    typescript: "JavaScript",
-    ts: "JavaScript",
-    json: "JavaScript",
-    html: "HTML",
-    css: "CSS",
-    c: "C",
-    cpp: "C++",
-    java: "Java",
-    text: "",
-    plain: "",
-  };
-  const mapped = mapping[lang];
-  if (mapped === "") return undefined;
-  return mapped || codeLang;
 }
 
 function resolveLinkFile(
