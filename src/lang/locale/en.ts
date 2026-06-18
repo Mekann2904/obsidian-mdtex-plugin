@@ -119,7 +119,8 @@ const en = {
   notice_preamble_copied: "Preamble copied to clipboard.",
 
   heading_localization: "Localization (Labels & Prefixes)",
-  heading_localization_desc: "Set the labels used for captions and cross-references.",
+  heading_localization_desc:
+    "Set the labels used for captions and cross-references. You can override these per document via frontmatter keys (figureTitle / figPrefix / tableTitle / tblPrefix / listingTitle / lstPrefix / eqnPrefix), which take precedence over the profile settings.",
   placeholder_label: "Label",
   placeholder_prefix: "Prefix",
   label_figures: "Figures (Label / Prefix)",

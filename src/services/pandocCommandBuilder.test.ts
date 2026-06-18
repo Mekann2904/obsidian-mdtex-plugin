@@ -4,7 +4,7 @@
 // Related: src/services/pandocCommandBuilder.ts, src/services/profileManager.ts, vitest.config.ts, plans.md
 
 import { describe, expect, it } from "vitest";
-import { buildPandocCommand } from "./pandocCommandBuilder";
+import { buildPandocCommand, buildLabelMetadataYaml } from "./pandocCommandBuilder";
 import { createDefaultProfile } from "./profileManager";
 
 describe("buildPandocCommand", () => {
@@ -95,5 +95,114 @@ describe("buildPandocCommand", () => {
 
     expect(result.args).toContain("--resource-path");
     expect(result.args).toContain("/vault/root");
+  });
+});
+
+describe("ラベルメタデータのメタデータ-file 移行", () => {
+  it("buildPandocCommand は -M でキャプション語／接頭辞を渡さない（frontmatter 上書きを阻害しない）", () => {
+    // コマンドライン -M は frontmatter より常に優先されてしまうため、文書ごとの上書きを
+    // 可能にするには -M を廃止し --metadata-file に寄せる必要がある。これを回帰防止のため検証する。
+    const profile = createDefaultProfile();
+    const result = buildPandocCommand({
+      profile,
+      format: "pdf",
+      outputPath: "/tmp/out.pdf",
+      workingDir: "/tmp",
+    });
+
+    // 削除対象の 8 項目（legacy kebab の listing-title 含む）が残っていないこと
+    for (const key of [
+      "figureTitle",
+      "figPrefix",
+      "tableTitle",
+      "tblPrefix",
+      "listingTitle",
+      "listing-title",
+      "lstPrefix",
+      "eqnPrefix",
+    ]) {
+      const asM = `-M ${key}=`;
+      expect(result.args.some(a => a.startsWith(asM))).toBe(false);
+    }
+    expect(result.args).not.toContain("-M");
+  });
+
+  it("buildPandocCommand は metadataFile 指定時に --metadata-file を展開する", () => {
+    const profile = createDefaultProfile();
+    const result = buildPandocCommand({
+      profile,
+      format: "pdf",
+      outputPath: "/tmp/out.pdf",
+      workingDir: "/tmp",
+      metadataFile: "/tmp/mdtex-metadata-1/labels.yaml",
+    });
+
+    const idx = result.args.indexOf("--metadata-file");
+    expect(idx).toBeGreaterThan(-1);
+    expect(result.args[idx + 1]).toBe("/tmp/mdtex-metadata-1/labels.yaml");
+  });
+
+  it("metadataFile 未指定時は --metadata-file を渡さない", () => {
+    const profile = createDefaultProfile();
+    const result = buildPandocCommand({
+      profile,
+      format: "pdf",
+      outputPath: "/tmp/out.pdf",
+      workingDir: "/tmp",
+    });
+    expect(result.args).not.toContain("--metadata-file");
+  });
+
+  it("buildLabelMetadataYaml はプロファイル既定値を crossref メタデータキーにマップする", () => {
+    const profile = createDefaultProfile();
+    profile.figureLabel = "図";
+    profile.figPrefix = "図";
+    profile.tableLabel = "表";
+    profile.tblPrefix = "表";
+    profile.codeLabel = "コード";
+    profile.lstPrefix = "コード";
+    profile.eqnPrefix = "式";
+
+    const yaml = buildLabelMetadataYaml(profile);
+
+    expect(yaml).toContain('figureTitle: "図"');
+    expect(yaml).toContain('figPrefix: "図"');
+    expect(yaml).toContain('tableTitle: "表"');
+    expect(yaml).toContain('tblPrefix: "表"');
+    expect(yaml).toContain('listingTitle: "コード"');
+    expect(yaml).toContain('lstPrefix: "コード"');
+    expect(yaml).toContain('eqnPrefix: "式"');
+    // equationLabel は crossref の Title 系キーに対応しないため含まれない
+    expect(yaml).not.toContain("equation");
+    // legacy kebab キーは含まれない
+    expect(yaml).not.toContain("listing-title");
+  });
+
+  it("buildLabelMetadataYaml は空の値を省略し、全空なら空文字列を返す", () => {
+    const partial = createDefaultProfile();
+    partial.figPrefix = "";
+    partial.tblPrefix = "   ";
+    const partialYaml = buildLabelMetadataYaml(partial);
+    expect(partialYaml).not.toContain("figPrefix");
+    expect(partialYaml).not.toContain("tblPrefix");
+    expect(partialYaml).toContain('figureTitle: "Figure"');
+
+    const empty = createDefaultProfile();
+    empty.figureLabel = "";
+    empty.figPrefix = "";
+    empty.tableLabel = "";
+    empty.tblPrefix = "";
+    empty.codeLabel = "";
+    empty.lstPrefix = "";
+    empty.eqnPrefix = "";
+    expect(buildLabelMetadataYaml(empty)).toBe("");
+  });
+
+  it("buildLabelMetadataYaml はダブルクオートとバックスラッシュをエスケープする", () => {
+    const profile = createDefaultProfile();
+    profile.figureLabel = 'a"b\\c';
+    const yaml = buildLabelMetadataYaml(profile);
+    // YAML 二重引用符内で " と \\ がエスケープされていること
+    expect(yaml).toContain('figureTitle: "a\\"b\\\\c"');
   });
 });

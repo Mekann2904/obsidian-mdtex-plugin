@@ -21,7 +21,12 @@ import { expandTransclusions } from "../utils/transclusion";
 import type { PluginContext } from "./lintService";
 import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
 import { t } from "../lang/helpers";
-import { buildPandocCommand, OutputFormat, PandocCommandResult } from "./pandocCommandBuilder";
+import {
+  buildPandocCommand,
+  buildLabelMetadataYaml,
+  OutputFormat,
+  PandocCommandResult,
+} from "./pandocCommandBuilder";
 import { runCommand } from "../utils/processRunner";
 import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
 
@@ -37,6 +42,25 @@ async function createTempLuaFilter(): Promise<{ luaPath: string; tempDir: string
     const luaPath = joinFsPath(tempDir, fileName);
     await fs.writeFile(luaPath, CALLOUT_LUA_FILTER, "utf8");
     return { luaPath, tempDir };
+  } catch (error) {
+    await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
+    throw error;
+  }
+}
+
+// プロファイル既定値のラベル／接頭辞を Pandoc メタデータ YAML として一時生成する。
+// 値が全て空なら null を返し、呼び出し側は --metadata-file を省略する。
+async function createTempMetadataFile(
+  profile: ProfileSettings,
+): Promise<{ metadataPath: string; tempDir: string } | null> {
+  const body = buildLabelMetadataYaml(profile);
+  if (!body) return null;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-metadata-"));
+  try {
+    const fileName = `labels-${Date.now()}-${Math.random().toString(16).slice(2)}.yaml`;
+    const metadataPath = joinFsPath(tempDir, fileName);
+    await fs.writeFile(metadataPath, body, "utf8");
+    return { metadataPath, tempDir };
   } catch (error) {
     await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
     throw error;
@@ -227,23 +251,29 @@ export async function convertCurrentPage(
       }
     }
 
-    // ユーザー設定プリアンブルにコールアウト定義を付与し、listing名の上書きを加える
+    // ユーザー設定プリアンブルにコールアウト定義を付与する
     // プリアンブルは生 .tex として --include-in-header で渡すため、YAML(header-includes) 時代の
     // クリーニングは行わず、ユーザー設定 + コールアウト定義をそのまま素通りさせる。
     const baseHeader = activeProfile.headerIncludes || "";
     const withCallout = baseHeader.includes("obsidiancallout")
       ? baseHeader
       : `${baseHeader.trim()}\n\n${CALLOUT_PREAMBLE}`.trim();
-    const headerWithListings = appendLabelOverrides(withCallout, {
-      figureLabel: activeProfile.figureLabel,
-      figPrefix: activeProfile.figPrefix,
-      tableLabel: activeProfile.tableLabel,
-      tblPrefix: activeProfile.tblPrefix,
-      codeLabel: activeProfile.codeLabel,
-      lstPrefix: activeProfile.lstPrefix,
-      equationLabel: activeProfile.equationLabel,
-      eqnPrefix: activeProfile.eqnPrefix,
-    });
+    // crossref-ON 時はキャプション語／参照接頭辞をメタデータ経路
+    // （--metadata-file / frontmatter）に一本化し、\renewcommand との二重管理を避ける。
+    // crossref-OFF 時はメタデータの消費先がないため、プロファイル値で LaTeX ネイティブの
+    // キャプション名（\figurename 等）を上書きするフォールバックを残す。
+    const headerWithListings = activeProfile.usePandocCrossref
+      ? withCallout
+      : appendLabelOverrides(withCallout, {
+          figureLabel: activeProfile.figureLabel,
+          figPrefix: activeProfile.figPrefix,
+          tableLabel: activeProfile.tableLabel,
+          tblPrefix: activeProfile.tblPrefix,
+          codeLabel: activeProfile.codeLabel,
+          lstPrefix: activeProfile.lstPrefix,
+          equationLabel: activeProfile.equationLabel,
+          eqnPrefix: activeProfile.eqnPrefix,
+        });
 
     //
     // LaTeX の \maketitle はタイトルページを強制的に plain スタイルにする。
@@ -507,6 +537,20 @@ async function buildPandocExecutionPlan(params: {
   const docxLua = resolveDocxLuaFilter(params.profile, params.format);
   if (docxLua) luaFilters.push(docxLua);
 
+  // プロファイル既定値をメタデータとして渡し、文書 frontmatter で上書き可能にする。
+  // ただし figureTitle / figPrefix 等は pandoc-crossref 専用メタデータなので、
+  // crossref-OFF では消費先がなく無意味。その場合は LaTeX ネイティブの
+  // \renewcommand フォールバック（convertCurrentPage 側）に任せ、不要な
+  // 一時ファイル生成を避ける。
+  const metadata = params.profile.usePandocCrossref
+    ? await createTempMetadataFile(params.profile)
+    : null;
+  let metadataFile: string | undefined;
+  if (metadata) {
+    metadataFile = metadata.metadataPath;
+    tempFiles.push(metadata.metadataPath, metadata.tempDir);
+  }
+
   try {
     const command = buildPandocCommand({
       profile: params.profile,
@@ -514,6 +558,7 @@ async function buildPandocExecutionPlan(params: {
       inputPath: params.useStdin ? undefined : params.inputPath,
       outputPath: params.outputFile,
       headerPath: params.headerFilePath,
+      metadataFile,
       workingDir: params.workingDir,
       extraArgs: params.pandocExtraArgs,
       luaFilters,
