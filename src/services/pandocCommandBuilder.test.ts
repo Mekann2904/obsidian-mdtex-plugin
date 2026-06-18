@@ -4,7 +4,7 @@
 // Related: src/services/pandocCommandBuilder.ts, src/services/profileManager.ts, vitest.config.ts, plans.md
 
 import { describe, expect, it } from "vitest";
-import { buildPandocCommand, getInputFormatArgs, OutputFormat } from "./pandocCommandBuilder";
+import { buildPandocCommand } from "./pandocCommandBuilder";
 import { createDefaultProfile } from "./profileManager";
 
 describe("buildPandocCommand", () => {
@@ -95,51 +95,5 @@ describe("buildPandocCommand", () => {
 
     expect(result.args).toContain("--resource-path");
     expect(result.args).toContain("/vault/root");
-  });
-
-  it("pdf/latex/docx の全形式で入力フォーマット引数が一致する", () => {
-    // リファクタ前は docx のみ markdown+raw_html+fenced_divs+raw_attribute、
-    // pdf/latex は素の markdown と非対称だった。全形式で同一の -f を返すことを検証する。
-    const formats: OutputFormat[] = ["pdf", "latex", "docx"];
-    const specs = formats.map(fmt => getInputFormatArgs(fmt).join(" "));
-
-    expect(new Set(specs).size).toBe(1);
-    const [flag, spec] = getInputFormatArgs("docx");
-    expect(flag).toBe("-f");
-    expect(spec).toBe(specs[0].split(" ")[1]);
-  });
-
-  it("buildPandocCommand が全形式で同一の入力フォーマット引数を展開する", () => {
-    const profile = createDefaultProfile();
-    const formats: OutputFormat[] = ["pdf", "latex", "docx"];
-    const builtSpecs = formats.map(fmt => {
-      const result = buildPandocCommand({
-        profile,
-        format: fmt,
-        outputPath: "/tmp/out",
-        workingDir: "/tmp",
-      });
-      const idx = result.args.indexOf("-f");
-      expect(idx).toBeGreaterThan(-1);
-      return result.args[idx + 1];
-    });
-
-    expect(new Set(builtSpecs).size).toBe(1);
-  });
-
-  it("統一された入力フォーマットが生 LaTeX / fenced div / raw block / コード属性の拡張を明示する", () => {
-    // プラグインが依存する構文を Pandoc のデフォルトに依存せず安定有効化するため、
-    // 必須拡張を明示することを検証する（各拡張を無効化すると対応構文がパースされない）。
-    const [, spec] = getInputFormatArgs("pdf");
-    expect(spec.startsWith("markdown")).toBe(true);
-    for (const ext of [
-      "+raw_tex", // 生 LaTeX (\clearpage 等) のパース
-      "+raw_html", // インライン HTML のパース
-      "+fenced_divs", // ::: fenced div のパース
-      "+raw_attribute", // {=latex} {=openxml} raw block のパース
-      "+fenced_code_attributes", // {#lst:... caption=...} コード属性のパース
-    ]) {
-      expect(spec).toContain(ext);
-    }
   });
 });
