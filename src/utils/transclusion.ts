@@ -4,6 +4,7 @@
 // Related: src/services/convertService.ts, src/utils/markdownTransforms.ts
 
 import { App, TFile } from "obsidian";
+import { namespacedRewrite } from "./crossrefLabels";
 
 function escapeRegExp(value: string): string {
   // 文字クラス内でエスケープが必要なのは ] と \ のみ（他は文字クラス内でリテラル扱い）。
@@ -115,9 +116,16 @@ export async function expandTransclusions(
     const newVisited = new Set(visited).add(targetPath);
     const expanded = await expandTransclusions(sliced, app, targetPath, cache, newVisited);
 
+    // 方式W: 埋め込み先の crossref ラベルと参照にファイル名プレフィックスを付与し、
+    // 別ファイル由来の同名ラベル衝突を自動解決する（ADR-005 関連）。
+    // メイン文書（この関数の最上位呼び出し）のラベルはリライトせず、埋め込み先のみ。
+    // これにより各ファイルを単独変換したときと同じラベル名で動作し、かつ複数ファイルを
+    // 埋め込んでも crossref の Duplicate label が起きない。
+    const namespaced = namespacedRewrite(expanded, targetPath);
+
     const withPrefix = blockquotePrefix
-      ? applyBlockquotePrefix(expanded, blockquotePrefix)
-      : expanded;
+      ? applyBlockquotePrefix(namespaced, blockquotePrefix)
+      : namespaced;
     result += withPrefix;
     lastIndex = regex.lastIndex;
   }

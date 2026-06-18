@@ -38,6 +38,7 @@ const en = {
   notice_pandoc_more_logs: "Pandoc: additional logs are available in the console.",
   notice_generated: "Successfully generated: {0}",
   notice_pandoc_exit_code: "Error: Pandoc process exited with code {0}",
+  notice_duplicate_labels: "Conversion aborted: duplicate cross-reference labels detected: {0}. Please make labels unique (fig:, tbl:, lst:, eq:, sec:).",
   notice_pandoc_launch_error: "Error launching Pandoc: {0}",
 
   notice_markdownlint_missing: "markdownlint-cli2 not found. Specify the path in settings.",

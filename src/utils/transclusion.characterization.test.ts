@@ -270,4 +270,103 @@ describe("expandTransclusions / extractSection: characterization（現状振る�
     const out = await expandTransclusions("![[a.md]]", app, "root.md", new Map());
     expect(out).toMatchInlineSnapshot(`"A1 B1 C B2 A2"`);
   });
+
+  // ===== W. 方式W: crossref ラベルのファイル名プレフィックス付与 =====
+
+  it("W1: 埋め込み先の {#fig:hoge} にファイル名プレフィックスが付く", async () => {
+    // 別ファイル由来の同名ラベル衝突を自動解決する（方式W）。
+    const app = makeStubApp([
+      { path: "sub.md", extension: "md", content: "![[x.png]]{#fig:hoge}" },
+    ]);
+    const out = await expandTransclusions("![[sub.md]]", app, "root.md", new Map());
+    expect(out).toMatchInlineSnapshot(`"![[x.png]]{#fig:sub-hoge}"`);
+  });
+
+  it("W2: 埋め込み先内の参照 [@fig:hoge] もプレフィックス付与される", async () => {
+    // ラベルと参照が一貫してリライトされ、自己完結参照が壊れない。
+    const app = makeStubApp([
+      {
+        path: "sub.md",
+        extension: "md",
+        content: "![[x.png]]{#fig:hoge}\n\nsee [@fig:hoge]",
+      },
+    ]);
+    const out = await expandTransclusions("![[sub.md]]", app, "root.md", new Map());
+    expect(out).toMatchInlineSnapshot(`
+      "![[x.png]]{#fig:sub-hoge}
+
+      see [@fig:sub-hoge]"
+    `);
+  });
+
+  it("W3: メイン文書のラベルはプレフィックス付与されない（ユーザー体験維持）", async () => {
+    const app = makeStubApp([
+      { path: "sub.md", extension: "md", content: "![[y.png]]{#fig:sub-only}" },
+    ]);
+    // メインに直接書いたラベルはそのまま、埋め込み先だけプレフィックス付与
+    const out = await expandTransclusions(
+      "![[z.png]]{#fig:main}\n\n![[sub.md]]",
+      app,
+      "root.md",
+      new Map(),
+    );
+    expect(out).toMatchInlineSnapshot(`
+      "![[z.png]]{#fig:main}
+
+      ![[y.png]]{#fig:sub-only}"
+    `);
+  });
+
+  it("W4: 別ファイル同名ラベルが衝突しない（方式W の核心）", async () => {
+    // sub1.md と sub2.md がそれぞれ {#fig:hoge} を持っていても、ファイル名で区別される。
+    const app = makeStubApp([
+      { path: "sub1.md", extension: "md", content: "![[a.png]]{#fig:hoge}" },
+      { path: "sub2.md", extension: "md", content: "![[b.png]]{#fig:hoge}" },
+    ]);
+    const out = await expandTransclusions(
+      "![[sub1.md]]\n\n![[sub2.md]]",
+      app,
+      "root.md",
+      new Map(),
+    );
+    expect(out).toMatchInlineSnapshot(`
+      "![[a.png]]{#fig:sub1-hoge}
+
+      ![[b.png]]{#fig:sub2-hoge}"
+    `);
+  });
+
+  it("W5: 全接頭辞（fig/tbl/lst/eq/sec）がプレフィックス付与対象", async () => {
+    const app = makeStubApp([
+      {
+        path: "sub.md",
+        extension: "md",
+        content: "{#fig:a}\n{#tbl:b}\n{#lst:c}\n{#eq:d}\n{#sec:e}",
+      },
+    ]);
+    const out = await expandTransclusions("![[sub.md]]", app, "root.md", new Map());
+    expect(out).toMatchInlineSnapshot(`
+      "{#fig:sub-a}
+      {#tbl:sub-b}
+      {#lst:sub-c}
+      {#eq:sub-d}
+      {#sec:sub-e}"
+    `);
+  });
+
+  it("W6: caption 属性付き {#lst:demo caption=...} も保持してプレフィックス付与", async () => {
+    const app = makeStubApp([
+      {
+        path: "sub.md",
+        extension: "md",
+        content: '```{#lst:demo caption="Hello"}\ncode\n```',
+      },
+    ]);
+    const out = await expandTransclusions("![[sub.md]]", app, "root.md", new Map());
+    expect(out).toMatchInlineSnapshot(`
+      "\`\`\`{#lst:sub-demo caption="Hello"}
+      code
+      \`\`\`"
+    `);
+  });
 });

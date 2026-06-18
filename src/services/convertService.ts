@@ -19,6 +19,7 @@ import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
 import { DOCX_TEX_LUA_FILTER } from "../assets/docxTexFilter";
 import { MERMAID_STRIP_LUA_FILTER } from "../assets/mermaid-filter";
 import { expandTransclusions } from "../utils/transclusion";
+import { detectDuplicateLabels } from "../utils/crossrefLabels";
 import type { PluginContext } from "./lintService";
 import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
 import { t } from "../lang/helpers";
@@ -316,6 +317,21 @@ export async function convertCurrentPage(
       activeProfile,
       activeFile.path,
     );
+
+    // 方式W: crossref ラベルの重複検出。メイン文書内のユーザーミス、および
+    // 同一ファイル複数回埋め込みによる crossref 制約衝突を、Pandoc 実行前に検出して
+    // 分かりやすく通知する（ADR-005 関連）。GHC の CallStack ではなく日本語で原因を示す。
+    const duplicates = detectDuplicateLabels(content);
+    if (duplicates.length > 0) {
+      const summary = duplicates
+        .map(d => `${d.label} (${d.count}回)`)
+        .join(", ");
+      new Notice(t("notice_duplicate_labels", [summary]));
+      if (!ctx.settings.suppressDeveloperLogs) {
+        console.warn(`[MdTex] Duplicate cross-reference labels:`, duplicates);
+      }
+      return;
+    }
 
     // NOTE: docx 出力時の LaTeX コマンド処理は文字列の正規表現逆変換では行わない。
     // `[^}]+` 系パターンは波括弧のネスト・`\{` エスケープ・複数行・オプション引数に対応できず、

@@ -41,6 +41,7 @@ const ja: Record<TranslationKeys, string> = {
   notice_pandoc_more_logs: "Pandoc: 追加のログはコンソールを確認してください。",
   notice_generated: "生成に成功: {0}",
   notice_pandoc_exit_code: "エラー: Pandoc がコード {0} で終了しました",
+  notice_duplicate_labels: "変換を中止しました: 相互参照ラベルが重複しています: {0}。ラベル（fig:, tbl:, lst:, eq:, sec:）を一意にしてください。",
   notice_pandoc_launch_error: "Pandoc の起動に失敗: {0}",
 
   notice_markdownlint_missing: "markdownlint-cli2 が見つかりません。設定でパスを指定してください。",

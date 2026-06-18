@@ -254,4 +254,72 @@ describe("convertCurrentPage", () => {
 
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
+
+  it("crossref ラベル重複時は変換を中止して Notice で原因を通知する", async () => {
+    // 方式W: メイン文書内のユーザーミスも、同一ファイル複数回埋め込みによる重複も、
+    // Pandoc 実行前に検出して分かりやすい日本語で通知する（GHC CallStack ではなく）。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-dup-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    // メイン文書内で fig:hoge を2回使用（ユーザーミス）
+    await fs.writeFile(
+      inputPath,
+      "![[a.png]]{#fig:hoge}\n\n![[b.png]]{#fig:hoge}",
+      "utf8",
+    );
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      profiles: { Default: profile },
+      activeProfile: "Default",
+    };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    // 重複検出で変換中止: Pandoc は呼ばれない
+    expect(mockedRunCommand).not.toHaveBeenCalled();
+    const lastNotice = Notice.messages.pop() || "";
+    // 原因ラベルが通知に含まれる（ロケール非依存の確認）
+    expect(lastNotice).toContain("fig:hoge");
+    expect(lastNotice).toMatch(/duplicate|重複/);
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("重複なしの場合は通常通り Pandoc が呼ばれる", async () => {
+    // 対照実験: 重複がなければ detectDuplicateLabels は邪魔をしない。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-nodup-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "![[a.png]]{#fig:one}\n\n![[b.png]]{#fig:two}", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      profiles: { Default: profile },
+      activeProfile: "Default",
+    };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    // 重複なしなので Pandoc が呼ばれる
+    expect(mockedRunCommand).toHaveBeenCalledTimes(1);
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
 });
