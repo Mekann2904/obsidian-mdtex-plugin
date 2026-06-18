@@ -27,43 +27,41 @@ export const CALLOUT_PREAMBLE = `
 \\definecolor{callout-danger}{HTML}{EF4444}
 \\definecolor{callout-bug}{HTML}{EF4444}
 \\definecolor{callout-example}{HTML}{2563EB}
-
+% 【注意】この \\newtcolorbox オプション定義内に空行を入れてはならない。
+% LaTeX では空行 = \\par となり、本文で \\begin{obsidiancallout} を開いてオプションが
+% 適用される際に pgfkeys が \\par に衝突し "Paragraph ended before \\pgfkeys@addpath
+% was complete" で PDF 生成が停止する（issue: callout 使用時のみ発火）。
+% コメント行(%)は行末の改行を吸収するため空行を生まず安全。行末 % も同様。
 \\newtcolorbox{obsidiancallout}[3]{%
   % 基本設定
-  breakable,
-  enhanced,
-  parbox=false,
-  
+  breakable,%
+  enhanced,%
+  parbox=false,%
   % カラー設定
   colback=callout-bg,       % 背景色
   colframe=callout-bg,      % フレーム色（背景と同化させる）
   colbacktitle=callout-bg,  % タイトル背景（背景と同化させる）
   coltitle=#1,              % タイトル文字色（引数で指定された色）
   coltext=callout-text,     % 本文文字色
-  
   % 枠線と左ラインの設定（ここが重要）
   boxrule=0pt,              % 全体の枠線はなし
   frame hidden,             % フレーム描画を隠す（背景色のみにする）
   borderline west={3pt}{0pt}{#1}, % ★左側に3ptのラインを追加（色はタイトルと同じ）
-  
   % 角丸設定
-  arc=3pt,
-  outer arc=3pt,
+  arc=3pt,%
+  outer arc=3pt,%
   sharp corners=west,       % 左側の角は直角にする（ラインをきれいに見せるため）
-  
   % 余白設定（レイアウト調整）
   left=10pt,                % 左余白（ラインからの距離）
   right=10pt,               % 右余白
   top=0pt,                  % 本文上の余白
   bottom=10pt,              % 本文下の余白
-  
   % タイトル設定
   toptitle=8pt,             % タイトル上の余白
   bottomtitle=2pt,          % タイトル下の余白
   titlerule=0mm,            % タイトルと本文の間の線を消す
-  fonttitle=\\bfseries\\sffamily,
-  
+  fonttitle=\\bfseries\\sffamily,%
   % タイトル内容
-  title={#2\\hspace{0.5em}#3},
+  title={#2\\hspace{0.5em}#3},%
 }
 `;
