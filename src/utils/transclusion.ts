@@ -46,8 +46,16 @@ export async function expandTransclusions(
     const blockquoteMatch = before.match(/^\s*(>+\s*)$/);
     const blockquotePrefix = blockquoteMatch ? blockquoteMatch[1] : "";
 
-    // プレフィックスを除いた部分を出力へ追加
-    result += markdown.substring(lastIndex, lineStart);
+    // プレフィックスを除いた部分を出力へ追加。
+    // 従来は無条件で lineStart までしか足さず、行頭〜埋め込み直前（before）に含まれる
+    // 引用プレフィックス「以外」のテキストもろとも消えていた（J2/J3/M3 のバグ）。
+    // 修正: 引用プレフィックスが検出された場合のみ行頭まで足し（プレフィックスは別途
+    // applyBlockquotePrefix で再付与）、それ以外は m.index まで足して before のテキストを残す。
+    if (blockquotePrefix) {
+      result += markdown.substring(lastIndex, lineStart);
+    } else {
+      result += markdown.substring(lastIndex, m.index);
+    }
 
     const parsed = parseLink(inner);
     const file = app.metadataCache.getFirstLinkpathDest(parsed.path, sourcePath);

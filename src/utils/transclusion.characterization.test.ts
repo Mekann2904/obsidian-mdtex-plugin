@@ -83,13 +83,13 @@ describe("expandTransclusions / extractSection: characterization（現状振る�
       { path: "img.png", extension: "png", content: "" },
     ]);
     const out = await expandTransclusions("before ![[img.png]] after", app, "src.md", new Map());
-    expect(out).toMatchInlineSnapshot(`"![[img.png]] after"`);
+    expect(out).toMatchInlineSnapshot(`"before ![[img.png]] after"`);
   });
 
   it("J3: 存在しないファイルはそのまま残す", async () => {
     const app = makeStubApp([{ path: "src.md", extension: "md", content: "text" }]);
     const out = await expandTransclusions("x ![[missing.md]] y", app, "src.md", new Map());
-    expect(out).toMatchInlineSnapshot(`"![[missing.md]] y"`);
+    expect(out).toMatchInlineSnapshot(`"x ![[missing.md]] y"`);
   });
 
   // ===== K. 循環・深度 =====
@@ -99,7 +99,7 @@ describe("expandTransclusions / extractSection: characterization（現状振る�
       { path: "src.md", extension: "md", content: "self ![[src.md]] end" },
     ]);
     const out = await expandTransclusions("self ![[src.md]] end", app, "src.md", new Map());
-    expect(out).toMatchInlineSnapshot(`" end end"`);
+    expect(out).toMatchInlineSnapshot(`"self self  end end"`);
   });
 
   it("K2: 相互参照（A→B→A）で循環を検出する", async () => {
@@ -108,7 +108,7 @@ describe("expandTransclusions / extractSection: characterization（現状振る�
       { path: "b.md", extension: "md", content: "B ![[a.md]] B" },
     ]);
     const out = await expandTransclusions("![[a.md]]", app, "root.md", new Map());
-    expect(out).toMatchInlineSnapshot(`" B A"`);
+    expect(out).toMatchInlineSnapshot(`"A B  B A"`);
   });
 
   it("K3: ダイヤモンド参照（A→B,C / B→D / C→D）で D は2回展開される", async () => {
@@ -119,7 +119,7 @@ describe("expandTransclusions / extractSection: characterization（現状振る�
       { path: "d.md", extension: "md", content: "D" },
     ]);
     const out = await expandTransclusions("![[a.md]]", app, "root.md", new Map());
-    expect(out).toMatchInlineSnapshot(`"DA1 ![[b.md]]D A3"`);
+    expect(out).toMatchInlineSnapshot(`"A1 B D A2 C D A3"`);
   });
 
   // ===== L. セクション抽出（extractSection 経由観測）=====
@@ -225,7 +225,7 @@ describe("expandTransclusions / extractSection: characterization（現状振る�
       { path: "note.md", extension: "md", content: "content" },
     ]);
     const out = await expandTransclusions("text ![[note.md]]", app, "root.md", new Map());
-    expect(out).toMatchInlineSnapshot(`"content"`);
+    expect(out).toMatchInlineSnapshot(`"text content"`);
   });
 
   // ===== O. parseLink 境界 =====
@@ -258,7 +258,7 @@ describe("expandTransclusions / extractSection: characterization（現状振る�
       { path: "b.md", extension: "md", content: "B" },
     ]);
     const out = await expandTransclusions("![[a.md]] and ![[b.md]]", app, "root.md", new Map());
-    expect(out).toMatchInlineSnapshot(`"A![[a.md]]B"`);
+    expect(out).toMatchInlineSnapshot(`"A and B"`);
   });
 
   it("P2: ネストした埋め込み（A が B を埋め込み、B が C を埋め込み）", async () => {
@@ -268,6 +268,6 @@ describe("expandTransclusions / extractSection: characterization（現状振る�
       { path: "c.md", extension: "md", content: "C" },
     ]);
     const out = await expandTransclusions("![[a.md]]", app, "root.md", new Map());
-    expect(out).toMatchInlineSnapshot(`"C B2 A2"`);
+    expect(out).toMatchInlineSnapshot(`"A1 B1 C B2 A2"`);
   });
 });
