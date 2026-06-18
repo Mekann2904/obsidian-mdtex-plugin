@@ -369,9 +369,14 @@ export function unwrapValidWikiLinks(markdown: string, app: App, sourcePath: str
   const lines = markdown.split("\n");
   let inFence = false;
 
+  // CommonMark 互換のフェンス開閉行: 0個以上の空白 + (``` または ~~~) 3本以上。
+  // 従来は /^```/ のみ判定しチルダフェンス（~~~）を認識しないバグがあった
+  // （チルダフェンス内の [[...]] が誤って展開されていた）。
+  const fenceLineRegex = /^\s*(`{3,}|~{3,})/;
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (/^```/.test(line)) {
+    if (fenceLineRegex.test(line)) {
       inFence = !inFence;
       continue;
     }
