@@ -120,7 +120,8 @@ const ja: Record<TranslationKeys, string> = {
   notice_preamble_copied: "プリアンブルをコピーしました。",
 
   heading_localization: "ラベルと言語設定",
-  heading_localization_desc: "キャプションや参照に使うラベルとプレフィックスを設定します。",
+  heading_localization_desc:
+    "キャプションや参照に使うラベルとプレフィックスを設定します。文書の frontmatter に figureTitle / figPrefix / tableTitle / tblPrefix / listingTitle / lstPrefix / eqnPrefix を書くと、このプロファイル設定より優先されます（文書ごとに上書き可能）。",
   placeholder_label: "ラベル",
   placeholder_prefix: "プレフィックス",
   label_figures: "図（ラベル / プレフィックス）",
@@ -134,9 +135,7 @@ const ja: Record<TranslationKeys, string> = {
   setting_crossref_path_name: "pandoc-crossref のパス",
   setting_crossref_path_desc: "pandoc-crossref 実行ファイルへのパス。",
   setting_enable_advtex_name: "高度な LaTeX コマンドを有効",
-  setting_enable_advtex_desc: "Lua フィルタを有効にします（docx の raw 出力など）。",
-  setting_lua_filter_name: "Lua フィルタのパス",
-  setting_lua_filter_desc: "カスタム Lua フィルタへのパス。",
+  setting_enable_advtex_desc: "DOCX 出力の LaTeX コマンド（\\textbf, \\footnote など）を AST ベースで処理します。",
   setting_pandoc_extra_args_name: "Pandoc 追加引数",
   setting_pandoc_extra_args_desc: "pandoc に渡す追加引数。",
   placeholder_pandoc_extra_args: "--toc --number-sections",

@@ -119,7 +119,8 @@ const en = {
   notice_preamble_copied: "Preamble copied to clipboard.",
 
   heading_localization: "Localization (Labels & Prefixes)",
-  heading_localization_desc: "Set the labels used for captions and cross-references.",
+  heading_localization_desc:
+    "Set the labels used for captions and cross-references. You can override these per document via frontmatter keys (figureTitle / figPrefix / tableTitle / tblPrefix / listingTitle / lstPrefix / eqnPrefix), which take precedence over the profile settings.",
   placeholder_label: "Label",
   placeholder_prefix: "Prefix",
   label_figures: "Figures (Label / Prefix)",
@@ -133,9 +134,7 @@ const en = {
   setting_crossref_path_name: "Pandoc Crossref Path",
   setting_crossref_path_desc: "Path to pandoc-crossref executable.",
   setting_enable_advtex_name: "Enable Advanced LaTeX Commands",
-  setting_enable_advtex_desc: "Enable Lua filters (e.g. for docx raw output).",
-  setting_lua_filter_name: "Lua Filter Path",
-  setting_lua_filter_desc: "Path to custom lua filter.",
+  setting_enable_advtex_desc: "Convert LaTeX commands (e.g. \\textbf, \\footnote) in DOCX output via AST.",
   setting_pandoc_extra_args_name: "Pandoc Extra Arguments",
   setting_pandoc_extra_args_desc: "Any other arguments to pass to pandoc.",
   placeholder_pandoc_extra_args: "--toc --number-sections",

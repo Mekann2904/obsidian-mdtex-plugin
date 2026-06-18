@@ -90,6 +90,72 @@ describe("convertCurrentPage", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
+  it("crossref-ON ではプリアンブルに \\renewcommand を注入せず --metadata-file でメタデータを渡す", async () => {
+    // frontmatter 優先を実現するため、crossref-ON 時はキャプション語をメタデータ経路
+    // （--metadata-file / frontmatter）に一本化し、\renewcommand との二重管理を解消する。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-xref-on-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "# Title\nHello", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir, usePandocCrossref: true };
+    const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    const [, args] = mockedRunCommand.mock.calls[0];
+    expect(args).toContain("--metadata-file");
+
+    const preamble = await fs.readFile(path.join(tmpDir, "note.preamble.tex"), "utf8");
+    expect(preamble).not.toContain("\\renewcommand{\\figurename}");
+    expect(preamble).not.toContain("\\renewcommand{\\tablename}");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("crossref-OFF ではプロファイル値で \\renewcommand を注入するフォールバックが残る", async () => {
+    // crossref-OFF 時はメタデータの消費先がないため、プロファイル値で LaTeX ネイティブの
+    // キャプション名を上書きするフォールバックを維持する（後方互換）。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-xref-off-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "# Title\nHello", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = {
+      ...DEFAULT_PROFILE,
+      outputDirectory: tmpDir,
+      usePandocCrossref: false,
+      figureLabel: "図",
+    };
+    const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    // crossref-OFF では crossref 専用メタデータに消費先がないため、--metadata-file
+    // を渡さず LaTeX ネイティブの \renewcommand フォールバックのみを使う。
+    const [, offArgs] = mockedRunCommand.mock.calls[0];
+    expect(offArgs).not.toContain("--metadata-file");
+
+    const preamble = await fs.readFile(path.join(tmpDir, "note.preamble.tex"), "utf8");
+    expect(preamble).toContain("\\renewcommand{\\figurename}{図}");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
   it("Pandoc が異常終了した場合はエラーノーティスを出す", async () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-err-"));
     const inputPath = path.join(tmpDir, "note.md");

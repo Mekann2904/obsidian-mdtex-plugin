@@ -7,21 +7,26 @@ import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs/promises";
-import * as fsSync from "fs";
 import { ProfileSettings } from "../MdTexPluginSettings";
 import {
   replaceWikiLinksRecursivelyAsync,
   unwrapValidWikiLinks,
   stripObsidianComments,
 } from "../utils/markdownTransforms";
-import { cleanLatexPreamble, appendLabelOverrides } from "../utils/latexPreamble";
+import { appendLabelOverrides } from "../utils/latexPreamble";
 import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
 import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
+import { DOCX_TEX_LUA_FILTER } from "../assets/docxTexFilter";
 import { expandTransclusions } from "../utils/transclusion";
 import type { PluginContext } from "./lintService";
 import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
 import { t } from "../lang/helpers";
-import { buildPandocCommand, OutputFormat, PandocCommandResult } from "./pandocCommandBuilder";
+import {
+  buildPandocCommand,
+  buildLabelMetadataYaml,
+  OutputFormat,
+  PandocCommandResult,
+} from "./pandocCommandBuilder";
 import { runCommand } from "../utils/processRunner";
 import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
 
@@ -37,6 +42,25 @@ async function createTempLuaFilter(): Promise<{ luaPath: string; tempDir: string
     const luaPath = joinFsPath(tempDir, fileName);
     await fs.writeFile(luaPath, CALLOUT_LUA_FILTER, "utf8");
     return { luaPath, tempDir };
+  } catch (error) {
+    await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
+    throw error;
+  }
+}
+
+// プロファイル既定値のラベル／接頭辞を Pandoc メタデータ YAML として一時生成する。
+// 値が全て空なら null を返し、呼び出し側は --metadata-file を省略する。
+async function createTempMetadataFile(
+  profile: ProfileSettings,
+): Promise<{ metadataPath: string; tempDir: string } | null> {
+  const body = buildLabelMetadataYaml(profile);
+  if (!body) return null;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-metadata-"));
+  try {
+    const fileName = `labels-${Date.now()}-${Math.random().toString(16).slice(2)}.yaml`;
+    const metadataPath = joinFsPath(tempDir, fileName);
+    await fs.writeFile(metadataPath, body, "utf8");
+    return { metadataPath, tempDir };
   } catch (error) {
     await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
     throw error;
@@ -227,22 +251,29 @@ export async function convertCurrentPage(
       }
     }
 
-    // ユーザー設定プリアンブルにコールアウト定義を付与し、listing名の上書きを加える
+    // ユーザー設定プリアンブルにコールアウト定義を付与する
+    // プリアンブルは生 .tex として --include-in-header で渡すため、YAML(header-includes) 時代の
+    // クリーニングは行わず、ユーザー設定 + コールアウト定義をそのまま素通りさせる。
     const baseHeader = activeProfile.headerIncludes || "";
     const withCallout = baseHeader.includes("obsidiancallout")
       ? baseHeader
       : `${baseHeader.trim()}\n\n${CALLOUT_PREAMBLE}`.trim();
-    const cleanedHeader = cleanLatexPreamble(withCallout);
-    const headerWithListings = appendLabelOverrides(cleanedHeader, {
-      figureLabel: activeProfile.figureLabel,
-      figPrefix: activeProfile.figPrefix,
-      tableLabel: activeProfile.tableLabel,
-      tblPrefix: activeProfile.tblPrefix,
-      codeLabel: activeProfile.codeLabel,
-      lstPrefix: activeProfile.lstPrefix,
-      equationLabel: activeProfile.equationLabel,
-      eqnPrefix: activeProfile.eqnPrefix,
-    });
+    // crossref-ON 時はキャプション語／参照接頭辞をメタデータ経路
+    // （--metadata-file / frontmatter）に一本化し、\renewcommand との二重管理を避ける。
+    // crossref-OFF 時はメタデータの消費先がないため、プロファイル値で LaTeX ネイティブの
+    // キャプション名（\figurename 等）を上書きするフォールバックを残す。
+    const headerWithListings = activeProfile.usePandocCrossref
+      ? withCallout
+      : appendLabelOverrides(withCallout, {
+          figureLabel: activeProfile.figureLabel,
+          figPrefix: activeProfile.figPrefix,
+          tableLabel: activeProfile.tableLabel,
+          tblPrefix: activeProfile.tblPrefix,
+          codeLabel: activeProfile.codeLabel,
+          lstPrefix: activeProfile.lstPrefix,
+          equationLabel: activeProfile.equationLabel,
+          eqnPrefix: activeProfile.eqnPrefix,
+        });
 
     //
     // LaTeX の \maketitle はタイトルページを強制的に plain スタイルにする。
@@ -281,19 +312,11 @@ export async function convertCurrentPage(
       cache,
     );
 
-    if (format === "docx") {
-      content = content
-        .replace(/\\textbf\{([^}]+)\}/g, "**$1**")
-        .replace(/\\textit\{([^}]+)\}/g, "*$1*")
-        .replace(/\\footnote\{([^}]+)\}/g, "^[$1]")
-        .replace(/\\centerline\{([^}]+)\}/g, '::: {custom-style="Center"}\n$1\n:::')
-        .replace(/\\rightline\{([^}]+)\}/g, '::: {custom-style="Right"}\n$1\n:::')
-        .replace(/\\vspace\{[^}]+\}/g, "\n\n")
-        .replace(/\\kenten\{([^}]+)\}/g, '[$1]{custom-style="Kenten"}')
-        .replace(/\\newpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
-        .replace(/\\clearpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
-        .replace(/\\noindent/g, "");
-    }
+    // NOTE: docx 出力時の LaTeX コマンド処理は文字列の正規表現逆変換では行わない。
+    // `[^}]+` 系パターンは波括弧のネスト・`\{` エスケープ・複数行・オプション引数に対応できず、
+    // ネストした LaTeX（例: \footnote{\textbf{重要}}）を破壊するため。
+    // 代わりに Pandoc の AST を直接処理する Lua フィルタ（DOCX_TEX_LUA_FILTER）へ一本化し、
+    // buildPandocExecutionPlan で実行時に一時ファイルとして渡す。
 
     if (lintEnabled) {
       // markdownlint 後の内容を Pandoc に渡すため、再度中間ファイルへ書き戻す
@@ -456,12 +479,20 @@ interface PandocExecutionPlan {
   workingDir: string;
 }
 
-function resolveDocxLuaFilter(profile: ProfileSettings, format: OutputFormat): string | null {
-  if (format !== "docx") return null;
-  if (!profile.enableAdvancedTexCommands) return null;
-  const luaFilterPath = profile.luaFilterPath.trim();
-  if (!luaFilterPath) return null;
-  return fsSync.existsSync(luaFilterPath) ? luaFilterPath : null;
+// DOCX 出力用の AST ベース Lua フィルタ（DOCX_TEX_LUA_FILTER）を一時生成する。
+// 従来の loose ファイル（tex-to-docx.lua）依存は廃止し、配布物（main.js）に埋め込んだ
+// フィルタを実行時に一時ファイルへ書き出すことで、全環境で正しく適用されるようにする。
+async function createTempDocxFilter(): Promise<{ luaPath: string; tempDir: string }> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-docx-"));
+  try {
+    const fileName = `docx-tex-${Date.now()}-${Math.random().toString(16).slice(2)}.lua`;
+    const luaPath = joinFsPath(tempDir, fileName);
+    await fs.writeFile(luaPath, DOCX_TEX_LUA_FILTER, "utf8");
+    return { luaPath, tempDir };
+  } catch (error) {
+    await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
+    throw error;
+  }
 }
 
 async function isInsideBaseDir(target: string, base: string): Promise<boolean> {
@@ -503,8 +534,25 @@ async function buildPandocExecutionPlan(params: {
     tempFiles.push(created.luaPath, created.tempDir);
   }
 
-  const docxLua = resolveDocxLuaFilter(params.profile, params.format);
-  if (docxLua) luaFilters.push(docxLua);
+  if (params.format === "docx" && params.profile.enableAdvancedTexCommands) {
+    const docxFilter = await createTempDocxFilter();
+    luaFilters.push(docxFilter.luaPath);
+    tempFiles.push(docxFilter.luaPath, docxFilter.tempDir);
+  }
+
+  // プロファイル既定値をメタデータとして渡し、文書 frontmatter で上書き可能にする。
+  // ただし figureTitle / figPrefix 等は pandoc-crossref 専用メタデータなので、
+  // crossref-OFF では消費先がなく無意味。その場合は LaTeX ネイティブの
+  // \renewcommand フォールバック（convertCurrentPage 側）に任せ、不要な
+  // 一時ファイル生成を避ける。
+  const metadata = params.profile.usePandocCrossref
+    ? await createTempMetadataFile(params.profile)
+    : null;
+  let metadataFile: string | undefined;
+  if (metadata) {
+    metadataFile = metadata.metadataPath;
+    tempFiles.push(metadata.metadataPath, metadata.tempDir);
+  }
 
   try {
     const command = buildPandocCommand({
@@ -513,6 +561,7 @@ async function buildPandocExecutionPlan(params: {
       inputPath: params.useStdin ? undefined : params.inputPath,
       outputPath: params.outputFile,
       headerPath: params.headerFilePath,
+      metadataFile,
       workingDir: params.workingDir,
       extraArgs: params.pandocExtraArgs,
       luaFilters,
@@ -528,7 +577,7 @@ async function buildPandocExecutionPlan(params: {
   }
 }
 
-const TEMP_PREFIXES = ["mdtex-lua-", "mdtex-mermaid-", "mdtex-"];
+const TEMP_PREFIXES = ["mdtex-lua-", "mdtex-mermaid-", "mdtex-docx-", "mdtex-"];
 
 async function cleanupTemporaryFiles(files: string[]) {
   if (!files?.length) return;

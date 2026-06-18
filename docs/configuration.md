@@ -243,21 +243,33 @@ YAML形式でパレットに表示するコマンドを定義します。
 
 ### 使用方法
 
-これらの設定は`\crefname`を通じてLaTeXに渡され、以下のように使用できます：
-
-```markdown
-![画像の説明](image.png){#fig:example}
-
-図\ref{fig:example}を参照
-```
-
-またはpandoc-crossrefを使用：
+これらの設定は Pandoc のメタデータ（pandoc-crossref の `figureTitle` / `figPrefix` / `tableTitle` / `tblPrefix` / `listingTitle` / `lstPrefix` / `eqnPrefix`）として渡されます。Pandoc Crossref が有効な場合は、図・表・コード・数式のキャプション語と参照接頭辞がこのメタデータから適用されます。
 
 ```markdown
 ![画像の説明](image.png){#fig:example}
 
 [@fig:example]を参照
 ```
+
+### 文書ごとに frontmatter で上書きする
+
+ラベルとプレフィックスは **文書の frontmatter で上書きできます**。優先順位は `frontmatter > プロファイル > デフォルト` です。プロファイル設定を変えずに、特定の文書だけキャプション語を切り替えたい場合に便利です。
+
+frontmatter に対応するメタデータキーを書くと、プロファイル設定より優先されます。
+
+```yaml
+---
+figureTitle: 図
+figPrefix: 図
+tableTitle: 表
+tblPrefix: 表
+listingTitle: コード
+lstPrefix: コード
+eqnPrefix: 式
+---
+```
+
+> **注意**: 数式キャプション語（`Equation`）は pandoc-crossref に対応する Title 系メタデータキーがなく、参照接頭辞の `eqnPrefix` のみ上書き可能です。Pandoc Crossref が無効の場合は frontmatter 上書きの効かない LaTeX ネイティブキャプション名のフォールバックが使われます。
 
 ---
 
@@ -279,16 +291,26 @@ pandoc-crossref実行ファイルへのパスを指定します。
 
 ### 高度なLaTeXコマンドを有効
 
-Luaフィルタを有効にします。DOCX変換時のraw出力などに使用されます。
+DOCX 変換時の LaTeX コマンド（`\textbf` / `\textit` / `\underline` / `\footnote` / `\textcolor` / `\newpage` / `\clearpage` など）を、Pandoc の AST を直接処理する組み込み Lua フィルタで変換します。従来の文字列の正規表現逆変換は廃止され、波括弧のネストや `\{` エスケープが含まれる LaTeX でも壊れません。
 
 - **デフォルト**: 有効（`true`）
+- **仕組み**: フィルタは `main.js` に埋め込まれて配布され、実行時に一時ファイルとして適用されます。loose ファイル（従来の `tex-to-docx.lua`）の配置は不要です。
 
-### Luaフィルタのパス
+#### DOCX の段落スタイル（custom-style）と reference-doc
 
-カスタムLuaフィルタへのパスを指定します。
+DOCX で `\centerline` / `\rightline` / `\kenten` 等を意図した見た目で出力するには、reference-doc（`--reference-doc`）に以下のカスタム段落スタイルが定義された `.docx` テンプレートを指定します。
 
-- **デフォルト**: `tex-to-docx.lua`
-- **説明**: DOCX変換時に使用されるLuaスクリプト
+- `Center` — センタリング用
+- `Right` — 右寄せ用
+- `Kenten` — 塞点（圏点）用
+
+手順:
+
+1. Pandoc の既定テンプレートを取り出す: `pandoc -o template.docx --print-default-data-file reference.docx`
+2. Word で `template.docx` を開き、上記のカスタム段落スタイルを作成・保存する
+3. プロファイルの「Pandoc 追加引数」に `--reference-doc=template.docx` を指定する
+
+> `--reference-doc` は DOCX 以外の形式では自動で除外されます。
 
 ### Pandoc追加引数
 
