@@ -484,18 +484,6 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         }),
       );
 
-    if (currentProfile.enableAdvancedTexCommands) {
-      new Setting(containerEl)
-        .setName(t("setting_lua_filter_name"))
-        .setDesc(t("setting_lua_filter_desc"))
-        .addText(text =>
-          text.setValue(currentProfile.luaFilterPath).onChange(async value => {
-            currentProfile.luaFilterPath = value;
-            await this.plugin.saveSettings();
-          }),
-        );
-    }
-
     new Setting(containerEl)
       .setName(t("setting_pandoc_extra_args_name"))
       .setDesc(t("setting_pandoc_extra_args_desc"))

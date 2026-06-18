@@ -279,16 +279,26 @@ pandoc-crossref実行ファイルへのパスを指定します。
 
 ### 高度なLaTeXコマンドを有効
 
-Luaフィルタを有効にします。DOCX変換時のraw出力などに使用されます。
+DOCX 変換時の LaTeX コマンド（`\textbf` / `\textit` / `\underline` / `\footnote` / `\textcolor` / `\newpage` / `\clearpage` など）を、Pandoc の AST を直接処理する組み込み Lua フィルタで変換します。従来の文字列の正規表現逆変換は廃止され、波括弧のネストや `\{` エスケープが含まれる LaTeX でも壊れません。
 
 - **デフォルト**: 有効（`true`）
+- **仕組み**: フィルタは `main.js` に埋め込まれて配布され、実行時に一時ファイルとして適用されます。loose ファイル（従来の `tex-to-docx.lua`）の配置は不要です。
 
-### Luaフィルタのパス
+#### DOCX の段落スタイル（custom-style）と reference-doc
 
-カスタムLuaフィルタへのパスを指定します。
+DOCX で `\centerline` / `\rightline` / `\kenten` 等を意図した見た目で出力するには、reference-doc（`--reference-doc`）に以下のカスタム段落スタイルが定義された `.docx` テンプレートを指定します。
 
-- **デフォルト**: `tex-to-docx.lua`
-- **説明**: DOCX変換時に使用されるLuaスクリプト
+- `Center` — センタリング用
+- `Right` — 右寄せ用
+- `Kenten` — 塞点（圏点）用
+
+手順:
+
+1. Pandoc の既定テンプレートを取り出す: `pandoc -o template.docx --print-default-data-file reference.docx`
+2. Word で `template.docx` を開き、上記のカスタム段落スタイルを作成・保存する
+3. プロファイルの「Pandoc 追加引数」に `--reference-doc=template.docx` を指定する
+
+> `--reference-doc` は DOCX 以外の形式では自動で除外されます。
 
 ### Pandoc追加引数
 
