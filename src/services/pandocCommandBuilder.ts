@@ -101,23 +101,11 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   return { command: pandocPath, args };
 }
 
-/**
- * Pandoc の入力フォーマット引数（`-f`）を返す。
- *
- * 全出力形式（pdf/latex/docx）で共通の Markdown 拡張セットを明示する。
- * Pandoc 3.x のデフォルト `markdown` は `+raw_tex +raw_html +fenced_divs
- * +raw_attribute +fenced_code_attributes` をすべて ON で含むため、これらは
- * 挙動を変えない冗長な再指定になるが、プラグインが依存する構文
- * （生 LaTeX / `:::` fenced div / `{=latex}` `{=openxml}` raw block /
- * `{#lst:...}` コード属性）を Pandoc のバージョン差や設定ドリフトに
- * 依存せず安定して有効化するため明示する。
- *
- * `format` は歴史的に出力形式ごとの分岐に使われていた引数だが、現状は
- * すべて同じ結果を返す。呼び出し側（`buildPandocCommand`）の意図と API
- * 安定性を保つため受け取り続け、分岐は行わない。
- */
 export function getInputFormatArgs(format: string): string[] {
-  return ["-f", "markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes"];
+  if (format === "docx") {
+    return ["-f", "markdown+raw_html+fenced_divs+raw_attribute"];
+  }
+  return ["-f", "markdown"];
 }
 
 export function filterPandocExtrasForFormat(extras: string[], format: string): string[] {
