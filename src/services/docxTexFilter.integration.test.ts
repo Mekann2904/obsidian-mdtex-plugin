@@ -292,3 +292,49 @@ describe.skipIf(!pandocAvailable() || !unzipAvailable())(
     });
   },
 );
+
+describe.skipIf(!pandocAvailable())(
+  "コードブロック委譲: 実 Pandoc --listings での lstlisting 生成回帰テスト (#38)",
+  () => {
+    // 標準記法 / 非標準(Obsidian)記法 / JS系(listings 非対応) の3パターン。
+    // これらは MdTex 側で自前変換せず Pandoc へパススルーするため、--listings
+    // ライタが language=/caption=/label= を正しく生成するかを検証する。
+    const CODE_SNIPPETS = [
+      '```{#lst:std .python caption="standard caption"}',
+      'print("standard")',
+      "```",
+      "",
+      '```python{#lst:obs caption="obsidian caption"}',
+      'print("obsidian")',
+      "```",
+      "",
+      "```{#lst:js .javascript}",
+      "console.log(1)",
+      "```",
+      "",
+    ].join("\n");
+
+    it("標準/非標準(Obsidian)記法とも language=/caption=/label= を生成し、JS系は language= を出力しない", () => {
+      // プラグインと同じ -f 指定 + --listings で latex へ変換する
+      const res = runPandoc(["-f", INPUT_FORMAT, "-t", "latex", "--listings"], CODE_SNIPPETS);
+      expect(res.status).toBe(0);
+      expect(res.stdout).not.toBe("");
+      const out = res.stdout;
+
+      // 標準記法: language=Python + caption + label
+      expect(out).toContain("language=Python");
+      expect(out).toContain("label=lst:std");
+      expect(out).toContain("caption={standard caption}");
+      // 非標準(Obsidian)記法も同一出力（言語の直後属性を Pandoc が認識）
+      expect(out).toContain("label=lst:obs");
+      expect(out).toContain("caption={obsidian caption}");
+
+      // JS系: --listings は skylighting 互換でないため language= を出力しない（純粋委譲の受入）
+      expect(out).toContain("label=lst:js");
+      expect(out).not.toContain("language=JavaScript");
+      // python 2ブロックのみが language= を持ち、JSブロックは持たない
+      expect((out.match(/language=Python/g) || []).length).toBe(2);
+      expect((out.match(/\\begin\{lstlisting\}/g) || []).length).toBe(3);
+    });
+  },
+);
