@@ -7,7 +7,6 @@ import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs/promises";
-import * as fsSync from "fs";
 import { ProfileSettings } from "../MdTexPluginSettings";
 import {
   replaceWikiLinksRecursivelyAsync,
@@ -17,6 +16,7 @@ import {
 import { appendLabelOverrides } from "../utils/latexPreamble";
 import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
 import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
+import { DOCX_TEX_LUA_FILTER } from "../assets/docxTexFilter";
 import { expandTransclusions } from "../utils/transclusion";
 import type { PluginContext } from "./lintService";
 import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
@@ -312,19 +312,11 @@ export async function convertCurrentPage(
       cache,
     );
 
-    if (format === "docx") {
-      content = content
-        .replace(/\\textbf\{([^}]+)\}/g, "**$1**")
-        .replace(/\\textit\{([^}]+)\}/g, "*$1*")
-        .replace(/\\footnote\{([^}]+)\}/g, "^[$1]")
-        .replace(/\\centerline\{([^}]+)\}/g, '::: {custom-style="Center"}\n$1\n:::')
-        .replace(/\\rightline\{([^}]+)\}/g, '::: {custom-style="Right"}\n$1\n:::')
-        .replace(/\\vspace\{[^}]+\}/g, "\n\n")
-        .replace(/\\kenten\{([^}]+)\}/g, '[$1]{custom-style="Kenten"}')
-        .replace(/\\newpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
-        .replace(/\\clearpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
-        .replace(/\\noindent/g, "");
-    }
+    // NOTE: docx 出力時の LaTeX コマンド処理は文字列の正規表現逆変換では行わない。
+    // `[^}]+` 系パターンは波括弧のネスト・`\{` エスケープ・複数行・オプション引数に対応できず、
+    // ネストした LaTeX（例: \footnote{\textbf{重要}}）を破壊するため。
+    // 代わりに Pandoc の AST を直接処理する Lua フィルタ（DOCX_TEX_LUA_FILTER）へ一本化し、
+    // buildPandocExecutionPlan で実行時に一時ファイルとして渡す。
 
     if (lintEnabled) {
       // markdownlint 後の内容を Pandoc に渡すため、再度中間ファイルへ書き戻す
@@ -487,12 +479,20 @@ interface PandocExecutionPlan {
   workingDir: string;
 }
 
-function resolveDocxLuaFilter(profile: ProfileSettings, format: OutputFormat): string | null {
-  if (format !== "docx") return null;
-  if (!profile.enableAdvancedTexCommands) return null;
-  const luaFilterPath = profile.luaFilterPath.trim();
-  if (!luaFilterPath) return null;
-  return fsSync.existsSync(luaFilterPath) ? luaFilterPath : null;
+// DOCX 出力用の AST ベース Lua フィルタ（DOCX_TEX_LUA_FILTER）を一時生成する。
+// 従来の loose ファイル（tex-to-docx.lua）依存は廃止し、配布物（main.js）に埋め込んだ
+// フィルタを実行時に一時ファイルへ書き出すことで、全環境で正しく適用されるようにする。
+async function createTempDocxFilter(): Promise<{ luaPath: string; tempDir: string }> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-docx-"));
+  try {
+    const fileName = `docx-tex-${Date.now()}-${Math.random().toString(16).slice(2)}.lua`;
+    const luaPath = joinFsPath(tempDir, fileName);
+    await fs.writeFile(luaPath, DOCX_TEX_LUA_FILTER, "utf8");
+    return { luaPath, tempDir };
+  } catch (error) {
+    await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
+    throw error;
+  }
 }
 
 async function isInsideBaseDir(target: string, base: string): Promise<boolean> {
@@ -534,8 +534,11 @@ async function buildPandocExecutionPlan(params: {
     tempFiles.push(created.luaPath, created.tempDir);
   }
 
-  const docxLua = resolveDocxLuaFilter(params.profile, params.format);
-  if (docxLua) luaFilters.push(docxLua);
+  if (params.format === "docx" && params.profile.enableAdvancedTexCommands) {
+    const docxFilter = await createTempDocxFilter();
+    luaFilters.push(docxFilter.luaPath);
+    tempFiles.push(docxFilter.luaPath, docxFilter.tempDir);
+  }
 
   // プロファイル既定値をメタデータとして渡し、文書 frontmatter で上書き可能にする。
   // ただし figureTitle / figPrefix 等は pandoc-crossref 専用メタデータなので、
@@ -574,7 +577,7 @@ async function buildPandocExecutionPlan(params: {
   }
 }
 
-const TEMP_PREFIXES = ["mdtex-lua-", "mdtex-mermaid-", "mdtex-"];
+const TEMP_PREFIXES = ["mdtex-lua-", "mdtex-mermaid-", "mdtex-docx-", "mdtex-"];
 
 async function cleanupTemporaryFiles(files: string[]) {
   if (!files?.length) return;

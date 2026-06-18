@@ -36,6 +36,11 @@ export interface ProfileSettings {
   documentClassOptions: string;
   useStandalone: boolean;
   enableAdvancedTexCommands: boolean;
+  /**
+   * @deprecated DOCX 用 Lua フィルタは `DOCX_TEX_LUA_FILTER`（main.js 埋め込み）へ
+   * 一本化され、loose ファイルパスは参照されなくなりました。既存の data.json との
+   * 後方互換性のためフィールド自体は残しますが、実行時には使用されません。
+   */
   luaFilterPath: string;
 }
 
@@ -247,6 +252,7 @@ export const DEFAULT_PROFILE: ProfileSettings = {
   documentClassOptions: "",
   useStandalone: true,
   enableAdvancedTexCommands: true,
+  // @deprecated（使用されません。後方互換性のため既定値を維持）
   luaFilterPath: "tex-to-docx.lua",
 };
 
