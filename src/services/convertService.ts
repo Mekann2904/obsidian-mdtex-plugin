@@ -328,7 +328,10 @@ export async function convertCurrentPage(
         .join(", ");
       new Notice(t("notice_duplicate_labels", [summary]));
       if (!ctx.settings.suppressDeveloperLogs) {
-        console.warn(`[MdTex] Duplicate cross-reference labels:`, duplicates);
+        console.warn(
+          `[MdTex] Duplicate cross-reference labels: ${duplicates.map(d => `${d.label}(${d.count})`).join(", ")}`,
+          duplicates,
+        );
       }
       return;
     }

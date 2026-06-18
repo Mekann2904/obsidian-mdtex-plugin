@@ -369,4 +369,89 @@ describe("expandTransclusions / extractSection: characterization（現状振る�
       \`\`\`"
     `);
   });
+  // ===== γ. 選択肢γ: 同一ファイル2回目埋め込みのラベル定義除去 =====
+
+  it("γ1: 同一ファイルを2回埋め込むと2回目のラベル定義だけ除去される", async () => {
+    // 内容は両方表示され、ラベルは1回だけ定義される（crossref Duplicate 解消）。
+    const app = makeStubApp([
+      { path: "sub.md", extension: "md", content: "![[x.png]]{#fig:hoge}" },
+    ]);
+    const out = await expandTransclusions(
+      "![[sub.md]]\n\n>![[sub.md]]",
+      app,
+      "root.md",
+      new Map(),
+    );
+    expect(out).toMatchInlineSnapshot(`
+      "![[x.png]]{#fig:sub-hoge}
+
+      > ![[x.png]]"
+    `);
+  });
+
+  it("γ2: 2回目も画像自体は表示される（width= 等の付随属性は保持）", async () => {
+    const app = makeStubApp([
+      {
+        path: "sub.md",
+        extension: "md",
+        content: "![[x.png]]{#fig:hoge width=0.8\\textwidth}",
+      },
+    ]);
+    const out = await expandTransclusions(
+      "![[sub.md]]\n\n![[sub.md]]",
+      app,
+      "root.md",
+      new Map(),
+    );
+    expect(out).toMatchInlineSnapshot(`
+      "![[x.png]]{#fig:sub-hoge width=0.8\\textwidth}
+
+      ![[x.png]]{width=0.8\\textwidth}"
+    `);
+  });
+
+  it("γ3: 2回目の参照 [@fig:hoge] は残る（1回目の定義を指す）", async () => {
+    const app = makeStubApp([
+      {
+        path: "sub.md",
+        extension: "md",
+        content: "![[x.png]]{#fig:hoge}\n\nsee [@fig:hoge]",
+      },
+    ]);
+    const out = await expandTransclusions(
+      "![[sub.md]]\n\n![[sub.md]]",
+      app,
+      "root.md",
+      new Map(),
+    );
+    expect(out).toMatchInlineSnapshot(`
+      "![[x.png]]{#fig:sub-hoge}
+
+      see [@fig:sub-hoge]
+
+      ![[x.png]]
+
+      see [@fig:sub-hoge]"
+    `);
+  });
+
+  it("γ4: 別ファイルの同名ラベルはそれぞれ保持される（ファイル名で一意化）", async () => {
+    // γ は「同一ファイル2回目」だけ対象。別ファイルは各1回なのでラベル保持。
+    const app = makeStubApp([
+      { path: "sub1.md", extension: "md", content: "![[a.png]]{#fig:hoge}" },
+      { path: "sub2.md", extension: "md", content: "![[b.png]]{#fig:hoge}" },
+    ]);
+    const out = await expandTransclusions(
+      "![[sub1.md]]\n\n![[sub2.md]]",
+      app,
+      "root.md",
+      new Map(),
+    );
+    expect(out).toMatchInlineSnapshot(`
+      "![[a.png]]{#fig:sub1-hoge}
+
+      ![[b.png]]{#fig:sub2-hoge}"
+    `);
+  });
 });
+

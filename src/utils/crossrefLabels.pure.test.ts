@@ -13,6 +13,7 @@ import {
   namespacedRewrite,
   extractRawLabels,
   detectDuplicateLabels,
+  stripLabelDefinitions,
 } from "./crossrefLabels";
 
 describe("fileSlug", () => {
@@ -161,5 +162,69 @@ describe("detectDuplicateLabels", () => {
     const md = "```\n{#fig:x}\n```\n{#fig:x}";
     // フェンス内は抽出されないので、実質1回 → 重複なし
     expect(detectDuplicateLabels(md)).toEqual([]);
+  });
+});
+
+describe("stripLabelDefinitions（選択肢γ: 2回目埋め込みのラベル定義除去）", () => {
+  it("単純ラベル {#fig:hoge} を除去する", () => {
+    expect(stripLabelDefinitions("![[x.png]]{#fig:hoge}")).toBe("![[x.png]]");
+  });
+
+  it("width= 等の付随属性は保持する（2回目も適切な幅で表示）", () => {
+    // #fig:hoge のみ除去、width= は残る
+    const out = stripLabelDefinitions(
+      "![[x.png]]{#fig:hoge width=0.8\\textwidth}",
+    );
+    expect(out).toBe("![[x.png]]{width=0.8\\textwidth}");
+  });
+
+  it("caption= も保持する", () => {
+    const out = stripLabelDefinitions('![[x.png]]{#fig:hoge caption="标题"}');
+    expect(out).toBe('![[x.png]]{caption="标题"}');
+  });
+
+  it("参照 [@fig:hoge] は残す（1回目の定義を指す）", () => {
+    const out = stripLabelDefinitions("see [@fig:hoge] and ![[x.png]]{#fig:hoge}");
+    expect(out).toContain("[@fig:hoge]");
+    expect(out).not.toContain("#fig:hoge");
+  });
+
+  it("全接頭辞（fig/tbl/lst/eq/sec）のラベル定義を除去", () => {
+    const md = "{#fig:a}\n{#tbl:b}\n{#lst:c}\n{#eq:d}\n{#sec:e}";
+    const out = stripLabelDefinitions(md);
+    expect(out).not.toContain("#fig:");
+    expect(out).not.toContain("#tbl:");
+    expect(out).not.toContain("#lst:");
+    expect(out).not.toContain("#eq:");
+    expect(out).not.toContain("#sec:");
+  });
+
+  it("コードフェンス内の {#fig:...} は除去しない（誤爆防止）", () => {
+    const md = "```\n{#fig:inside}\n```\n{#fig:outside}";
+    const out = stripLabelDefinitions(md);
+    // フェンス内は保持、外は除去
+    expect(out).toContain("{#fig:inside}");
+    expect(out).not.toContain("#fig:outside");
+  });
+
+  it("フェンス開始行の {#lst:...} は除去（コードブロックのラベルも重複元になる）", () => {
+    const md = '```{#lst:demo caption="Hi"}\ncode\n```';
+    const out = stripLabelDefinitions(md);
+    expect(out).not.toContain("#lst:demo");
+    // caption は保持
+    expect(out).toContain('caption="Hi"');
+  });
+
+  it("インラインコード内の {#fig:...} は除去しない", () => {
+    const md = "see `{#fig:code}` and {#fig:real}";
+    const out = stripLabelDefinitions(md);
+    expect(out).toContain("{#fig:code}");
+    expect(out).not.toContain("#fig:real");
+  });
+
+  it("画像記法のラベル除去後、空属性 {} は残さない", () => {
+    // {#fig:hoge} のみ → 属性が空 → {} ごと除去
+    const out = stripLabelDefinitions("![cap](x.png){#fig:hoge}");
+    expect(out).toBe("![cap](x.png)");
   });
 });

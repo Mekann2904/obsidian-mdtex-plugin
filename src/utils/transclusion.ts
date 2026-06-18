@@ -4,7 +4,7 @@
 // Related: src/services/convertService.ts, src/utils/markdownTransforms.ts
 
 import { App, TFile } from "obsidian";
-import { namespacedRewrite } from "./crossrefLabels";
+import { namespacedRewrite, stripLabelDefinitions } from "./crossrefLabels";
 
 function escapeRegExp(value: string): string {
   // 文字クラス内でエスケープが必要なのは ] と \ のみ（他は文字クラス内でリテラル扱い）。
@@ -27,6 +27,11 @@ function parseLink(linkText: string): { path: string; heading?: string; blockId?
 /**
  * Markdown内の ![[...]] を展開する。Markdown以外の埋め込みはそのまま残す。
  * 簡易的な循環検出のため visited を使用。
+ *
+ * 方式W/γ: expanded Set で「文書全体で既出のファイル」を追跡し、同一ファイルの
+ * 2回目以降の埋め込みでは crossref ラベル定義だけを除去する（内容は表示）。
+ * これにより同一ファイル複数回埋め込みでも crossref の Duplicate label が起きず、
+ * かつ両方の埋め込みが内容を表示する（ユーザーの意図を尊重）。
  */
 export async function expandTransclusions(
   markdown: string,
@@ -34,6 +39,7 @@ export async function expandTransclusions(
   sourcePath: string,
   cache: Map<string, string>,
   visited: Set<string> = new Set(),
+  expanded: Set<string> = new Set(),
 ): Promise<string> {
   const regex = /!\[\[(.*?)\]\]/g;
   let lastIndex = 0;
@@ -114,14 +120,26 @@ export async function expandTransclusions(
     }
 
     const newVisited = new Set(visited).add(targetPath);
-    const expanded = await expandTransclusions(sliced, app, targetPath, cache, newVisited);
+    const expandedContent = await expandTransclusions(sliced, app, targetPath, cache, newVisited, expanded);
 
     // 方式W: 埋め込み先の crossref ラベルと参照にファイル名プレフィックスを付与し、
     // 別ファイル由来の同名ラベル衝突を自動解決する（ADR-005 関連）。
     // メイン文書（この関数の最上位呼び出し）のラベルはリライトせず、埋め込み先のみ。
     // これにより各ファイルを単独変換したときと同じラベル名で動作し、かつ複数ファイルを
     // 埋め込んでも crossref の Duplicate label が起きない。
-    const namespaced = namespacedRewrite(expanded, targetPath);
+    const isFirstOccurrence = !expanded.has(targetPath);
+    expanded.add(targetPath);
+
+    let namespaced = namespacedRewrite(expandedContent, targetPath);
+
+    // 選択肢γ: 同一ファイルが2回目以降に埋め込まれた場合、ラベル「定義」だけ除去する。
+    // 内容（画像含む）と参照は残す。これにより同一ファイル複数回埋め込みでも:
+    // - 両方の埋め込みが内容を表示する（ユーザーの意図を尊重）
+    // - crossref ラベルは1回だけ定義される（Duplicate label 解消）
+    // - 参照は1回目の実体を指す（自然）
+    if (!isFirstOccurrence) {
+      namespaced = stripLabelDefinitions(namespaced);
+    }
 
     const withPrefix = blockquotePrefix
       ? applyBlockquotePrefix(namespaced, blockquotePrefix)

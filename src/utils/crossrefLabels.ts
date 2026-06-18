@@ -154,22 +154,23 @@ function pushLabelsFromLine(line: string, results: ExtractedLabel[]): void {
  */
 export function namespacedRewrite(content: string, sourceFilePath: string): string {
   const slug = fileSlug(sourceFilePath);
-  const prefixPattern = `(${PREFIX_ALTERNATIVES})`;
+  // 非 capture (?:...) を使う: capture 番号を id/caption/restAttrs と揃えるため。
+  const prefixPattern = `(?:${PREFIX_ALTERNATIVES})`;
 
   // 1) ラベル属性 {#prefix:id ...} の id 部分へ slug を付与
-  //    caption="..." 等の後続属性を保持するため、id のみ置換する。
+  //    caption="..." および width= 等の後続属性を保持するため、id のみ置換する。
+  //    capture: [1]=prefix [2]=id [3]=caption("..."込み) [4]=その他の後続属性
   const labelRegex = new RegExp(
-    `\\{#(${prefixPattern}):([a-zA-Z0-9:_-]+)(\\s+caption="(.*?)")?(\\s+[^}]*)?\\}`,
+    `\\{#(${prefixPattern}):([a-zA-Z0-9:_-]+)(\\s+caption="[^"]*")?(\\s+[^}]*)?\\}`,
     "g",
   );
   let out = content.replace(
     labelRegex,
-    (full, p1: string, _p2: string, id: string, capGroup: string | undefined) => {
+    (full, p1: string, id: string, capGroup: string | undefined, restAttrs: string | undefined) => {
       // 二重リライト防止: 既に slug- で始まっていたらそのまま
       if (id.startsWith(`${slug}-`)) return full;
       const newId = `${slug}-${id}`;
-      const capPart = capGroup ?? "";
-      return `{#${p1}:${newId}${capPart}}`;
+      return `{#${p1}:${newId}${capGroup ?? ""}${restAttrs ?? ""}}`;
     },
   );
 
@@ -193,7 +194,6 @@ export interface DuplicateLabel {
   label: string; // "fig:hoge" 形式
   count: number;
 }
-
 /**
  * 最終 Markdown からラベルを抽出し、重複（同一ラベルの複数回出現）を検出する。
  * メイン文書内のユーザーミスも、同一ファイル複数回埋め込みによる crossref 制約衝突も
@@ -209,4 +209,94 @@ export function detectDuplicateLabels(markdown: string): DuplicateLabel[] {
   return [...counts.entries()]
     .filter(([, n]) => n > 1)
     .map(([label, count]) => ({ label, count }));
+}
+
+/**
+ * 同一ファイルが2回目以降に埋め込まれたとき、ラベル「定義」だけを除去する（選択肢γ）。
+ *
+ * - {#fig:hoge} → 属性ブロックごと除去（width/caption 等の付随属性がない場合）
+ * - {#fig:hoge width=...} → #fig:hoge のみ除去、width= は保持（2回目も適切な幅で表示）
+ * - 参照 [@fig:hoge] は残す（1回目で定義されたラベルを指すため、一貫性がある）
+ *
+ * これにより同一ファイルの複数回埋め込みでも:
+ * - 両方の埋め込みが内容を表示する（ユーザーの意図を尊重）
+ * - crossref のラベルは1回だけ定義される（Duplicate label 解消）
+ * - 参照は1回目の実体を指す（自然）
+ *
+ * 注意: コードフェンス内・インラインコード内の {#prefix:id} は除去しない（誤爆防止）。
+ */
+export function stripLabelDefinitions(content: string): string {
+  const lines = content.split(/\r?\n/);
+  let inFence = false;
+  const fenceLineRegex = /^\s*(`{3,}|~{3,})/;
+
+  const out = lines.map(line => {
+    // フェンス内はスキップ（ただしフェンス開始行の {#lst:...} は除去対象: コードブロックの
+    // ラベルも crossref 重複の元になるため）。フェンス内部行のみ保護。
+    if (fenceLineRegex.test(line)) {
+      inFence = !inFence;
+      // フェンス開始行自体もラベル除去対象にする（コードブロックの lst ラベル）
+      return stripLabelsFromLine(line);
+    }
+    if (inFence) return line;
+    return stripLabelsFromLine(line);
+  });
+  return out.join("\n");
+}
+
+// 1行からインラインコードを保護しつつ {#prefix:id ...} 属性を除去する。
+function stripLabelsFromLine(line: string): string {
+  const inlineCodeRanges: Array<[number, number]> = [];
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] !== "`") {
+      i += 1;
+      continue;
+    }
+    let j = i;
+    while (j < line.length && line[j] === "`") j += 1;
+    const openLen = j - i;
+    let k = j;
+    let closed = false;
+    while (k < line.length) {
+      if (line[k] !== "`") {
+        k += 1;
+        continue;
+      }
+      let l = k;
+      while (l < line.length && line[l] === "`") l += 1;
+      if (l - k === openLen) {
+        inlineCodeRanges.push([i, l]);
+        i = l;
+        closed = true;
+        break;
+      }
+      k = l;
+    }
+    if (!closed) i = j;
+  }
+  const isProtected = (pos: number) =>
+    inlineCodeRanges.some(([s, e]) => pos >= s && pos < e);
+
+  // ラベル定義の識別子部分 #prefix:id のみ除去する（選択肢γ）。
+  // width= / caption= 等の付随属性は保持する（2回目の画像も適切な幅で表示するため）。
+  // 例: ![cap](path){#fig:hoge width=0.8\\textwidth} → ![cap](path){width=0.8\\textwidth}
+  //     {#fig:hoge} のみ → 属性が空になるので {} ごと除去
+  const labelIdRegex = new RegExp(
+    `#(${PREFIX_ALTERNATIVES}):[a-zA-Z0-9:_-]+\\s*`,
+    "g",
+  );
+  let result = "";
+  let lastIdx = 0;
+  let m: RegExpExecArray | null;
+  while ((m = labelIdRegex.exec(line)) !== null) {
+    if (isProtected(m.index)) continue;
+    result += line.slice(lastIdx, m.index);
+    lastIdx = m.index + m[0].length;
+  }
+  result += line.slice(lastIdx);
+  // #prefix:id 除去で { } が空になった属性ブロックを除去
+  result = result.replace(/\{\s*\}/g, "");
+  // 末尾の余分な空白を整える
+  return result.replace(/[ \t]+$/, "");
 }
