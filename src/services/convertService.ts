@@ -13,7 +13,7 @@ import {
   unwrapValidWikiLinks,
   stripObsidianComments,
 } from "../utils/markdownTransforms";
-import { appendLabelOverrides } from "../utils/latexPreamble";
+import { appendLabelOverrides, ensureCodelistingEnvironment } from "../utils/latexPreamble";
 import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
 import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
 import { DOCX_TEX_LUA_FILTER } from "../assets/docxTexFilter";
@@ -255,9 +255,15 @@ export async function convertCurrentPage(
     // プリアンブルは生 .tex として --include-in-header で渡すため、YAML(header-includes) 時代の
     // クリーニングは行わず、ユーザー設定 + コールアウト定義をそのまま素通りさせる。
     const baseHeader = activeProfile.headerIncludes || "";
-    const withCallout = baseHeader.includes("obsidiancallout")
-      ? baseHeader
-      : `${baseHeader.trim()}\n\n${CALLOUT_PREAMBLE}`.trim();
+    // Pandoc 3.8+ は --listings 時にキャプション付きコードブロックを \begin{codelisting} で
+    // 出力する。codelisting 環境は DEFAULT_LATEX_PREAMBLE に定義済みだが、旧版からの移行等で
+    // 独自プリアンブルを持つ場合は定義が欠け「Environment codelisting undefined.」で停止するため、
+    // 欠けていれば冪等に補完する（コールアウト定義付与と同じ層で処理）。
+    const withCallout = ensureCodelistingEnvironment(
+      baseHeader.includes("obsidiancallout")
+        ? baseHeader
+        : `${baseHeader.trim()}\n\n${CALLOUT_PREAMBLE}`.trim(),
+    );
     // crossref-ON 時はキャプション語／参照接頭辞をメタデータ経路
     // （--metadata-file / frontmatter）に一本化し、\renewcommand との二重管理を避ける。
     // crossref-OFF 時はメタデータの消費先がないため、プロファイル値で LaTeX ネイティブの

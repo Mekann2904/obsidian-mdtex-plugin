@@ -16,6 +16,7 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { DEFAULT_LATEX_PREAMBLE } from "../MdTexPluginSettings";
+import { ensureCodelistingEnvironment } from "./latexPreamble";
 
 function lualatexAvailable(): boolean {
   try {
@@ -62,6 +63,46 @@ describe("DEFAULT_LATEX_PREAMBLE: codelisting の PDF コンパイル（lualatex
       );
 
       const pdfPath = path.join(dir, "codelist.pdf");
+      expect(
+        res.status,
+        `lualatex は終了コード0のはず。出力抜粋:\n${(res.stdout || "") + (res.stderr || "")}`.slice(0, 800),
+      ).toBe(0);
+      expect(fs.existsSync(pdfPath), "PDF が生成される").toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// 旧版からの移行等で codelisting 定義が欠けた独自プリアンブルが、
+// ensureCodelistingEnvironment によって救済されることを実コンパイルで固定する。
+// 「Environment codelisting undefined.」で停止しないことの回帰ガード。
+describe("ensureCodelistingEnvironment: 独自プリアンブルの codelisting 補完（lualatex）", () => {
+  it_lua("codelisting 未定義の独自プリアンブルでも PDF を生成する", () => {
+    // DEFAULT_LATEX_PREAMBLE を使わず listings のみを持つ独自プリアンブルを模擬
+    const customPreamble = [
+      "\\usepackage{listings}",
+      "\\lstset{basicstyle=\\ttfamily}",
+    ].join("\n");
+    const preamble = ensureCodelistingEnvironment(customPreamble);
+    expect(preamble).toMatch(/\]\s*\{codelisting\}/);
+
+    const tex =
+      `\\documentclass{article}\n${preamble}\n\\begin{document}\n` +
+      "\\begin{codelisting}[h]\n\\caption{sample}\\label{lst:ex}\n" +
+      "\\begin{lstlisting}[language=Python]\nprint(\"hi\")\n\\end{lstlisting}\n" +
+      "\\end{codelisting}\n\\end{document}\n";
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mdtex-codelist-inject-"));
+    try {
+      const texPath = path.join(dir, "inject.tex");
+      fs.writeFileSync(texPath, tex, "utf8");
+      const res = spawnSync(
+        "lualatex",
+        ["-interaction=nonstopmode", "-halt-on-error", "inject.tex"],
+        { cwd: dir, stdio: "pipe", encoding: "utf8" },
+      );
+      const pdfPath = path.join(dir, "inject.pdf");
       expect(
         res.status,
         `lualatex は終了コード0のはず。出力抜粋:\n${(res.stdout || "") + (res.stderr || "")}`.slice(0, 800),
