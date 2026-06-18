@@ -140,9 +140,19 @@ export function stripObsidianComments(markdown: string): string {
       }
 
       if (isInRanges(idx, protectedRanges)) {
+        // 保護区間（インラインコード / 数式）に入った %% はコメント走査対象にしない。
+        // 従来は区間終端まで読み飛ばすだけで lineOut へ出力しておらず、結果として
+        // コード/数式の中身ごと出力から落ちていた（C1/C2/D2 のバグ）。
+        // 修正: 保護区間は「そのまま出力に残す」べきなので、区間内容を lineOut へコピーする。
         const range = protectedRanges.find(([s, e]) => idx >= s && idx < e)!;
         if (!inComment && range[0] > cursor) {
           lineOut += line.slice(cursor, range[0]);
+        }
+        // コメント中でない限り、保護区間全体をそのまま出力へ残す。
+        // コメント中の場合は区間内でコメントが始まっていることはない（%% は区間外でのみ開始）
+        // ので、cursor を進めるだけで出力しない。
+        if (!inComment) {
+          lineOut += line.slice(range[0], range[1]);
         }
         cursor = range[1];
         continue;

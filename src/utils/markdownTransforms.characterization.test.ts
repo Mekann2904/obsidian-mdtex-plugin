@@ -90,24 +90,24 @@ describe("stripObsidianComments: characterization（現状振る舞いの録音�
 
   it("C1: 単一バッククォート内の %% は保護する", () => {
     const input = "inline `%% keep in code %%` here";
-    expect(stripObsidianComments(input)).toMatchInlineSnapshot(`"inline  here"`);
+    expect(stripObsidianComments(input)).toMatchInlineSnapshot(`"inline \`%% keep in code %%\` here"`);
   });
 
   it("C2: 2本バッククォート内の %% は保護する（開閉本数マッチ）", () => {
     const input = "inline ``%% keep in double code %%`` here";
-    expect(stripObsidianComments(input)).toMatchInlineSnapshot(`"inline  here"`);
+    expect(stripObsidianComments(input)).toMatchInlineSnapshot(`"inline \`\`%% keep in double code %%\`\` here"`);
   });
 
   // ===== D. 数式 =====
 
   it("D1: インライン数式 $...$ 内の %% は保護する", () => {
     const input = "数式 $a %% b %% c$ です";
-    expect(stripObsidianComments(input)).toMatchInlineSnapshot(`"数式  です"`);
+    expect(stripObsidianComments(input)).toMatchInlineSnapshot(`"数式 $a %% b %% c$ です"`);
   });
 
   it("D2: ブロック数式 $$...$$ 内の %% は保護する（同一行）", () => {
     const input = "$$x %% y %% z$$";
-    expect(stripObsidianComments(input)).toMatchInlineSnapshot(`""`);
+    expect(stripObsidianComments(input)).toMatchInlineSnapshot(`"$$x %% y %% z$$"`);
   });
 
   it("D3: ブロック数式 $$ の開閉トグル（別行にまたがる）", () => {
