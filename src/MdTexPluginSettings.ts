@@ -175,6 +175,18 @@ export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
   morestring=[b]'
 }
 
+% codelisting 浮動体環境（Pandoc 3.8+ の --listings 互換）
+% Pandoc 3.8 以降はキャプション付きコードブロックを \begin{codelisting}...\end{codelisting}
+% として出力するが、codelisting 環境は listings パッケージに含まれず newfloat で別途
+% 定義が必要。これがないと「! LaTeX Error: Environment codelisting undefined.」で
+% PDF 生成が停止する。pandoc-crossref の Listing 参照や cleveref とも整合する。
+\\usepackage{newfloat}
+\\DeclareFloatingEnvironment[
+  fileext=lol,
+  listname={List of Listings},
+  name=Listing
+]{codelisting}
+
 % 引用ボックス
 \\usepackage{tcolorbox}
 \\tcbuselibrary{breakable, skins}
