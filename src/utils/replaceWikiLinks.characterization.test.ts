@@ -182,13 +182,17 @@ describe("replaceWikiLinksAndCodeAsync: characterization（現状振る舞いの
 
   // ===== Y. 引用内 =====
 
-  it("Y1: > ![[img.png]] は引用内画像（width=100%）", async () => {
+  it("Y1: > ![[img.png]] は引用プレフィックス付き標準画像記法", async () => {
+    // 従来は引用内画像を別扱い（width=100% デフォルト）していたが、imageScale デフォルト値の
+    // 存在でデッドコード化しておりコメントと不一致だったため廃止（ADR-005）。
+    // 現在は引用の有無にかかわらず一律の標準記法。applyBlockquotePrefix が > を行ごとに付与。
     const app = makeStubApp([{ path: "img.png", extension: "png" }]);
     const out = await replaceWikiLinksAndCodeAsync("> ![[img.png]]", app, profile(), "src.md", new Map());
-    expect(out).toMatchInlineSnapshot(`"> ![](img.png){width=0.8\\textwidth}"`);
+    expect(out).toMatchInlineSnapshot(`"> ![ ](img.png){width=0.8\\textwidth}"`);
   });
 
-  it("Y2: inBlockquote=true で画像（scale 設定時）", async () => {
+  it("Y2: inBlockquote=true でも画像は引用分岐せず一律の標準記法", async () => {
+    // inBlockquote は .md 埋め込み再帰の引用継承用。画像ブランチでは効かない（統一記法）。
     const app = makeStubApp([{ path: "img.png", extension: "png" }]);
     const out = await replaceWikiLinksAndCodeAsync(
       "![[img.png]]",
@@ -198,7 +202,7 @@ describe("replaceWikiLinksAndCodeAsync: characterization（現状振る舞いの
       new Map(),
       true,
     );
-    expect(out).toMatchInlineSnapshot(`"![](img.png){0.5}"`);
+    expect(out).toMatchInlineSnapshot(`"![ ](img.png){0.5}"`);
   });
 
   it("Y3: ネスト引用 >> ![[img.png]]", async () => {

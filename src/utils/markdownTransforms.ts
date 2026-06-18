@@ -7,7 +7,6 @@ import { FileSystemAdapter, App, TFile } from "obsidian";
 import * as path from "path";
 import { ProfileSettings } from "../MdTexPluginSettings";
 import { getLinkTargetFile } from "./linkUtils";
-import { escapeLatex } from "./latexEscape";
 
 /**
  * Obsidian の `%% ... %%` コメントを Pandoc へ渡す前に取り除く。
@@ -277,31 +276,40 @@ export async function replaceWikiLinksAndCodeAsync(
           result += applyBlockquotePrefix(inlined, blockquotePrefix);
           continue;
         } catch {
+          // 埋め込み読み込み失敗時は標準 Markdown リンクへフォールバック。
+          // エスケープは Pandoc が reader で Markdown として解釈し出力フォーマット向けに
+          // 再エスケープするため TS 側では行わない（ADR-005/Q4-3）。
           const linkText = (imageCaption || pipeCaption || targetLink || "").trim() || targetLink;
-          const fallback = `[${escapeLatex(linkText)}](${latexPath})`;
+          const fallback = `[${linkText}](${latexPath})`;
           result += applyBlockquotePrefix(fallback, blockquotePrefix);
           continue;
         }
       }
 
-      const isBlockquote = !!blockquotePrefix || inBlockquote;
-      if (isBlockquote) {
-        const widthOpt = profile.imageScale ? `{${profile.imageScale}}` : "{width=100%}";
-        const caption = (imageCaption || pipeCaption || "").trim();
-        const imageMarkdown = `![${escapeLatex(caption)}](${latexPath})${widthOpt}`;
-        result += applyBlockquotePrefix(imageMarkdown, blockquotePrefix);
-        continue;
-      }
+      // 画像（.md 以外）を標準 Markdown の画像記法へ変換する。
+      // Pandoc は ![caption](path){#id width=...} を reader で Image ノードへ正しくパースするため、
+      // TS は標準記法を吐くだけで LaTeX 化は Pandoc/crossref に委ねる（ADR-005/Q4-1）。
+      //   - label: pandoc-crossref は図参照に #fig:<name> を要求するため、fig: 接頭辞を補完する。
+      //     これは Pandoc の構文解釈ではなく crossref の参照解決要件で、TS が担う唯一の変換。
+      //   - scale: profile.imageScale は "width=0.8\\textwidth" 形式の完全な属性値を想定。
+      //   - caption: Pandoc が Markdown として解釈し出力フォーマット向けにエスケープするため、
+      //     TS 側の escapeLatex は行わない（Q4-3）。
+      // 引用の有無にかかわらず一律に標準記法を吐く。引用プレフィックスの付与は
+      // applyBlockquotePrefix が行ごとに行う（blockquotePrefix は行頭 > を検出した場合のみ設定）。
+      // 従来は inBlockquote で引用内画像を別扱い（width=100% デフォルト）していたが、
+      // この分岐は imageScale デフォルト値の存在で事実上デッドコード化しており、
+      // コメントと実装が不一致だったため廃止した（ADR-005）。
+      const rawCaption = (imageCaption || pipeCaption || "").trim();
+      const captionPart = rawCaption || " "; // 空なら空白1つでキャプション省略を表現
 
-      const labelPart = imageLabel
+      const labelAttr = imageLabel
         ? `#${imageLabel.startsWith("fig:") ? "" : "fig:"}${imageLabel}`
         : "";
-      const rawCaption = imageCaption || pipeCaption || " ";
-      const captionPart = rawCaption.trim() ? escapeLatex(rawCaption) : " ";
-      const scalePart = profile.imageScale ? profile.imageScale : "";
-      const separator = labelPart && scalePart ? " " : "";
+      const scaleAttr = profile.imageScale || "";
+      const attrs = [labelAttr, scaleAttr].filter(Boolean).join(" ");
+      const attrBlock = attrs ? `{${attrs}}` : "";
 
-      const imageMarkdown = `![${captionPart}](${latexPath}){${labelPart}${separator}${scalePart}}`;
+      const imageMarkdown = `![${captionPart}](${latexPath})${attrBlock}`;
       result += applyBlockquotePrefix(imageMarkdown, blockquotePrefix);
       continue;
     }
