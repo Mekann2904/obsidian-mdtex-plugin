@@ -14,7 +14,7 @@ import {
   unwrapValidWikiLinks,
   stripObsidianComments,
 } from "../utils/markdownTransforms";
-import { cleanLatexPreamble, appendLabelOverrides } from "../utils/latexPreamble";
+import { appendLabelOverrides } from "../utils/latexPreamble";
 import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
 import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
 import { expandTransclusions } from "../utils/transclusion";
@@ -228,12 +228,13 @@ export async function convertCurrentPage(
     }
 
     // ユーザー設定プリアンブルにコールアウト定義を付与し、listing名の上書きを加える
+    // プリアンブルは生 .tex として --include-in-header で渡すため、YAML(header-includes) 時代の
+    // クリーニングは行わず、ユーザー設定 + コールアウト定義をそのまま素通りさせる。
     const baseHeader = activeProfile.headerIncludes || "";
     const withCallout = baseHeader.includes("obsidiancallout")
       ? baseHeader
       : `${baseHeader.trim()}\n\n${CALLOUT_PREAMBLE}`.trim();
-    const cleanedHeader = cleanLatexPreamble(withCallout);
-    const headerWithListings = appendLabelOverrides(cleanedHeader, {
+    const headerWithListings = appendLabelOverrides(withCallout, {
       figureLabel: activeProfile.figureLabel,
       figPrefix: activeProfile.figPrefix,
       tableLabel: activeProfile.tableLabel,
