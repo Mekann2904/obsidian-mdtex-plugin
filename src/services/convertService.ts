@@ -30,43 +30,21 @@ import {
 } from "./pandocCommandBuilder";
 import { runCommand } from "../utils/processRunner";
 import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
-import { resolveDefaultsFilePath } from "./templatePackService";
+
+import {
+  resolveDefaultsFilePath,
+  normalizeTemplateFolder,
+} from "./templatePackService";
+import {
+  createTempFile,
+  cleanupTemporaryFiles,
+  isInsideBaseDir,
+  TempFileArtifact,
+} from "./tempFiles";
+
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
-}
-
-// Luaフィルタを一時生成（ディレクトリも返し、失敗時は片付ける）
-async function createTempLuaFilter(): Promise<{ luaPath: string; tempDir: string }> {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-lua-"));
-  try {
-    const fileName = `callout-${Date.now()}-${Math.random().toString(16).slice(2)}.lua`;
-    const luaPath = joinFsPath(tempDir, fileName);
-    await fs.writeFile(luaPath, CALLOUT_LUA_FILTER, "utf8");
-    return { luaPath, tempDir };
-  } catch (error) {
-    await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
-    throw error;
-  }
-}
-
-// プロファイル既定値のラベル／接頭辞を Pandoc メタデータ YAML として一時生成する。
-// 値が全て空なら null を返し、呼び出し側は --metadata-file を省略する。
-async function createTempMetadataFile(
-  profile: ProfileSettings,
-): Promise<{ metadataPath: string; tempDir: string } | null> {
-  const body = buildLabelMetadataYaml(profile);
-  if (!body) return null;
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-metadata-"));
-  try {
-    const fileName = `labels-${Date.now()}-${Math.random().toString(16).slice(2)}.yaml`;
-    const metadataPath = joinFsPath(tempDir, fileName);
-    await fs.writeFile(metadataPath, body, "utf8");
-    return { metadataPath, tempDir };
-  } catch (error) {
-    await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
-    throw error;
-  }
 }
 
 function parseDraftFlag(extraArgs: string): { extras: string[]; isDraft: boolean } {
@@ -487,53 +465,33 @@ interface PandocExecutionPlan {
   workingDir: string;
 }
 
-// DOCX 出力用の AST ベース Lua フィルタ（DOCX_TEX_LUA_FILTER）を一時生成する。
-// 従来の loose ファイル（tex-to-docx.lua）依存は廃止し、配布物（main.js）に埋め込んだ
-// フィルタを実行時に一時ファイルへ書き出すことで、全環境で正しく適用されるようにする。
-// 同パターンで Mermaid 言語削除フィルタ（MERMAID_STRIP_LUA_FILTER）も生成する。
-async function createTempLuaFilterContent(
-  content: string,
-  prefix: string,
-): Promise<{ luaPath: string; tempDir: string }> {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
-  try {
-    const fileName = `${prefix}${Date.now()}-${Math.random().toString(16).slice(2)}.lua`;
-    const luaPath = joinFsPath(tempDir, fileName);
-    await fs.writeFile(luaPath, content, "utf8");
-    return { luaPath, tempDir };
-  } catch (error) {
-    await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
-    throw error;
-  }
+// 変換パイプラインで使う一時 Lua/YAML ファイルは、生成プリミティブ（createTempFile）の
+// 薄いラッパとして統一する。mkdtemp + writeFile + cleanup-on-error は tempFiles.ts に集約済み。
+// 各フィルタは配布物（main.js）に埋め込んだ文字列定数を実行時に一時ファイルへ書き出し、
+// 全環境で正しく適用されるようにする（loose ファイル依存は廃止）。
+
+// Obsidian コールアウト変換用 Lua フィルタ（pdf/latex 常時適用）。
+async function createTempLuaFilter(): Promise<TempFileArtifact> {
+  return createTempFile(CALLOUT_LUA_FILTER, "mdtex-lua-", "lua");
 }
 
-async function createTempDocxFilter(): Promise<{ luaPath: string; tempDir: string }> {
-  return createTempLuaFilterContent(DOCX_TEX_LUA_FILTER, "mdtex-docx-");
+// DOCX 出力用の AST ベース Lua フィルタ（DOCX_TEX_LUA_FILTER）。
+async function createTempDocxFilter(): Promise<TempFileArtifact> {
+  return createTempFile(DOCX_TEX_LUA_FILTER, "mdtex-docx-", "lua");
 }
 
-// Mermaid 言語削除フィルタ（pdf/latex 用）を一時生成する。
-// 適用条件（enableExperimentalMermaid が無効）は buildPandocExecutionPlan 側で判定する。
-async function createTempMermaidFilter(): Promise<{ luaPath: string; tempDir: string }> {
-  return createTempLuaFilterContent(MERMAID_STRIP_LUA_FILTER, "mdtex-mermaid-");
+// Mermaid 言語削除フィルタ（pdf/latex 用）。適用条件（enableExperimentalMermaid が無効）は
+// buildPandocExecutionPlan 側で判定する（ADR-005）。
+async function createTempMermaidFilter(): Promise<TempFileArtifact> {
+  return createTempFile(MERMAID_STRIP_LUA_FILTER, "mdtex-mermaid-", "lua");
 }
 
-async function isInsideBaseDir(target: string, base: string): Promise<boolean> {
-  const [realTarget, realBase] = await Promise.all([
-    fs.realpath(target).catch(() => path.resolve(target)),
-    fs.realpath(base).catch(() => path.resolve(base)),
-  ]);
-
-  const normalize = (p: string) => path.resolve(p).replace(/[/\\]+/g, path.sep);
-  const t = normalize(realTarget);
-  const b = normalize(realBase);
-
-  if (process.platform === "win32") {
-    const tl = t.toLowerCase();
-    const bl = b.toLowerCase();
-    return tl === bl || tl.startsWith(bl + path.sep);
-  }
-
-  return t === b || t.startsWith(b + path.sep);
+// プロファイル既定値のラベル／接頭辞を Pandoc メタデータ YAML として一時生成する。
+// 値が全て空なら null を返し、呼び出し側は --metadata-file を省略する。
+async function createTempMetadataFile(profile: ProfileSettings): Promise<TempFileArtifact | null> {
+  const body = buildLabelMetadataYaml(profile);
+  if (!body) return null;
+  return createTempFile(body, "mdtex-metadata-", "yaml");
 }
 
 async function buildPandocExecutionPlan(params: {
@@ -555,23 +513,23 @@ async function buildPandocExecutionPlan(params: {
 
   if (params.format === "pdf" || params.format === "latex") {
     const created = await createTempLuaFilter();
-    luaFilters.push(created.luaPath);
-    tempFiles.push(created.luaPath, created.tempDir);
+    luaFilters.push(created.filePath);
+    tempFiles.push(created.filePath, created.tempDir);
 
     // 実験的 Mermaid 無効時: Mermaid コードブロックの言語を削除し、--listings の
     // unknown language 警告を防ぐ。従来の stripMermaidLanguage（TS 正規表現）に代わる
     // AST ベース処理（ADR-005）。
     if (params.stripMermaid) {
       const mermaid = await createTempMermaidFilter();
-      luaFilters.push(mermaid.luaPath);
-      tempFiles.push(mermaid.luaPath, mermaid.tempDir);
+      luaFilters.push(mermaid.filePath);
+      tempFiles.push(mermaid.filePath, mermaid.tempDir);
     }
   }
 
   if (params.format === "docx" && params.profile.enableAdvancedTexCommands) {
     const docxFilter = await createTempDocxFilter();
-    luaFilters.push(docxFilter.luaPath);
-    tempFiles.push(docxFilter.luaPath, docxFilter.tempDir);
+    luaFilters.push(docxFilter.filePath);
+    tempFiles.push(docxFilter.filePath, docxFilter.tempDir);
   }
 
   // プロファイル既定値をメタデータとして渡し、文書 frontmatter で上書き可能にする。
@@ -588,8 +546,8 @@ async function buildPandocExecutionPlan(params: {
       : null;
   let metadataFile: string | undefined;
   if (metadata) {
-    metadataFile = metadata.metadataPath;
-    tempFiles.push(metadata.metadataPath, metadata.tempDir);
+    metadataFile = metadata.filePath;
+    tempFiles.push(metadata.filePath, metadata.tempDir);
   }
 
   try {
@@ -613,33 +571,6 @@ async function buildPandocExecutionPlan(params: {
     await cleanupTemporaryFiles(tempFiles);
     throw error;
   }
-}
-
-const TEMP_PREFIXES = ["mdtex-lua-", "mdtex-mermaid-", "mdtex-docx-", "mdtex-"];
-
-async function cleanupTemporaryFiles(files: string[]) {
-  if (!files?.length) return;
-
-  const uniq = Array.from(new Set(files.map(f => path.resolve(f))));
-  const tempRoot = path.resolve(os.tmpdir());
-  const tempRootReal = await fs.realpath(tempRoot).catch(() => tempRoot);
-
-  await Promise.allSettled(
-    uniq.map(async file => {
-      try {
-        const resolved = path.resolve(file);
-        if (!(await isInsideBaseDir(resolved, tempRootReal))) return;
-        const base = path.basename(resolved);
-        if (!TEMP_PREFIXES.some(p => base.startsWith(p))) return;
-        await fs.rm(resolved, { recursive: true, force: false, maxRetries: 2, retryDelay: 100 });
-      } catch (err: unknown) {
-        const errorObj = err as { code?: string };
-        if (errorObj.code !== "ENOENT") {
-          console.warn(`Failed to delete temporary file: ${file}`, err);
-        }
-      }
-    }),
-  );
 }
 
 function createPandocNoticeHandlers(ctx: PluginContext) {
