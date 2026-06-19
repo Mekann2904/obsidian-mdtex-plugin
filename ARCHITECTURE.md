@@ -260,7 +260,6 @@ export function renameProfile(profiles: Record<string, ProfileSettings>, oldName
 
 ```typescript
 export function buildPandocCommand(options: PandocCommandOptions): PandocCommandResult
-export function getInputFormatArgs(format: OutputFormat): string[]
 ```
 
 ### ProcessRunner

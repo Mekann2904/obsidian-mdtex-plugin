@@ -13,8 +13,7 @@ import {
   unwrapValidWikiLinks,
   stripObsidianComments,
 } from "../utils/markdownTransforms";
-import { appendLabelOverrides, ensureCodelistingEnvironment } from "../utils/latexPreamble";
-import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
+import { buildHeader } from "../utils/headerBuilder";
 import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
 import { DOCX_TEX_LUA_FILTER } from "../assets/docxTexFilter";
 import { MERMAID_STRIP_LUA_FILTER } from "../assets/mermaid-filter";
@@ -31,6 +30,7 @@ import {
 } from "./pandocCommandBuilder";
 import { runCommand } from "../utils/processRunner";
 import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
+
 import {
   resolveDefaultsFilePath,
   normalizeTemplateFolder,
@@ -41,6 +41,7 @@ import {
   isInsideBaseDir,
   TempFileArtifact,
 } from "./tempFiles";
+
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
@@ -260,76 +261,17 @@ export async function convertCurrentPage(
       }
     }
 
-    // 文書テンプレート方式（ADR-007）: defaults 方式は文書の「枠」（プリアンブル・
-    // documentclass 系・ページ番号・キャプション名）を defaults file 側で管理する。
-    // 一方、CALLOUT_PREAMBLE（Obsidian コールアウト変換）と codelisting 環境定義
-    // （`--listings` 常時付与に伴う Pandoc 3.8+ 互換）と draftSnippet（Obsidian frontmatter
-    // 連動）は MdTex 固有レイヤとして方式に関わらず維持する。
-    const isDefaultsMode = isDefaultsTemplateMode(activeProfile);
-
-    // ユーザー設定プリアンブルにコールアウト定義を付与する
-    // プリアンブルは生 .tex として --include-in-header で渡すため、YAML(header-includes) 時代の
-    // クリーニングは行わず、ユーザー設定 + コールアウト定義をそのまま素通りさせる。
-    // defaults 方式では headerIncludes も defaults file 側の include-in-header で管理するため
-    // 空扱いとし、CALLOUT_PREAMBLE と codelisting 定義だけを残す。
-    const baseHeader = isDefaultsMode ? "" : activeProfile.headerIncludes || "";
-    // Pandoc 3.8+ は --listings 時にキャプション付きコードブロックを \begin{codelisting} で
-    // 出力する。codelisting 環境は DEFAULT_LATEX_PREAMBLE に定義済みだが、旧版からの移行等で
-    // 独自プリアンブルを持つ場合は定義が欠け「Environment codelisting undefined.」で停止するため、
-    // 欠けていれば冪等に補完する（コールアウト定義付与と同じ層で処理）。
-    // defaults 方式でも --listings を常時付与するため codelisting 補完は維持する。
-    const withCallout = ensureCodelistingEnvironment(
-      baseHeader.includes("obsidiancallout")
-        ? baseHeader
-        : `${baseHeader.trim()}\n\n${CALLOUT_PREAMBLE}`.trim(),
-    );
-    // crossref-ON 時はキャプション語／参照接頭辞をメタデータ経路
-    // （--metadata-file / frontmatter）に一本化し、\renewcommand との二重管理を避ける。
-    // crossref-OFF 時はメタデータの消費先がないため、プロファイル値で LaTeX ネイティブの
-    // キャプション名（\figurename 等）を上書きするフォールバックを残す。
-    // いずれにせよ defaults 方式ではキャプション名も defaults file 側で管理するため、
-    // appendLabelOverrides はスキップする（builtin + crossref-OFF のみ注入）。
-    const headerWithListings =
-      isDefaultsMode || activeProfile.usePandocCrossref
-        ? withCallout
-        : appendLabelOverrides(withCallout, {
-            figureLabel: activeProfile.figureLabel,
-            figPrefix: activeProfile.figPrefix,
-            tableLabel: activeProfile.tableLabel,
-            tblPrefix: activeProfile.tblPrefix,
-            codeLabel: activeProfile.codeLabel,
-            lstPrefix: activeProfile.lstPrefix,
-            equationLabel: activeProfile.equationLabel,
-            eqnPrefix: activeProfile.eqnPrefix,
-          });
-
-    //
-    // LaTeX の \maketitle はタイトルページを強制的に plain スタイルにする。
-    // ページ番号をオフにしても、plain スタイルのままだと1ページ目だけ数字が出る。
-    // plain → empty に差し替えてタイトルページも無番号に統一する。
-    // defaults 方式ではページ番号制御も defaults file 側で管理するためスキップする。
-    const pageNumberSnippet =
-      isDefaultsMode || activeProfile.usePageNumber
-        ? ""
-        : "\\makeatletter\\let\\ps@plain\\ps@empty\\makeatother";
-
-    const draftSnippet = draftRequested
-      ? [
-          "\\def\\isdraft{1}",
-          "\\PassOptionsToPackage{draft}{graphicx}",
-          "\\makeatletter\\Gin@drafttrue\\makeatother",
-        ].join("\n")
-      : "";
-
-    const headerWithoutDraft = pageNumberSnippet
-      ? `${pageNumberSnippet}\n${headerWithListings}`
-      : headerWithListings;
-
-    const headerWithDraftFlag = draftSnippet
-      ? `${draftSnippet}\n${headerWithoutDraft}`
-      : headerWithoutDraft;
+    // ヘッダ（--include-in-header の中身）の組み立ては純粋関数 buildHeader に切り出している。
+    // 文書テンプレート方式（ADR-007）の分岐、CALLOUT_PREAMBLE 付与、codelisting 補完、
+    // label overrides、ページ番号スニペット、draft スニペットの各段とその根拠は
+    // buildHeader 側に集約済み（issue #51）。ここでは方式の解決と draft フラグだけ渡す。
+    // defaults 方式は文書の「枠」（プリアンブル本体・キャプション名・ページ番号）を defaults
+    // file 側で管理する一方、CALLOUT_PREAMBLE / codelisting / draftSnippet は MdTex 固有
+    // レイヤとして方式に関わらず buildHeader 内で維持する。
+    const mode = isDefaultsTemplateMode(activeProfile) ? "defaults" : "builtin";
+    const headerContent = buildHeader(activeProfile, { mode, draft: draftRequested });
     // LaTeX生ファイルとして include-in-header で渡す（Markdown経由のエスケープを防ぐ）
-    await fs.writeFile(headerFilePath, `${headerWithDraftFlag}\n`, "utf8");
+    await fs.writeFile(headerFilePath, `${headerContent}\n`, "utf8");
 
     // 有効な WikiLink のみ [[ ]] を外してテキストにする
     content = unwrapValidWikiLinks(content, ctx.app, activeFile.path);

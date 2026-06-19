@@ -33,6 +33,12 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
     passWithNoTests: true,
+    // 実プロセスを起動する統合テスト（lualatex による PDF コンパイル、pandoc、
+    // mermaid DOM rasterization 等）は冷備え/並列負荷で 5s 既定を超え得る。
+    // 特に DEFAULT_LATEX_PREAMBLE（luatexja-fontspec + unicode-math 等の重いプリアンブル）を
+    // コンパイルする codelisting 統合テストは ~4.6s かかり、フルスイート並列実行下で
+    // ギリギリになるため、push/CI ゲートが非決定的になるのを防ぐため十分な頭長を確保する。
+    testTimeout: 30000,
     coverage: {
       provider: "v8",
     },
