@@ -27,7 +27,11 @@ function lualatexAvailable(): boolean {
   }
 }
 
-const it_lua = lualatexAvailable() ? it : it.skip;
+// lualatex の PDF コンパイルは（初回フォントキャッシュ構築等もあり）4–6s 程を要する。
+// vitest 既定の testTimeout 5000ms では負荷時に timerace で落ちるため、十分な猶予を持たせる。
+const LUALATEX_TEST_TIMEOUT = 30000;
+const it_lua = (name: string, fn: () => void) =>
+  (lualatexAvailable() ? it : it.skip)(name, fn, LUALATEX_TEST_TIMEOUT);
 
 // DEFAULT_LATEX_PREAMBLE は --include-in-header 相当（\documentclass を持たない）。
 // codelisting 検証に集中するため、別件の unicode-math/amssymb 衝突を回避して組み立てる。

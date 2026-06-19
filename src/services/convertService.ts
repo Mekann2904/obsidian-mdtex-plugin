@@ -31,10 +31,7 @@ import {
 } from "./pandocCommandBuilder";
 import { runCommand } from "../utils/processRunner";
 import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
-import {
-  resolveDefaultsFilePath,
-  normalizeTemplateFolder,
-} from "./templatePackService";
+import { resolveDefaultsFilePath } from "./templatePackService";
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
