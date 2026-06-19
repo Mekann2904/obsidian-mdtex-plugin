@@ -1,0 +1,50 @@
+# tate-twocolumn 用 defaults file（ADR-007 defaults 方式のサンプル）
+#
+# 使い方（MdTex のプロファイルで documentTemplateMode: "defaults" を選択後）:
+#   1. defaultsFilePath にこのファイルを指定する
+#      例: <vault>/sample-tate-twocolumn-defaults/defaults.yaml
+#   2. sample-tate-twocolumn.md を開いて PDF 変換を実行
+#
+# ${.} は Pandoc が「この defaults file 自身のディレクトリ」に展開する特殊変数。
+# テンプレート一式をフォルダ単位で持ち運べるため、Git 管理や学会配布と相性が良い。
+
+from: markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes
+to: pdf
+pdf-engine: lualatex
+standalone: true
+
+# 文書の「枠」をこのカスタムテンプレートで構築（builtin のデフォルトラテンブルから差し替え）。
+# 段抜けタイトル（twocolumn[\@maketitle]）に調整済み。
+template: ${.}/tate-twocolumn.tex
+
+# Pandoc 変数スロット（テンプレート内の $...$ に埋まる）。
+# ここが builtin モードの「GUI 設定値」の役割を担う。
+variables:
+  documentclass: ltjtarticle
+  classoption: "twocolumn, a5paper"
+  fontsize: 10pt
+  # 日本語小説の版面に寄せるため、既定余白よりかなり詰める。
+  # 縦書き二段組では余白が広すぎると本文が紙面中央に浮いて見える。
+  geometry:
+    - top=9mm
+    - bottom=10mm
+    - left=9mm
+    - right=9mm
+
+# 文書の「プリアンブル」（\begin{document} の直前に挿入）。
+# builtin の DEFAULT_LATEX_PREAMBLE 相当だが、縦書きに最適化して最小化している。
+# luatexja-fontspec は ltjtarticle が既定で読み込むため、ここでは和文フォント指定のみ。
+# 欧文フォントは縦組でも自然に回転するよう MatchUppercase で和文に寄せる。
+include-in-header: ${.}/preamble.tex
+
+# Markdown 本文では青空文庫風の ルビ《るび》 記法を使い、
+# LaTeX 出力時だけ \ruby{ルビ}{るび} に変換する。
+filters:
+  - ${.}/aozora-ruby.lua
+
+# 目次や章番号が必要なら以下を有効化。
+# table-of-contents: true
+# toc-depth: 3
+# number-sections: true
+
+# 図・表・コードの相互参照（pandoc-crossref）は MdTex 側の設定で有効化される。

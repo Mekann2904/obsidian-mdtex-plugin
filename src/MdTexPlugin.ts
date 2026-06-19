@@ -21,6 +21,7 @@ import {
   loadSettings as loadSettingsService,
   saveSettings as saveSettingsService,
 } from "./services/settingsService";
+import { scaffoldSampleTemplatePacks } from "./services/templatePackService";
 import { t } from "./lang/helpers";
 import { LatexCommandModal } from "./modal/LatexCommandModal";
 import { buildLatexCommands } from "./data/latexCommands";
@@ -49,6 +50,12 @@ export default class MdTexPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
     this.debugLog("MdTexPlugin loaded");
+
+    // ADR-008: 初回起動時にサンプルテンプレートパックを vault のテンプレートフォルダへ
+    // 展開する。「存在しない場合だけ作る」を徹底し、ユーザーが編集・削除したものは
+    // 上書きしない。一度でも scaffold を試みたら sampleTemplatesScaffolded を true にし、
+    // 以降の起動で再展開しない（ユーザーが削除しても戻さない）。
+    await this.maybeScaffoldSamplePacks();
 
     this.statusBarItem = this.addStatusBarItem();
     this.updateStatus(t("status_ready"));
@@ -120,6 +127,23 @@ export default class MdTexPlugin extends Plugin {
       settings: this.settings,
       getActiveProfileSettings: () => this.getActiveProfileSettings(),
     };
+  }
+
+  /**
+   * 初回起動時のみサンプルテンプレートパックを展開する（ADR-008）。
+   * アクティブプロファイルの templateFolder を基準にし、一度試みたら
+   * sampleTemplatesScaffolded を立てて再実行しない。
+   */
+  private async maybeScaffoldSamplePacks(): Promise<void> {
+    if (this.settings.sampleTemplatesScaffolded) return;
+    const folder = this.getActiveProfileSettings().templateFolder || "MdTex Templates";
+    try {
+      await scaffoldSampleTemplatePacks(this.app, folder);
+    } catch (e) {
+      this.debugLog(`MdTexPlugin: sample scaffold failed: ${e}`);
+    }
+    this.settings.sampleTemplatesScaffolded = true;
+    await this.saveSettings();
   }
 
   async loadSettings() {

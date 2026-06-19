@@ -1,0 +1,51 @@
+% preamble.tex — 情報系論文風テンプレート用プリアンブル
+
+% MdTex defaults mode では builtin の DEFAULT_LATEX_PREAMBLE が入らないため、
+% raw_attribute 等で必要になる互換コマンドを定義する。
+\providecommand{\passthrough}[1]{#1}
+
+% 日本語・フォント
+% ltjsarticle は LuaTeX-ja 前提のクラス。Pandoc 側も fontspec を読み込むため、
+% ここでは重複しやすい luatexja-fontspec を明示ロードしない。
+\usepackage[haranoaji]{luatexja-preset}
+
+% 数式・図表・コード
+% unicode-math は Pandoc 側で読み込まれることがあるため、amssymb は重複衝突を避けて明示しない。
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  numbers=left,
+  numberstyle=\scriptsize,
+  frame=single,
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true
+}
+
+% 見出し・キャプション
+\usepackage{titlesec}
+\titleformat{\section}{\large\bfseries}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.8em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.8em}{}
+\titlespacing*{\section}{0pt}{1.2em}{0.5em}
+\titlespacing*{\subsection}{0pt}{0.9em}{0.3em}
+\titlespacing*{\subsubsection}{0pt}{0.7em}{0.2em}
+
+\usepackage[font=small,labelfont=bf]{caption}
+\renewcommand{\figurename}{図}
+\renewcommand{\tablename}{表}
+\renewcommand{\refname}{参考文献}
+
+% ページ・段落
+\pagestyle{plain}
+\setlength{\parindent}{1em}
+\setlength{\parskip}{0pt}
+\linespread{0.98}
+
+% URL / link
+\usepackage[unicode,hidelinks]{hyperref}

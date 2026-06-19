@@ -12,6 +12,10 @@ import {
 } from "./MdTexPluginSettings";
 import { DEFAULT_LATEX_COMMANDS_YAML } from "./data/latexCommands";
 import { addProfile, removeProfile } from "./services/profileManager";
+import {
+  listTemplatePacks,
+  scaffoldSampleTemplatePacks,
+} from "./services/templatePackService";
 import { t } from "./lang/helpers";
 
 export class PandocPluginSettingTab extends PluginSettingTab {
@@ -23,6 +27,10 @@ export class PandocPluginSettingTab extends PluginSettingTab {
   }
 
   display(): void {
+    void this.render();
+  }
+
+  private async render(): Promise<void> {
     const { containerEl } = this;
     containerEl.empty();
 
@@ -197,18 +205,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     const isDefaultsMode = isDefaultsTemplateMode(currentProfile);
 
     if (isDefaultsMode) {
-      new Setting(containerEl)
-        .setName(t("setting_defaults_file_path_name"))
-        .setDesc(t("setting_defaults_file_path_desc"))
-        .addText(text =>
-          text
-            .setValue(currentProfile.defaultsFilePath ?? "")
-            .setPlaceholder(t("placeholder_defaults_file_path"))
-            .onChange(async value => {
-              currentProfile.defaultsFilePath = value;
-              await this.plugin.saveSettings();
-            }),
-        );
+      await this.renderDefaultsModeSettings(currentProfile);
     }
 
     new Setting(containerEl)
@@ -607,6 +604,114 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
       );
+  }
+
+  /**
+   * defaults 方式（ADR-007/008）の設定 UI を描画する。
+   *
+   * テンプレートフォルダ・defaults file の指定方法（パック選択 / カスタムパス）・
+   * テンプレートパックのドロップダウン・サンプル再展開を並べる。
+   * 描画前にパック一覧をスキャンし、最初から正しい選択肢でドロップダウンを構築する。
+   */
+  private async renderDefaultsModeSettings(currentProfile: ProfileSettings): Promise<void> {
+    const { containerEl } = this;
+
+    // テンプレートフォルダ（パスのみを data.json に保持）
+    new Setting(containerEl)
+      .setName(t("setting_template_folder_name"))
+      .setDesc(t("setting_template_folder_desc"))
+      .addText(text =>
+        text.setValue(currentProfile.templateFolder ?? "").onChange(async value => {
+          currentProfile.templateFolder = value;
+          await this.plugin.saveSettings();
+        }),
+      );
+
+    // defaults file の指定方法: パック選択 / カスタムパス
+    new Setting(containerEl)
+      .setName(t("setting_defaults_selection_name"))
+      .setDesc(t("setting_defaults_selection_desc"))
+      .addDropdown(dropdown => {
+        dropdown.addOption("pack", t("option_defaults_selection_pack"));
+        dropdown.addOption("custom", t("option_defaults_selection_custom"));
+        dropdown.setValue(currentProfile.defaultsSelection ?? "pack");
+        dropdown.onChange(async value => {
+          currentProfile.defaultsSelection = value as "pack" | "custom";
+          await this.plugin.saveSettings();
+          this.display();
+        });
+      });
+
+    if (currentProfile.defaultsSelection === "custom") {
+      // 後方互換: 従来の絶対パス直接指定
+      new Setting(containerEl)
+        .setName(t("setting_defaults_file_path_name"))
+        .setDesc(t("setting_defaults_file_path_desc"))
+        .addText(text =>
+          text
+            .setValue(currentProfile.defaultsFilePath ?? "")
+            .setPlaceholder(t("placeholder_defaults_file_path"))
+            .onChange(async value => {
+              currentProfile.defaultsFilePath = value;
+              await this.plugin.saveSettings();
+            }),
+        );
+      return;
+    }
+
+    // パック選択モード: 描画前にパック一覧をスキャンし、最初から正しい選択肢で構築する。
+    // これにより「初回表示が空 → 非同期補充」というちらつき・バグを防ぐ。
+    let packs = await listTemplatePacks(this.app, currentProfile.templateFolder);
+    // 選択中パックが一覧に無い場合は空に戻す（存在しないパックを保持しない）
+    if (
+      currentProfile.selectedTemplatePack &&
+      !packs.includes(currentProfile.selectedTemplatePack)
+    ) {
+      currentProfile.selectedTemplatePack = "";
+      await this.plugin.saveSettings();
+    }
+
+    const packSetting = new Setting(containerEl)
+      .setName(t("setting_template_pack_name"))
+      .setDesc(t("setting_template_pack_desc"))
+      .addDropdown(dropdown => {
+        if (packs.length === 0) {
+          dropdown.addOption("", t("setting_template_pack_empty"));
+        } else {
+          for (const pack of packs) {
+            dropdown.addOption(pack, pack);
+          }
+        }
+        dropdown.setValue(currentProfile.selectedTemplatePack ?? "");
+        dropdown.onChange(async value => {
+          currentProfile.selectedTemplatePack = value;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    packSetting.addButton(button =>
+      button.setButtonText(t("button_rescan_packs")).onClick(async () => {
+        const rescanned = await listTemplatePacks(this.app, currentProfile.templateFolder);
+        packs = rescanned;
+        await this.display();
+        if (rescanned.length) {
+          new Notice(t("notice_packs_rescanned", [rescanned.length]));
+        } else {
+          new Notice(t("notice_packs_empty"));
+        }
+      }),
+    );
+
+    packSetting.addButton(button =>
+      button.setButtonText(t("button_install_samples")).onClick(async () => {
+        const created = await scaffoldSampleTemplatePacks(
+          this.app,
+          currentProfile.templateFolder,
+        );
+        await this.display();
+        new Notice(t("notice_sample_packs_installed", [created.join(", ") || "（既存）"]));
+      }),
+    );
   }
 }
 

@@ -40,11 +40,15 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
 
   args.push(...getInputFormatArgs(options.format));
 
-  // 文書テンプレート方式（ADR-007）: defaults 方式は defaults file（`-d`）に文書の「枠」を委譲する。
+  // 文書テンプレート方式（ADR-007 / ADR-008）: defaults 方式は defaults file（`-d`）に文書の「枠」を委譲する。
   // コマンドライン `-V` は defaults file より優先されてしまうため、documentclass 系の `-V` は
   // 後段で生成せず、枠の構築を完全に defaults file 側へ渡す。`-d` は他のコマンドライン引数より
   // 早い位置に置き、以降の明示引数（フォーマット・エンジン等）が defaults file を上書きする
   // 方向（MdTex が所有する項目が勝つ）にする。
+  //
+  // profile.defaultsFilePath には、呼び出し側（convertService）が ADR-008 のパス解決
+  // （pack: vault 相対→絶対、custom: そのまま）を済ませた最終パスが入っている前提。
+  // 純粋関数を保つため、vault I/O を伴う解決はここでは行わない。
   const isDefaults = isDefaultsTemplateMode(profile);
   if (isDefaults) {
     const defaultsPath = profile.defaultsFilePath?.trim();

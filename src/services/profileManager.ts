@@ -95,6 +95,10 @@ export function migrateSettings(raw: unknown): PandocPluginSettings {
       obj.enableLatexGhost as unknown as boolean,
       DEFAULT_SETTINGS.enableLatexGhost,
     ),
+    sampleTemplatesScaffolded: valueOrDefault(
+      obj.sampleTemplatesScaffolded as unknown as boolean,
+      DEFAULT_SETTINGS.sampleTemplatesScaffolded,
+    ),
   };
 }
 

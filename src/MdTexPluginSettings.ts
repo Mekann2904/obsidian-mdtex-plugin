@@ -44,6 +44,24 @@ export interface ProfileSettings {
   documentTemplateMode: "builtin" | "defaults";
   /** defaults 方式で読み込む Pandoc defaults file（`-d`）のパス。defaults 方式時は必須。 */
   defaultsFilePath: string;
+  /**
+   * 選択中のテンプレートパック名（ADR-008）。`defaultsSelection` が `"pack"` の場合、
+   * テンプレートフォルダ（`templateFolder`）直下の同名サブフォルダ内の `defaults.yaml` を
+   * defaults file として解決する。空文字列は「何も選択されていない」。
+   */
+  selectedTemplatePack: string;
+  /**
+   * defaults 方式の defaults file 解決経路（ADR-008）。
+   * - "pack": テンプレートフォルダ内のテンプレートパック（`selectedTemplatePack`）から解決。
+   * - "custom": 従来の絶対パス（`defaultsFilePath`）をそのまま使用（後方互換）。
+   */
+  defaultsSelection: "pack" | "custom";
+  /**
+   * テンプレートパックを格納する vault 内フォルダパス（ADR-008）。既定は `MdTex Templates/`。
+   * 直下の各サブフォルダが 1 テンプレートパック。Obsidian Sync / Git で同期され、
+   * プラグイン更新で消えない。
+   */
+  templateFolder: string;
   documentClass: string;
   documentClassOptions: string;
   useStandalone: boolean;
@@ -82,6 +100,11 @@ export interface PandocPluginSettings {
   latexCommandsYaml: string; // LaTeX コマンドパレット用のユーザ定義 YAML
   enableLatexPalette: boolean; // LaTeXコマンドパレット/補完の有効・無効
   enableLatexGhost: boolean; // ゴーストテキスト補完の有効・無効
+  /**
+   * 初回サンプルテンプレートパックの展開（scaffold）を完了したか（ADR-008）。
+   * true の間は起動時に vault へのサンプル展開を試みない。ユーザーが削除しても再展開しない。
+   */
+  sampleTemplatesScaffolded: boolean;
 }
 
 /**
@@ -286,6 +309,9 @@ export const DEFAULT_PROFILE: ProfileSettings = {
   eqnPrefix: "Eq.",
   documentTemplateMode: "builtin",
   defaultsFilePath: "",
+  selectedTemplatePack: "",
+  defaultsSelection: "pack",
+  templateFolder: "MdTex Templates",
   documentClass: "ltjarticle",
   documentClassOptions: "",
   useStandalone: true,
@@ -309,4 +335,5 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
   latexCommandsYaml: DEFAULT_LATEX_COMMANDS_YAML,
   enableLatexPalette: true,
   enableLatexGhost: true,
+  sampleTemplatesScaffolded: false,
 };

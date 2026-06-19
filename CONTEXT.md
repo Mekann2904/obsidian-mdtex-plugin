@@ -48,6 +48,14 @@ _Avoid_: 設定ファイル（より一般的すぎる）、プロファイル�
 standalone を OFF にして出力した、文書テンプレート（枠）を含まない本文のみの出力。別の master LaTeX 文書から `\input` / `\include` で取り込むことを想定する。`defaults` 方式の defaults file 内で `standalone: false` を指定することで得られる。
 _Avoid_: 断片、フラグメント（文脈がないと意味不明）
 
+**テンプレートパック**:
+1 つの文書テンプレート（枠）を構成するファイル一式。`defaults.yaml`（入口）を必須とし、`template:` で参照する `.tex`、`include-in-header:` で参照する `preamble.tex`、`filters:` で参照する `.lua` 等の補助ファイルを同梱する。1 フォルダ = 1 テンプレートパックとして vault 内のテンプレートフォルダに配置し、ドロップダウンで選択する。
+_Avoid_: テーマ（外観の変更と誤解されやすい。MdTex のテンプレートパックは「文書の枠」のテンプレであり CSS テーマではない）、スキン
+
+**テンプレートフォルダ**:
+テンプレートパックを格納する vault 内のフォルダ。既定は `<vault>/MdTex Templates/`。直下の各サブフォルダが 1 つのテンプレートパックを表す。Obsidian の Templates / Templater と同じ「vault 内に置く」慣行で、Obsidian Sync / Git で同期・バックアップされ、プラグイン更新でも消えない。設定（パス）のみを `data.json` に保持する。
+_Avoid_: プラグインフォルダ（`data.json` が置かれる `.obsidian/plugins/<id>/` とは別物。プラグインの更新で同梱ファイルが置き換えられるため、ユーザーが作り込んだテンプレートパックはここに置くべきでない）
+
 ## Flagged ambiguities
 
 **「埋め込み」 vs 「トランスクルージョン」**:

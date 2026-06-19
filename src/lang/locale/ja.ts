@@ -120,6 +120,24 @@ const ja: Record<TranslationKeys, string> = {
     "Pandoc の defaults YAML ファイル（-d で渡す）へのパス。方式が「defaults file」のとき必須です。ファイル内で ${.} を使うと自身のディレクトリを参照できるため、テンプレ一式を1つのフォルダで管理できます。",
   placeholder_defaults_file_path: "/path/to/defaults.yaml",
 
+  setting_defaults_selection_name: "defaults file の指定方法",
+  setting_defaults_selection_desc:
+    "テンプレートフォルダ内のテンプレートパックから選ぶか、パスを直接指定します。新しいテンプレートを追加するには、テンプレートフォルダに defaults.yaml を含むフォルダを置いて「再スキャン」してください。",
+  option_defaults_selection_pack: "テンプレートパックから選択",
+  option_defaults_selection_custom: "パスを直接指定",
+  setting_template_pack_name: "テンプレートパック",
+  setting_template_pack_desc:
+    "テンプレートフォルダ内で見つかった defaults.yaml 付きフォルダから選びます。フォルダを追加したら「再スキャン」で反映します。",
+  setting_template_pack_empty: "（テンプレートパックが見つかりません。テンプレートフォルダに defaults.yaml を含むフォルダを置いてください）",
+  setting_template_folder_name: "テンプレートフォルダ",
+  setting_template_folder_desc:
+    "テンプレートパックを格納する vault 内フォルダ。既定は「MdTex Templates」。このフォルダの直下に各テンプレートパック（defaults.yaml を含むフォルダ）を置きます。Obsidian Sync / Git で同期され、プラグインの更新で消えません。",
+  button_rescan_packs: "再スキャン",
+  notice_packs_rescanned: "{0} 個のテンプレートパックを見つけました",
+  notice_packs_empty: "テンプレートパックが見つかりませんでした。テンプレートフォルダを確認してください",
+  notice_sample_packs_installed: "サンプルテンプレートを展開しました: {0}",
+  button_install_samples: "サンプルを再展開",
+
   heading_preamble: "LaTeX プリアンブル",
   preamble_desc:
     "LaTeX コードのみ入力してください。YAML の --- と header-includes は自動付与されます。全角入力にも対応します。",

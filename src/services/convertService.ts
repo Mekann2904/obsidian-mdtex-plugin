@@ -31,6 +31,10 @@ import {
 } from "./pandocCommandBuilder";
 import { runCommand } from "../utils/processRunner";
 import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
+import {
+  resolveDefaultsFilePath,
+  normalizeTemplateFolder,
+} from "./templatePackService";
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
@@ -177,18 +181,40 @@ export async function convertCurrentPage(
 
   new Notice(t("notice_converting", [format.toUpperCase()]));
 
-  const activeProfile = ctx.getActiveProfileSettings();
-
-  // ガードレール（ADR-007）: defaults 方式は defaults file（`-d`）に枠を委譲するため、
-  // パス未指定なら変換前にブロックする。`-d` に空パスを渡すと Pandoc が不可解なエラーを
-  // 出すため、設定不備を分かりやすく通知して処理を中断する。
-  if (isDefaultsTemplateMode(activeProfile) && !activeProfile.defaultsFilePath?.trim()) {
-    new Notice(t("notice_defaults_file_required"));
-    return;
-  }
+  const originalProfile = ctx.getActiveProfileSettings();
 
   const fileAdapter = ctx.app.vault.adapter as FileSystemAdapter;
   const vaultBasePath = fileAdapter.getBasePath();
+
+  // ADR-008: defaults file のパスを解決する。
+  // pack: テンプレートフォルダ内の選択中パック → vault 相対パスを絶対パスへ。
+  // custom: 従来の defaultsFilePath（絶対パス）をそのまま。
+  // buildPandocCommand は純粋関数のため、vault I/O を伴う解決はここで済ませ、
+  // 解決済み絶対パスを defaultsFilePath にセットしたコピーを後段へ渡す
+  //（直接ミューテーションは data.json 汚染を招くため避ける）。
+  let effectiveDefaultsPath = "";
+  if (isDefaultsTemplateMode(originalProfile)) {
+    // ADR-008: pack モードでパックが解決できた場合のみ vault 相対→絶対変換する。
+    // resolveDefaultsFilePath は pack 未解決時に空を返すため、空でなければ vault 相対パス。
+    // custom モード、および pack 未選択のフォールバック（旧 data.json 互換）は
+    // defaultsFilePath をそのまま使う（絶対パスを getFullPath に渡して二重化しない）。
+    const resolved = resolveDefaultsFilePath(originalProfile);
+    const isCustom = originalProfile.defaultsSelection === "custom";
+    if (!isCustom && resolved) {
+      effectiveDefaultsPath = fileAdapter.getFullPath(resolved);
+    } else {
+      effectiveDefaultsPath = originalProfile.defaultsFilePath?.trim() ?? "";
+    }
+
+    // ガードレール（ADR-007/008）: パス未指定/未解決なら変換前にブロックする。
+    // `-d` に空パスを渡すと Pandoc が不可解なエラーを出すため、設定不備を通知して中断する。
+    if (!effectiveDefaultsPath) {
+      new Notice(t("notice_defaults_file_required"));
+      return;
+    }
+  }
+  const activeProfile = { ...originalProfile, defaultsFilePath: effectiveDefaultsPath };
+
   const inputFilePath = fileAdapter.getFullPath(activeFile.path);
   const baseName = path.basename(inputFilePath, ".md");
   const sourceDir = path.dirname(inputFilePath);

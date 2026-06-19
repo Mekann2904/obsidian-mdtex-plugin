@@ -1,0 +1,79 @@
+% preamble.tex — 縦書き二段組向けプリアンブル（小説組版・ADR-007 defaults 方式サンプル）
+%
+% builtin モードの DEFAULT_LATEX_PREAMBLE を縦書き ltjtarticle + twocolumn（小説用途）
+% 向けに最適化した版。defaults 方式では headerIncludes がスキップされるため、
+% MdTex 固有 Lua フィルタ（callout/mermaid/docx）が前提とする
+% \passthrough・listings 等を含め、defaults 方式で必須となるパッケージを自前ロードする。
+% さらに小説組版（ルビ・圏点・話者名字取り）に必要なマクロを整える。
+% 詳細は README.md「学んだ落とし穴」を参照。
+
+% --- Pandoc raw_attribute 互換（必須） ---
+% Pandoc は Markdown 内の {=latex} 等の raw block や生 LaTeX を \passthrough{...}
+% で包んで出力する（MdTex は入力形式に +raw_attribute を常時指定）。
+% builtin モードでは DEFAULT_LATEX_PREAMBLE がこの定義を担うが、defaults 方式では
+% headerIncludes がスキップされるため、ここで必ず定義すること。
+\providecommand{\passthrough}[1]{#1}
+
+% --- フォント ---
+% 和文フォント: ltjtarticle 既定を尊重（Noto 系に寄せるなら以下を有効化）
+% \setmainjfont{Noto Serif CJK JP}
+% \setsansjfont{Noto Sans CJK JP}
+
+% 欧文（数字含む）は和文に自然に混ざるよう大文字基準でスケール。
+% 縦組では自動的に回転して配置される。
+\usepackage{luatexja-fontspec}
+\setmainfont[Scale=MatchUppercase]{Noto Serif}
+\setsansfont[Scale=MatchUppercase]{Noto Sans}
+
+% --- 数式 ---
+\usepackage{amsmath,amssymb}
+
+% --- コード（listings）---
+% callout/mermaid/docx の MdTex 固有 Lua フィルタは、キャプション内の
+% インラインコード等を \lstinline!...! で出力する。このコマンドは listings パッケージ
+% が定義するため、defaults 方式でも必ずロードすること（builtin では DEFAULT_LATEX_PREAMBLE 経由）。
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true
+}
+
+% --- 小説組版（ルビ・圏点・縦書き補助）---
+% \ruby / \kenten は luatexja-ruby が提供。縦書き ltjtarticle で必須。
+\usepackage{luatexja-ruby}
+
+% --- Markdown 見出しを小説向けに控えめに整える ---
+% サンプル本文は通常の Markdown として # / ## / ###### を使う。
+% Pandoc が出力する \section / \subsection / \paragraph をここで組版調整する。
+\usepackage{titlesec}
+\titleformat{\section}{\normalsize\bfseries}{ }{0pt}{}
+\titlespacing*{\section}{0pt}{0pt}{6mm}
+\titleformat{\subsection}{\normalsize\bfseries}{ }{0pt}{}
+\titlespacing*{\subsection}{0pt}{3mm}{2mm}
+\titleformat{\paragraph}{\scriptsize}{ }{0pt}{}
+\titlespacing*{\paragraph}{0pt}{0pt}{3mm}
+\titleformat{\subparagraph}{\scriptsize}{ }{0pt}{}
+\titlespacing*{\subparagraph}{0pt}{0pt}{6mm}
+
+% --- 図表 ---
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+
+% --- 参照 ---
+\usepackage[unicode,hypertexnames=false]{hyperref}
+
+% --- 本文サイズ・行送り ---
+% ltjtarticle は 9pt オプションを無視するため、本文開始時に小説向けサイズを明示する。
+% 8.8pt / 12pt は A5 二段組でも詰まりすぎず、既定よりかなり小説らしい密度になる。
+\AtBeginDocument{\fontsize{8.8pt}{12pt}\selectfont\setlength{\parindent}{1em}}
+\setlength{\parskip}{0pt}
+\linespread{0.92}
+
+% --- 二段組の段間調整 ---
+% 余白を詰める一方、段間は読み分けられる程度に確保する。
+% NOTE: LuaTeX-ja の和文単位 zw は begin{document} 後に定義されるため、
+% preamble では使えない。pt / mm 等の絶対単位で指定する。
+\setlength{\columnsep}{6mm}

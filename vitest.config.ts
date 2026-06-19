@@ -6,7 +6,29 @@
 import path from "path";
 import { defineConfig } from "vitest/config";
 
+// サンプルテンプレートパックの補助ファイル（.tex/.lua/.yaml）を文字列として取り込む
+// （ADR-008）。esbuild 側と同等の text loader を Rollup プラグインで再現し、
+// テスト実行時にこれらのファイルが JS としてパースされるのを防ぐ。
+function rawTextLoader() {
+  return {
+    name: "mdtex-raw-text-loader",
+    transform(_code: string, id: string) {
+      if (/\.(tex|lua|yaml)$/.test(id)) {
+        // ファイルを文字列定数として default export する JS に変換する。
+        const fs = require("fs") as typeof import("fs");
+        const content = fs.readFileSync(id, "utf8");
+        return {
+          code: `export default ${JSON.stringify(content)};`,
+          map: null,
+        };
+      }
+      return null;
+    },
+  };
+}
+
 export default defineConfig({
+  plugins: [rawTextLoader()],
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],

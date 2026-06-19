@@ -119,6 +119,24 @@ const en = {
     "Path to the Pandoc defaults YAML file passed with -d. Required when the mode is 'Defaults file'. Use ${.} inside the file to reference its own directory, so a template bundle can live in one folder.",
   placeholder_defaults_file_path: "/path/to/defaults.yaml",
 
+  setting_defaults_selection_name: "Defaults File Source",
+  setting_defaults_selection_desc:
+    "Choose from template packs in the template folder, or specify a path directly. To add a new template, place a folder containing defaults.yaml in the template folder and click 'Rescan'.",
+  option_defaults_selection_pack: "Select from template packs",
+  option_defaults_selection_custom: "Specify path directly",
+  setting_template_pack_name: "Template Pack",
+  setting_template_pack_desc:
+    "Choose from folders with defaults.yaml found in the template folder. After adding a folder, click 'Rescan' to refresh.",
+  setting_template_pack_empty: "(No template packs found. Place a folder containing defaults.yaml in the template folder)",
+  setting_template_folder_name: "Template Folder",
+  setting_template_folder_desc:
+    "Vault folder that stores template packs. Default is 'MdTex Templates'. Place each template pack (a folder with defaults.yaml) directly under it. Synced via Obsidian Sync / Git and preserved across plugin updates.",
+  button_rescan_packs: "Rescan",
+  notice_packs_rescanned: "Found {0} template packs",
+  notice_packs_empty: "No template packs found. Check the template folder",
+  notice_sample_packs_installed: "Installed sample templates: {0}",
+  button_install_samples: "Reinstall samples",
+
   heading_preamble: "LaTeX Preamble",
   preamble_desc:
     "Enter pure LaTeX code only. YAML delimiters (---) and 'header-includes:' are injected automatically. This field supports full-width editing.",
