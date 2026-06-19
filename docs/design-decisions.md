@@ -149,6 +149,40 @@ ADR-005 の Lua 基盤化でも、`%% %%` コメントの除去だけは TS 前�
 
 ---
 
+### ADR-007: 文書テンプレート方式を 2 値（`builtin` / `defaults`）で公開する
+
+**ステータス**: 採用
+
+**コンテキスト**:
+ADR-005 のパイプラインでは、MdTex は Pandoc の**組み込みデフォルトテンプレート**（`default.latex`）を無改造で使い、`documentclass` / `fontsize` / `geometry` / `classoption` を `-V` 変数スロットに、ユーザープリアンブルを `--include-in-header` に注入するだけだった。`--template`（独自テンプレート）や `--defaults`（defaults file）といった Pandoc の高度なカスタマイズ経路は UI から隠され、`pandocExtraArgs`（「Pandoc 追加引数」）という隠しハッチ経由でしかアクセスできなかった。結果として、学会公式テンプレート（IEEEtran / acmart 等）のタイトル・著者ブロック構造、縦書き（`ltjtarticle`）、段組、複数ファイルの `\input` 構成といった「文書の枠」を完全に制御したい上級ユーザーの要求を、GUI で満たせなかった。
+
+**決定**:
+プロファイルに**文書テンプレート方式**（`documentTemplateMode`）を 2 値で導入する。
+
+- **`builtin`（既定・現状維持）**: MdTex が GUI 設定値から `-V documentclass` 等を生成し、デフォルトテンプレに注入する。初心者体験は一切変わらない。
+- **`defaults`（上級者向け）**: ユーザーが用意した **defaults file**（Pandoc の `-d` / `--defaults` で読む YAML）に文書の「枠」の構築を委譲する。MdTex は `-d <path>` を渡し、`documentclass` / `fontsize` / `geometry` / `classoption` 系の `-V` 生成をスキップする（Pandoc の precedence でコマンドライン `-V` が defaults file を上書きしてしまう衝突を避けるため）。
+
+MdTex 固有レイヤ（Obsidian 記法の TS 前処理・callout/mermaid/docx の Lua フィルタ・`--pdf-engine`・`--resource-path`）は、**方式に関わらず継続**する。つまり `defaults` 方式は「Obsidian 統合 × Pandoc 全機能」のブリッジであり、文書の「枠」だけを defaults file に渡す。3 つのユースケース（縦書き・段組・学会テンプレート、および `standalone: false` による本文フラグメント出力）は、いずれも defaults file 内で表現可能なため、MdTex 側にモードを増やさない。
+
+**考慮した代替案**:
+- 方式 A（3 モード動的 UI: `builtin` / `custom` / `fragment`）: MdTex 側で 3 モードと組合せ衝突（custom + 非空プリアンブル等）のガードレールを自前実装する。組合せ爆発と保守負荷を招く。調査の結果、`custom` は defaults file の `template:`、`fragment` は defaults file の `standalone: false` で表現可能と判明したため、MdTex 側のモードは不要と判断した。
+- 方式 B（defaults file への完全外部化・ GUI 全廃）: GUI 設定と `DEFAULT_LATEX_PREAMBLE`（luatexja・Noto フォント・listings 等）による「日本語環境で GUI ポチポチで即動く」初心者価値を失う。既存ユーザー全員への破壊的影響。ADR-001「ユーザーは既存の LaTeX 知識を活用できる」は両層を想定するため、片方を切り捨てる本案は不適。
+- 方式 C（`pandocExtraArgs` 経由の `--template` / `--defaults` を文書化するだけ）: 既にパススルー自体は通るが、MdTex の `-V` 系生成との precedence 衝突を解決できず、`defaults` でも `documentclass` 等が GUI 値で上書きされて効かない。実用的でない。
+
+**結果**:
+
+**ポジティブ**:
+- 既存ユーザーへの影響ゼロ（既定 `builtin` で `data.json` 互換）。漸進的開示により、初心者と上級者を同一 UI で両立。
+- 上級ユーザーは defaults file で Pandoc 全機能へ到達。学会テンプレ一式をフォルダ単位で配置・Git 管理できる（`${.}` で同フォルダ参照）。
+- モードが 2 値に抑えられ、組合せガードレールが不要。Pandoc が defaults file のバリデーションを担う。
+
+**ネガティブ**:
+- `defaults` 方式時の `-V` 生成スキップは、`buildPandocCommand` に方式分岐を導入し、純粋関数のテストケースを増やす。
+- defaults file に委譲した設定項目は GUI と二重管理の温床となるため、`defaults` 時は当該 GUI 項目を折りたたみ・非表示にする UI 整理がセットで必要。
+- 上級ユーザーは MdTex 固有レイヤ（Lua フィルタ等）と defaults file の相互作用を理解する必要がある。これは文書化で対応する。
+
+---
+
 ## トレードオフ
 
 ### 外部ツールの使用
