@@ -322,4 +322,87 @@ describe("convertCurrentPage", () => {
 
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
+
+  it("defaults 方式は -d を渡し、documentclass 系 -V / --standalone / --metadata-file を生成せず、プリアンブルは CALLOUT+codelisting のみ", async () => {
+    // ADR-007: defaults 方式は defaults file に枠を委譲する。headerFilePath 構成は
+    // CALLOUT_PREAMBLE（Obsidian コールアウト）と codelisting 環境定義（--listings 常時付与に
+    // 伴う Pandoc 3.8+ 互換）だけを残し、baseHeader / appendLabelOverrides / pageNumberSnippet
+    // は defaults file 側で管理するためスキップする。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-defaults-"));
+    const defaultsYaml = path.join(tmpDir, "defaults.yaml");
+    await fs.writeFile(defaultsYaml, "from: markdown\n", "utf8");
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "# Title\nHello", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = {
+      ...DEFAULT_PROFILE,
+      outputDirectory: tmpDir,
+      documentTemplateMode: "defaults" as const,
+      defaultsFilePath: defaultsYaml,
+    };
+    const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    const [, args] = mockedRunCommand.mock.calls[0];
+    // -d が渡る
+    const dIdx = args.indexOf("-d");
+    expect(dIdx).toBeGreaterThan(-1);
+    expect(args[dIdx + 1]).toBe(defaultsYaml);
+    // documentclass 系 -V / --standalone / --metadata-file は生成しない（枠とキャプション名は defaults file 側）
+    expect(args).not.toContain("documentclass=ltjarticle");
+    expect(args).not.toContain("fontsize=11pt");
+    expect(args.some((a: string) => a.startsWith("geometry:margin="))).toBe(false);
+    expect(args).not.toContain("--standalone");
+    expect(args).not.toContain("--metadata-file");
+
+    // プリアンブル構成: CALLOUT と codelisting は含む、baseHeader / \renewcommand / ページ番号スニペットは含まない
+    const preamble = await fs.readFile(path.join(tmpDir, "note.preamble.tex"), "utf8");
+    expect(preamble).toContain("obsidiancallout");
+    expect(preamble).toContain("codelisting");
+    expect(preamble).not.toContain("luatexja-fontspec"); // DEFAULT_LATEX_PREAMBLE（baseHeader）は含まない
+    expect(preamble).not.toContain("\\renewcommand{\\figurename}");
+    expect(preamble).not.toContain("\\let\\ps@plain\\ps@empty");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("defaults 方式で defaultsFilePath 未指定なら変換前にブロックして Notice で通知する", async () => {
+    // ガードレール: -d に空パスを渡すと Pandoc が不可解なエラーを出すため、分かりやすく通知する。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-defaults-empty-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "# Title\nHello", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = {
+      ...DEFAULT_PROFILE,
+      outputDirectory: tmpDir,
+      documentTemplateMode: "defaults" as const,
+      defaultsFilePath: "",
+    };
+    const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    expect(mockedRunCommand).not.toHaveBeenCalled();
+    const lastNotice = Notice.messages.pop() || "";
+    expect(lastNotice.toLowerCase()).toContain("defaults");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
 });

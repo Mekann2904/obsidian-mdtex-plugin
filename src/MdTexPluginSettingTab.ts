@@ -5,7 +5,11 @@
 
 import { App, PluginSettingTab, Setting, Notice, Modal, debounce } from "obsidian";
 import MdTexPlugin from "./MdTexPlugin";
-import { DEFAULT_LATEX_PREAMBLE, ProfileSettings } from "./MdTexPluginSettings";
+import {
+  DEFAULT_LATEX_PREAMBLE,
+  isDefaultsTemplateMode,
+  ProfileSettings,
+} from "./MdTexPluginSettings";
 import { DEFAULT_LATEX_COMMANDS_YAML } from "./data/latexCommands";
 import { addProfile, removeProfile } from "./services/profileManager";
 import { t } from "./lang/helpers";
@@ -172,6 +176,41 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // =================================================================
     containerEl.createEl("h3", { text: t("heading_latex_engine") });
 
+    // 文書テンプレート方式（ADR-007）: このセクションの他項目の意味を決める「入口」。
+    // builtin → GUI 設定値で枠を構築、defaults → defaults file に枠を委譲。
+    // defaults 選択時は委譲対象の GUI 項目（ドキュメントクラス・フォントサイズ・プリアンブル等）
+    // を折りたたみ、defaults file パス入力だけを表示する（漸進的開示）。
+    new Setting(containerEl)
+      .setName(t("setting_template_mode_name"))
+      .setDesc(t("setting_template_mode_desc"))
+      .addDropdown(dropdown => {
+        dropdown.addOption("builtin", t("option_template_builtin"));
+        dropdown.addOption("defaults", t("option_template_defaults"));
+        dropdown.setValue(currentProfile.documentTemplateMode ?? "builtin");
+        dropdown.onChange(async value => {
+          currentProfile.documentTemplateMode = value as "builtin" | "defaults";
+          await this.plugin.saveSettings();
+          this.display(); // 漸進的開示のために再描画
+        });
+      });
+
+    const isDefaultsMode = isDefaultsTemplateMode(currentProfile);
+
+    if (isDefaultsMode) {
+      new Setting(containerEl)
+        .setName(t("setting_defaults_file_path_name"))
+        .setDesc(t("setting_defaults_file_path_desc"))
+        .addText(text =>
+          text
+            .setValue(currentProfile.defaultsFilePath ?? "")
+            .setPlaceholder(t("placeholder_defaults_file_path"))
+            .onChange(async value => {
+              currentProfile.defaultsFilePath = value;
+              await this.plugin.saveSettings();
+            }),
+        );
+    }
+
     new Setting(containerEl)
       .setName(t("setting_latex_engine_name"))
       .setDesc(t("setting_latex_engine_desc"))
@@ -182,143 +221,150 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         }),
       );
 
-    new Setting(containerEl)
-      .setName(t("setting_document_class_name"))
-      .setDesc(t("setting_document_class_desc"))
-      .addText(text =>
-        text.setValue(currentProfile.documentClass).onChange(async value => {
-          currentProfile.documentClass = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName(t("setting_document_class_opts_name"))
-      .setDesc(t("setting_document_class_opts_desc"))
-      .addText(text =>
-        text.setValue(currentProfile.documentClassOptions).onChange(async value => {
-          currentProfile.documentClassOptions = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName(t("setting_font_size_name"))
-      .setDesc(t("setting_font_size_desc"))
-      .addText(text =>
-        text.setValue(currentProfile.fontSize).onChange(async value => {
-          currentProfile.fontSize = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName(t("setting_use_margin_name"))
-      .setDesc(t("setting_use_margin_desc"))
-      .addToggle(toggle =>
-        toggle.setValue(currentProfile.useMarginSize).onChange(async value => {
-          currentProfile.useMarginSize = value;
-          await this.plugin.saveSettings();
-          this.display(); // 再描画でMargin Size入力を有効/無効化
-        }),
-      );
-
-    if (currentProfile.useMarginSize) {
+    // 委譲対象の GUI 項目（ドキュメントクラス・フォントサイズ・マージン・ページ番号・画像スケール）は
+    // defaults 方式では defaults file 側で管理するため非表示。builtin 方式のみ表示する。
+    if (!isDefaultsMode) {
       new Setting(containerEl)
-        .setName(t("setting_margin_size_name"))
-        .setDesc(t("setting_margin_size_desc"))
+        .setName(t("setting_document_class_name"))
+        .setDesc(t("setting_document_class_desc"))
         .addText(text =>
-          text.setValue(currentProfile.marginSize).onChange(async value => {
-            currentProfile.marginSize = value;
+          text.setValue(currentProfile.documentClass).onChange(async value => {
+            currentProfile.documentClass = value;
+            await this.plugin.saveSettings();
+          }),
+        );
+
+      new Setting(containerEl)
+        .setName(t("setting_document_class_opts_name"))
+        .setDesc(t("setting_document_class_opts_desc"))
+        .addText(text =>
+          text.setValue(currentProfile.documentClassOptions).onChange(async value => {
+            currentProfile.documentClassOptions = value;
+            await this.plugin.saveSettings();
+          }),
+        );
+
+      new Setting(containerEl)
+        .setName(t("setting_font_size_name"))
+        .setDesc(t("setting_font_size_desc"))
+        .addText(text =>
+          text.setValue(currentProfile.fontSize).onChange(async value => {
+            currentProfile.fontSize = value;
+            await this.plugin.saveSettings();
+          }),
+        );
+
+      new Setting(containerEl)
+        .setName(t("setting_use_margin_name"))
+        .setDesc(t("setting_use_margin_desc"))
+        .addToggle(toggle =>
+          toggle.setValue(currentProfile.useMarginSize).onChange(async value => {
+            currentProfile.useMarginSize = value;
+            await this.plugin.saveSettings();
+            this.display(); // 再描画でMargin Size入力を有効/無効化
+          }),
+        );
+
+      if (currentProfile.useMarginSize) {
+        new Setting(containerEl)
+          .setName(t("setting_margin_size_name"))
+          .setDesc(t("setting_margin_size_desc"))
+          .addText(text =>
+            text.setValue(currentProfile.marginSize).onChange(async value => {
+              currentProfile.marginSize = value;
+              await this.plugin.saveSettings();
+            }),
+          );
+      }
+
+      new Setting(containerEl)
+        .setName(t("setting_page_numbers_name"))
+        .setDesc(t("setting_page_numbers_desc"))
+        .addToggle(toggle =>
+          toggle.setValue(currentProfile.usePageNumber).onChange(async value => {
+            currentProfile.usePageNumber = value;
+            await this.plugin.saveSettings();
+          }),
+        );
+
+      new Setting(containerEl)
+        .setName(t("setting_image_scale_name"))
+        .setDesc(t("setting_image_scale_desc"))
+        .addText(text =>
+          text.setValue(currentProfile.imageScale).onChange(async value => {
+            currentProfile.imageScale = value;
             await this.plugin.saveSettings();
           }),
         );
     }
 
-    new Setting(containerEl)
-      .setName(t("setting_page_numbers_name"))
-      .setDesc(t("setting_page_numbers_desc"))
-      .addToggle(toggle =>
-        toggle.setValue(currentProfile.usePageNumber).onChange(async value => {
-          currentProfile.usePageNumber = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
-    new Setting(containerEl)
-      .setName(t("setting_image_scale_name"))
-      .setDesc(t("setting_image_scale_desc"))
-      .addText(text =>
-        text.setValue(currentProfile.imageScale).onChange(async value => {
-          currentProfile.imageScale = value;
-          await this.plugin.saveSettings();
-        }),
-      );
-
     // =================================================================
     // 4. LaTeX Preamble (Custom Header) - Improved UI
+    // defaults 方式では headerIncludes も defaults file 側で管理するため非表示。
     // =================================================================
-    containerEl.createEl("h3", { text: t("heading_preamble") });
+    if (!isDefaultsMode) {
+      containerEl.createEl("h3", { text: t("heading_preamble") });
 
-    const preambleDesc = containerEl.createDiv({ cls: "setting-item-description" });
-    preambleDesc.setText(t("preamble_desc"));
-    preambleDesc.style.marginBottom = "8px";
+      const preambleDesc = containerEl.createDiv({ cls: "setting-item-description" });
+      preambleDesc.setText(t("preamble_desc"));
+      preambleDesc.style.marginBottom = "8px";
 
-    // Create a container for the textarea to give it specific styling
-    const editorContainer = containerEl.createDiv();
-    editorContainer.style.width = "100%";
+      // Create a container for the textarea to give it specific styling
+      const editorContainer = containerEl.createDiv();
+      editorContainer.style.width = "100%";
 
-    const textArea = editorContainer.createEl("textarea");
-    textArea.style.width = "100%";
-    textArea.style.height = "400px"; // 十分な高さを確保
-    textArea.style.fontFamily = "var(--font-monospace)"; // 等幅フォント
-    textArea.style.fontSize = "13px";
-    textArea.style.whiteSpace = "pre"; // 自動折り返しを無効化（コードとして表示）
-    textArea.style.overflow = "auto"; // スクロールバー
-    textArea.style.resize = "vertical"; // 縦方向のみリサイズ可
-    textArea.spellcheck = false; // スペルチェック無効
+      const textArea = editorContainer.createEl("textarea");
+      textArea.style.width = "100%";
+      textArea.style.height = "400px"; // 十分な高さを確保
+      textArea.style.fontFamily = "var(--font-monospace)"; // 等幅フォント
+      textArea.style.fontSize = "13px";
+      textArea.style.whiteSpace = "pre"; // 自動折り返しを無効化（コードとして表示）
+      textArea.style.overflow = "auto"; // スクロールバー
+      textArea.style.resize = "vertical"; // 縦方向のみリサイズ可
+      textArea.spellcheck = false; // スペルチェック無効
 
-    textArea.value = currentProfile.headerIncludes;
-    textArea.placeholder = t("placeholder_preamble");
+      textArea.value = currentProfile.headerIncludes;
+      textArea.placeholder = t("placeholder_preamble");
 
-    textArea.addEventListener("change", async () => {
-      currentProfile.headerIncludes = textArea.value;
-      await this.plugin.saveSettings();
-    });
-
-    // Reset / Copy / Fullscreen Buttons
-    const btnContainer = containerEl.createDiv();
-    btnContainer.style.marginTop = "8px";
-    btnContainer.style.display = "flex";
-    btnContainer.style.gap = "8px";
-    btnContainer.style.justifyContent = "flex-end";
-
-    const fullscreenBtn = btnContainer.createEl("button", { text: t("button_open_fullscreen") });
-    fullscreenBtn.onclick = async () => {
-      await this.plugin.saveSettings();
-      const modal = new PreambleModal(this.app, currentProfile.headerIncludes, async val => {
-        currentProfile.headerIncludes = val;
-        textArea.value = val;
+      textArea.addEventListener("change", async () => {
+        currentProfile.headerIncludes = textArea.value;
         await this.plugin.saveSettings();
       });
-      modal.open();
-    };
 
-    const resetBtn = btnContainer.createEl("button", { text: t("button_reset_preamble") });
-    resetBtn.addEventListener("click", async () => {
-      if (confirm(t("confirm_reset_preamble"))) {
-        currentProfile.headerIncludes = DEFAULT_LATEX_PREAMBLE;
-        textArea.value = DEFAULT_LATEX_PREAMBLE;
+      // Reset / Copy / Fullscreen Buttons
+      const btnContainer = containerEl.createDiv();
+      btnContainer.style.marginTop = "8px";
+      btnContainer.style.display = "flex";
+      btnContainer.style.gap = "8px";
+      btnContainer.style.justifyContent = "flex-end";
+
+      const fullscreenBtn = btnContainer.createEl("button", { text: t("button_open_fullscreen") });
+      fullscreenBtn.onclick = async () => {
         await this.plugin.saveSettings();
-        new Notice(t("notice_preamble_reset"));
-      }
-    });
+        const modal = new PreambleModal(this.app, currentProfile.headerIncludes, async val => {
+          currentProfile.headerIncludes = val;
+          textArea.value = val;
+          await this.plugin.saveSettings();
+        });
+        modal.open();
+      };
 
-    const copyBtn = btnContainer.createEl("button", { text: t("button_copy") });
-    copyBtn.onclick = async () => {
-      await navigator.clipboard.writeText(textArea.value);
-      new Notice(t("notice_preamble_copied"));
-    };
+      const resetBtn = btnContainer.createEl("button", { text: t("button_reset_preamble") });
+      resetBtn.addEventListener("click", async () => {
+        if (confirm(t("confirm_reset_preamble"))) {
+          currentProfile.headerIncludes = DEFAULT_LATEX_PREAMBLE;
+          textArea.value = DEFAULT_LATEX_PREAMBLE;
+          await this.plugin.saveSettings();
+          new Notice(t("notice_preamble_reset"));
+        }
+      });
+
+      const copyBtn = btnContainer.createEl("button", { text: t("button_copy") });
+      copyBtn.onclick = async () => {
+        await navigator.clipboard.writeText(textArea.value);
+        new Notice(t("notice_preamble_copied"));
+      };
+    } // end preamble section (defaults 方式では非表示)
 
     // =================================================================
     // 5. LaTeX Command Palette (YAML)
@@ -386,64 +432,67 @@ export class PandocPluginSettingTab extends PluginSettingTab {
 
     // =================================================================
     // 5. Localization (Labels & Prefixes)
+    // defaults 方式ではキャプション語／参照接頭辞も defaults file 側の metadata で管理するため非表示。
     // =================================================================
-    containerEl.createEl("h3", { text: t("heading_localization") });
-    containerEl.createEl("p", {
-      text: t("heading_localization_desc"),
-      cls: "setting-item-description",
-    });
+    if (!isDefaultsMode) {
+      containerEl.createEl("h3", { text: t("heading_localization") });
+      containerEl.createEl("p", {
+        text: t("heading_localization_desc"),
+        cls: "setting-item-description",
+      });
 
-    // Helper to create label settings pair
-    const createLabelSetting = (
-      name: string,
-      labelKey: keyof ProfileSettings,
-      prefixKey: keyof ProfileSettings,
-    ) => {
-      const div = containerEl.createDiv({ cls: "setting-item" });
-      div.style.display = "flex";
-      div.style.justifyContent = "space-between";
-      div.style.alignItems = "center";
-      div.style.padding = "0.75em 0";
-      div.style.borderTop = "1px solid var(--background-modifier-border)";
+      // Helper to create label settings pair
+      const createLabelSetting = (
+        name: string,
+        labelKey: keyof ProfileSettings,
+        prefixKey: keyof ProfileSettings,
+      ) => {
+        const div = containerEl.createDiv({ cls: "setting-item" });
+        div.style.display = "flex";
+        div.style.justifyContent = "space-between";
+        div.style.alignItems = "center";
+        div.style.padding = "0.75em 0";
+        div.style.borderTop = "1px solid var(--background-modifier-border)";
 
-      const info = div.createDiv({ cls: "setting-item-info" });
-      info.createDiv({ cls: "setting-item-name", text: name });
+        const info = div.createDiv({ cls: "setting-item-info" });
+        info.createDiv({ cls: "setting-item-name", text: name });
 
-      const control = div.createDiv({ cls: "setting-item-control" });
-      control.style.gap = "10px";
+        const control = div.createDiv({ cls: "setting-item-control" });
+        control.style.gap = "10px";
 
-      // Label Input
-      const labelInput = document.createElement("input");
-      labelInput.type = "text";
-      labelInput.placeholder = t("placeholder_label");
-      labelInput.value = String(currentProfile[labelKey]);
-      labelInput.style.width = "120px";
-      labelInput.onchange = async () => {
-        // @ts-ignore
-        currentProfile[labelKey] = labelInput.value;
-        await this.plugin.saveSettings();
+        // Label Input
+        const labelInput = document.createElement("input");
+        labelInput.type = "text";
+        labelInput.placeholder = t("placeholder_label");
+        labelInput.value = String(currentProfile[labelKey]);
+        labelInput.style.width = "120px";
+        labelInput.onchange = async () => {
+          // @ts-ignore
+          currentProfile[labelKey] = labelInput.value;
+          await this.plugin.saveSettings();
+        };
+
+        // Prefix Input
+        const prefixInput = document.createElement("input");
+        prefixInput.type = "text";
+        prefixInput.placeholder = t("placeholder_prefix");
+        prefixInput.value = String(currentProfile[prefixKey]);
+        prefixInput.style.width = "120px";
+        prefixInput.onchange = async () => {
+          // @ts-ignore
+          currentProfile[prefixKey] = prefixInput.value;
+          await this.plugin.saveSettings();
+        };
+
+        control.appendChild(labelInput);
+        control.appendChild(prefixInput);
       };
 
-      // Prefix Input
-      const prefixInput = document.createElement("input");
-      prefixInput.type = "text";
-      prefixInput.placeholder = t("placeholder_prefix");
-      prefixInput.value = String(currentProfile[prefixKey]);
-      prefixInput.style.width = "120px";
-      prefixInput.onchange = async () => {
-        // @ts-ignore
-        currentProfile[prefixKey] = prefixInput.value;
-        await this.plugin.saveSettings();
-      };
-
-      control.appendChild(labelInput);
-      control.appendChild(prefixInput);
-    };
-
-    createLabelSetting(t("label_figures"), "figureLabel", "figPrefix");
-    createLabelSetting(t("label_tables"), "tableLabel", "tblPrefix");
-    createLabelSetting(t("label_listings"), "codeLabel", "lstPrefix");
-    createLabelSetting(t("label_equations"), "equationLabel", "eqnPrefix"); // Added Equation
+      createLabelSetting(t("label_figures"), "figureLabel", "figPrefix");
+      createLabelSetting(t("label_tables"), "tableLabel", "tblPrefix");
+      createLabelSetting(t("label_listings"), "codeLabel", "lstPrefix");
+      createLabelSetting(t("label_equations"), "equationLabel", "eqnPrefix"); // Added Equation
+    } // end localization section (defaults 方式では非表示)
 
     // =================================================================
     // 6. Cross-referencing & Filters
@@ -497,15 +546,19 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           }),
       );
 
-    new Setting(containerEl)
-      .setName(t("setting_use_standalone_name"))
-      .setDesc(t("setting_use_standalone_desc"))
-      .addToggle(toggle =>
-        toggle.setValue(currentProfile.useStandalone).onChange(async value => {
-          currentProfile.useStandalone = value;
-          await this.plugin.saveSettings();
-        }),
-      );
+    // --standalone 制御は defaults 方式では defaults file の standalone: で管理するため非表示。
+    // builtin 方式のみ表示（本文フラグメント出力は defaults 方式の defaults file で行う）。
+    if (!isDefaultsMode) {
+      new Setting(containerEl)
+        .setName(t("setting_use_standalone_name"))
+        .setDesc(t("setting_use_standalone_desc"))
+        .addToggle(toggle =>
+          toggle.setValue(currentProfile.useStandalone).onChange(async value => {
+            currentProfile.useStandalone = value;
+            await this.plugin.saveSettings();
+          }),
+        );
+    }
 
     // =================================================================
     // 7. Global Settings

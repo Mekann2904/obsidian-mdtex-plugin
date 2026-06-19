@@ -160,6 +160,21 @@ MdTexでは、複数の設定プロファイルを作成・管理できます。
   Pandoc追加引数: --toc
 ```
 
+### 例4: defaults file 方式プロファイル（上級者向け・学会テンプレ）
+
+**目的**: IEEEtran / acmart 等の学会公式テンプレや、縦書き・段組・複数ファイル構成など、GUI では表現しきれない「文書の枠」を完全制御する。
+
+```yaml
+プロファイル名: IEEE用
+設定:
+  文書テンプレート方式: defaults file
+  defaults file のパス: ./my-templates/ieee/defaults.yaml
+  出力フォーマット: pdf
+  LaTeX エンジン: lualatex
+```
+
+defaults 方式を選ぶと、ドキュメントクラス・フォントサイズ・余白・プリアンブル等の「枠」に関わる GUI 項目は折りたたまれ、それらはすべて defaults file 側で管理します。MdTex 固有の処理（Obsidian 記法・コールアウト・`--resource-path` 等）は方式に関わらず継続するため、Obsidian ノートをそのまま学会テンプレに流し込めます。defaults file の書き方と `${.}` の活用については [設定リファレンス](./configuration.md#文書テンプレート方式adr-007) を参照してください。
+
 ---
 
 ## ベストプラクティス

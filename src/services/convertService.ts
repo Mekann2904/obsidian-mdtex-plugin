@@ -7,7 +7,7 @@ import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs/promises";
-import { ProfileSettings } from "../MdTexPluginSettings";
+import { isDefaultsTemplateMode, ProfileSettings } from "../MdTexPluginSettings";
 import {
   replaceWikiLinksAndCodeAsync,
   unwrapValidWikiLinks,
@@ -178,6 +178,15 @@ export async function convertCurrentPage(
   new Notice(t("notice_converting", [format.toUpperCase()]));
 
   const activeProfile = ctx.getActiveProfileSettings();
+
+  // ガードレール（ADR-007）: defaults 方式は defaults file（`-d`）に枠を委譲するため、
+  // パス未指定なら変換前にブロックする。`-d` に空パスを渡すと Pandoc が不可解なエラーを
+  // 出すため、設定不備を分かりやすく通知して処理を中断する。
+  if (isDefaultsTemplateMode(activeProfile) && !activeProfile.defaultsFilePath?.trim()) {
+    new Notice(t("notice_defaults_file_required"));
+    return;
+  }
+
   const fileAdapter = ctx.app.vault.adapter as FileSystemAdapter;
   const vaultBasePath = fileAdapter.getBasePath();
   const inputFilePath = fileAdapter.getFullPath(activeFile.path);
@@ -252,14 +261,24 @@ export async function convertCurrentPage(
       }
     }
 
+    // 文書テンプレート方式（ADR-007）: defaults 方式は文書の「枠」（プリアンブル・
+    // documentclass 系・ページ番号・キャプション名）を defaults file 側で管理する。
+    // 一方、CALLOUT_PREAMBLE（Obsidian コールアウト変換）と codelisting 環境定義
+    // （`--listings` 常時付与に伴う Pandoc 3.8+ 互換）と draftSnippet（Obsidian frontmatter
+    // 連動）は MdTex 固有レイヤとして方式に関わらず維持する。
+    const isDefaultsMode = isDefaultsTemplateMode(activeProfile);
+
     // ユーザー設定プリアンブルにコールアウト定義を付与する
     // プリアンブルは生 .tex として --include-in-header で渡すため、YAML(header-includes) 時代の
     // クリーニングは行わず、ユーザー設定 + コールアウト定義をそのまま素通りさせる。
-    const baseHeader = activeProfile.headerIncludes || "";
+    // defaults 方式では headerIncludes も defaults file 側の include-in-header で管理するため
+    // 空扱いとし、CALLOUT_PREAMBLE と codelisting 定義だけを残す。
+    const baseHeader = isDefaultsMode ? "" : activeProfile.headerIncludes || "";
     // Pandoc 3.8+ は --listings 時にキャプション付きコードブロックを \begin{codelisting} で
     // 出力する。codelisting 環境は DEFAULT_LATEX_PREAMBLE に定義済みだが、旧版からの移行等で
     // 独自プリアンブルを持つ場合は定義が欠け「Environment codelisting undefined.」で停止するため、
     // 欠けていれば冪等に補完する（コールアウト定義付与と同じ層で処理）。
+    // defaults 方式でも --listings を常時付与するため codelisting 補完は維持する。
     const withCallout = ensureCodelistingEnvironment(
       baseHeader.includes("obsidiancallout")
         ? baseHeader
@@ -269,26 +288,31 @@ export async function convertCurrentPage(
     // （--metadata-file / frontmatter）に一本化し、\renewcommand との二重管理を避ける。
     // crossref-OFF 時はメタデータの消費先がないため、プロファイル値で LaTeX ネイティブの
     // キャプション名（\figurename 等）を上書きするフォールバックを残す。
-    const headerWithListings = activeProfile.usePandocCrossref
-      ? withCallout
-      : appendLabelOverrides(withCallout, {
-          figureLabel: activeProfile.figureLabel,
-          figPrefix: activeProfile.figPrefix,
-          tableLabel: activeProfile.tableLabel,
-          tblPrefix: activeProfile.tblPrefix,
-          codeLabel: activeProfile.codeLabel,
-          lstPrefix: activeProfile.lstPrefix,
-          equationLabel: activeProfile.equationLabel,
-          eqnPrefix: activeProfile.eqnPrefix,
-        });
+    // いずれにせよ defaults 方式ではキャプション名も defaults file 側で管理するため、
+    // appendLabelOverrides はスキップする（builtin + crossref-OFF のみ注入）。
+    const headerWithListings =
+      isDefaultsMode || activeProfile.usePandocCrossref
+        ? withCallout
+        : appendLabelOverrides(withCallout, {
+            figureLabel: activeProfile.figureLabel,
+            figPrefix: activeProfile.figPrefix,
+            tableLabel: activeProfile.tableLabel,
+            tblPrefix: activeProfile.tblPrefix,
+            codeLabel: activeProfile.codeLabel,
+            lstPrefix: activeProfile.lstPrefix,
+            equationLabel: activeProfile.equationLabel,
+            eqnPrefix: activeProfile.eqnPrefix,
+          });
 
     //
     // LaTeX の \maketitle はタイトルページを強制的に plain スタイルにする。
     // ページ番号をオフにしても、plain スタイルのままだと1ページ目だけ数字が出る。
     // plain → empty に差し替えてタイトルページも無番号に統一する。
-    const pageNumberSnippet = activeProfile.usePageNumber
-      ? ""
-      : "\\makeatletter\\let\\ps@plain\\ps@empty\\makeatother";
+    // defaults 方式ではページ番号制御も defaults file 側で管理するためスキップする。
+    const pageNumberSnippet =
+      isDefaultsMode || activeProfile.usePageNumber
+        ? ""
+        : "\\makeatletter\\let\\ps@plain\\ps@empty\\makeatother";
 
     const draftSnippet = draftRequested
       ? [
@@ -592,9 +616,13 @@ async function buildPandocExecutionPlan(params: {
   // crossref-OFF では消費先がなく無意味。その場合は LaTeX ネイティブの
   // \renewcommand フォールバック（convertCurrentPage 側）に任せ、不要な
   // 一時ファイル生成を避ける。
-  const metadata = params.profile.usePandocCrossref
-    ? await createTempMetadataFile(params.profile)
-    : null;
+  // defaults 方式ではキャプション語／参照接頭辞も defaults file 側の `metadata:` で管理する。
+  // コマンドライン `--metadata-file` は defaults file より優先されてしまうため、defaults 方式
+  // では生成をスキップし、precedence 衝突を回避する（builtin 方式は従来どおり crossref-ON のみ生成）。
+  const metadata =
+    params.profile.usePandocCrossref && !isDefaultsTemplateMode(params.profile)
+      ? await createTempMetadataFile(params.profile)
+      : null;
   let metadataFile: string | undefined;
   if (metadata) {
     metadataFile = metadata.metadataPath;

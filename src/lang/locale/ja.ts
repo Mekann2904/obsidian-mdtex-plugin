@@ -43,6 +43,8 @@ const ja: Record<TranslationKeys, string> = {
   notice_pandoc_exit_code: "エラー: Pandoc がコード {0} で終了しました",
   notice_duplicate_labels: "変換を中止しました: 相互参照ラベルが重複しています: {0}。ラベル（fig:, tbl:, lst:, eq:, sec:）を一意にしてください。",
   notice_pandoc_launch_error: "Pandoc の起動に失敗: {0}",
+  notice_defaults_file_required:
+    "文書テンプレート方式が「defaults file」ですが、defaults file のパスが未設定です。プロファイル設定でパスを指定してください。",
 
   notice_markdownlint_missing: "markdownlint-cli2 が見つかりません。設定でパスを指定してください。",
   notice_lint_ok: "Lint 完了: 問題なし",
@@ -107,6 +109,16 @@ const ja: Record<TranslationKeys, string> = {
   setting_page_numbers_desc: "ページ番号を有効にします。",
   setting_image_scale_name: "画像スケール",
   setting_image_scale_desc: "デフォルトの画像スケール（例: width=0.8\\textwidth）。",
+
+  setting_template_mode_name: "文書テンプレート方式",
+  setting_template_mode_desc:
+    "文書の「枠」の構築方法を選びます。「組み込み」は GUI 設定値を Pandoc 変数として注入します。「defaults file」は枠（ドキュメントクラス・フォントサイズ・プリアンブル等）を Pandoc の defaults file（-d）に委譲します。",
+  option_template_builtin: "組み込み（GUI 設定）",
+  option_template_defaults: "defaults file（上級者向け）",
+  setting_defaults_file_path_name: "defaults file のパス",
+  setting_defaults_file_path_desc:
+    "Pandoc の defaults YAML ファイル（-d で渡す）へのパス。方式が「defaults file」のとき必須です。ファイル内で ${.} を使うと自身のディレクトリを参照できるため、テンプレ一式を1つのフォルダで管理できます。",
+  placeholder_defaults_file_path: "/path/to/defaults.yaml",
 
   heading_preamble: "LaTeX プリアンブル",
   preamble_desc:

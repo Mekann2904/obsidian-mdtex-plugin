@@ -92,6 +92,76 @@ PDF生成後に一時ファイル（.tex、.temp.md）を削除するかどう�
 
 ## LaTeX/PDFエンジン設定
 
+### 文書テンプレート方式（ADR-007）
+
+文書の「枠」（`\documentclass`・タイトルブロック・プリアンブル・ページ体裁）をどう構築するかを選択します。この設定は本セクションの他項目の意味を決める「入口」です。
+
+| 方式 | 概要 | 対象 |
+|---|---|---|
+| **組み込み（`builtin`・既定）** | GUI 設定値（ドキュメントクラス・フォントサイズ・余白・プリアンブル等）から Pandoc の `-V` 変数を生成し、組み込みデフォルトテンプレに注入する | 初心者・既存ユーザー（現状完全維持） |
+| **defaults file（`defaults`・上級者向け）** | Pandoc の defaults file（`-d`）に枠の構築を委譲する | 学会公式テンプレ・縦書き・段組・複数ファイル構成を完全制御したい上級者 |
+
+#### defaults 方式を選んだときの挙動
+
+MdTex は `-d <defaultsFilePath>` を渡し、以下を **defaults file 側で管理** します（コマンドライン `-V` が defaults file より優先される Pandoc の precedence 衝突を避けるため、MdTex 側では生成しません）。
+
+- `documentclass` / `classoption` / `fontsize` / `geometry:margin` / `graphics`（画像スケール）/ `pagestyle`（ページ番号）の各 `-V`
+- `--standalone`（defaults file の `standalone:` で制御。`standalone: false` で本文フラグメントを出力）
+- ユーザープリアンブル（`headerIncludes`）とキャプション語／参照接頭辞（defaults file の `metadata:` / `include-in-header` で管理）
+- beamer ターゲット（defaults file の `to: beamer` で管理）
+
+一方、MdTex 固有レイヤは方式に関わらず継続します。
+
+- Obsidian 記法の TS 前処理（`%% %%` コメント・WikiLink・トランスクルージョン・コールアウト等）
+- Lua フィルタ（コールアウト / Mermaid 言語削除 / DOCX の LaTeX コマンド処理）
+- `--pdf-engine`（LaTeX エンジン）、`--resource-path`、出力フォーマット（pdf/docx/latex）
+- `--include-in-header` に注入する MdTex 固有の断片（Obsidian コールアウト定義・`--listings` 互換の codelisting 環境定義・ドラフトモードスニペット）
+
+> **ガードレール**: `defaults` 方式で defaults file のパスが未指定のときは、変換前にエラー通知してブロックします。
+
+#### defaults file のパス
+
+Pandoc の defaults YAML ファイル（`-d` で渡す）へのパスを指定します。`defaults` 方式のとき必須です。
+
+#### defaults file の書き方
+
+defaults file は Pandoc の `-d` / `--defaults` で読む YAML で、テンプレート・プリアンブル・フィルタ・変数・メタデータなど Pandoc のほぼ全オプションを 1 ファイルに集約できます。
+
+```yaml
+# 学会テンプレ（IEEEtran）の例
+from: markdown
+
+template: ${.}/ieeetran.tex
+include-in-header:
+  - ${.}/preamble.tex
+
+variables:
+  documentclass: IEEEtran
+  classoption: conference
+  fontsize: 10pt
+  geometry: margin=1in
+
+metadata:
+  figureTitle: "Fig."
+  figPrefix: "Fig."
+  tableTitle: "Table"
+  tblPrefix: "Table"
+```
+
+`${.}` は defaults file 自身のディレクトリを参照する Pandoc 公式の記法です。テンプレ一式（defaults.yaml / ieeetran.tex / preamble.tex）を 1 つのフォルダにまとめて Git 管理でき、defaults file のパスだけをプロファイルに指定すればよくなります。
+
+```
+my-templates/
+└── ieee/
+    ├── defaults.yaml      ← プロファイルの「defaults file のパス」に指定
+    ├── ieeetran.tex       ← ${.}/ieeetran.tex で参照
+    └── preamble.tex       ← ${.}/preamble.tex で参照
+```
+
+> **本文フラグメント出力**: defaults file 内で `standalone: false` を指定すると、枠を含まない本文のみの出力が得られます。別の master LaTeX 文書から `\input` / `\include` で取り込む用途を想定します。
+
+> **注意**: MdTex は常時 `--listings`、`--highlight-style=tango`、`--resource-path` を付与します（方式に関わらず）。defaults file 内の相対パス解決や、これら常時付与するオプション・フィルタ指定との相互作用にご注意ください。
+
 ### LaTeXエンジン
 
 PDF生成に使用するLaTeXエンジンを指定します。

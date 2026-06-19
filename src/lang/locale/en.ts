@@ -40,6 +40,8 @@ const en = {
   notice_pandoc_exit_code: "Error: Pandoc process exited with code {0}",
   notice_duplicate_labels: "Conversion aborted: duplicate cross-reference labels detected: {0}. Please make labels unique (fig:, tbl:, lst:, eq:, sec:).",
   notice_pandoc_launch_error: "Error launching Pandoc: {0}",
+  notice_defaults_file_required:
+    "Document template mode is 'Defaults file', but no defaults file path is set. Set the path in the profile settings.",
 
   notice_markdownlint_missing: "markdownlint-cli2 not found. Specify the path in settings.",
   notice_lint_ok: "Lint completed: no issues.",
@@ -106,6 +108,16 @@ const en = {
   setting_page_numbers_desc: "Enable page numbering.",
   setting_image_scale_name: "Image Scale",
   setting_image_scale_desc: "Default image scaling (e.g. width=0.8\\textwidth).",
+
+  setting_template_mode_name: "Document Template Mode",
+  setting_template_mode_desc:
+    "Choose how the document frame is built. 'Built-in' injects the GUI settings as Pandoc variables; 'Defaults file' delegates the frame (document class, font size, preamble, etc.) to a Pandoc defaults file (-d).",
+  option_template_builtin: "Built-in (GUI settings)",
+  option_template_defaults: "Defaults file (advanced)",
+  setting_defaults_file_path_name: "Defaults File Path",
+  setting_defaults_file_path_desc:
+    "Path to the Pandoc defaults YAML file passed with -d. Required when the mode is 'Defaults file'. Use ${.} inside the file to reference its own directory, so a template bundle can live in one folder.",
+  placeholder_defaults_file_path: "/path/to/defaults.yaml",
 
   heading_preamble: "LaTeX Preamble",
   preamble_desc:

@@ -32,6 +32,18 @@ export interface ProfileSettings {
   lstPrefix: string;
   equationLabel: string; // `DEFAULT_SETTINGS` に存在しなかったため追加
   eqnPrefix: string;
+  /**
+   * 文書テンプレート方式（ADR-007）。
+   * - "builtin": GUI 設定値から `-V` を生成し、Pandoc の組み込みデフォルトテンプレに
+   *   documentclass / fontsize / geometry 等を注入する（既定・後方互換）。
+   * - "defaults": defaults file（`-d`）に文書の「枠」の構築を委譲する。documentclass 系の
+   *   `-V` 生成をスキップし、Pandoc の precedence 衝突（コマンドライン `-V` が defaults file
+   *   を上書きする）を回避する。MdTex 固有レイヤ（Obsidian 記法処理・Lua フィルタ・
+   *   `--pdf-engine`・`--resource-path`）は方式に関わらず継続する。
+   */
+  documentTemplateMode: "builtin" | "defaults";
+  /** defaults 方式で読み込む Pandoc defaults file（`-d`）のパス。defaults 方式時は必須。 */
+  defaultsFilePath: string;
   documentClass: string;
   documentClassOptions: string;
   useStandalone: boolean;
@@ -42,6 +54,18 @@ export interface ProfileSettings {
    * 後方互換性のためフィールド自体は残しますが、実行時には使用されません。
    */
   luaFilterPath: string;
+}
+
+/**
+ * 文書テンプレート方式が `defaults`（defaults file 委譲）かを判定する（ADR-007）。
+ *
+ * `documentTemplateMode` は型上は非 optional だが、旧版の `data.json` から読み込んだ
+ * 直後はフィールドが欠損し得る（`migrateSettings` の `cloneProfile` が DEFAULT_PROFILE で
+ * 補完するまで）。この `?? "builtin"` フォールバックを単一ヘルパーに集約し、各消費側で
+ * 正規化ロジックを重複させない。純粋関数なのでユニットテストも容易。
+ */
+export function isDefaultsTemplateMode(profile: ProfileSettings): boolean {
+  return (profile.documentTemplateMode ?? "builtin") === "defaults";
 }
 
 /**
@@ -260,6 +284,8 @@ export const DEFAULT_PROFILE: ProfileSettings = {
   lstPrefix: "Listing",
   equationLabel: "Equation",
   eqnPrefix: "Eq.",
+  documentTemplateMode: "builtin",
+  defaultsFilePath: "",
   documentClass: "ltjarticle",
   documentClassOptions: "",
   useStandalone: true,

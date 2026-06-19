@@ -3,7 +3,7 @@
 // Reason: コマンド生成をテストしやすくし、プロセス実行から分離するため。
 // Related: src/services/convertService.ts, src/utils/processRunner.ts, src/MdTexPluginSettings.ts, vitest.config.ts
 
-import { ProfileSettings } from "../MdTexPluginSettings";
+import { isDefaultsTemplateMode, ProfileSettings } from "../MdTexPluginSettings";
 import { normalizeFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
 
 export type OutputFormat = "pdf" | "latex" | "docx";
@@ -40,6 +40,17 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
 
   args.push(...getInputFormatArgs(options.format));
 
+  // 文書テンプレート方式（ADR-007）: defaults 方式は defaults file（`-d`）に文書の「枠」を委譲する。
+  // コマンドライン `-V` は defaults file より優先されてしまうため、documentclass 系の `-V` は
+  // 後段で生成せず、枠の構築を完全に defaults file 側へ渡す。`-d` は他のコマンドライン引数より
+  // 早い位置に置き、以降の明示引数（フォーマット・エンジン等）が defaults file を上書きする
+  // 方向（MdTex が所有する項目が勝つ）にする。
+  const isDefaults = isDefaultsTemplateMode(profile);
+  if (isDefaults) {
+    const defaultsPath = profile.defaultsFilePath?.trim();
+    if (defaultsPath) args.push("-d", normalizeFsPath(defaultsPath));
+  }
+
   if (options.metadataFile) {
     args.push("--metadata-file", normalizeFsPath(options.metadataFile));
   }
@@ -52,10 +63,12 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
 
   if (options.format === "pdf") {
     args.push(`--pdf-engine=${profile.latexEngine}`);
-    if (profile.documentClass === "beamer") args.push("-t", "beamer");
+    // defaults 方式では beamer ターゲット（`-t beamer`）も defaults file の `to:` で管理するため、
+    // documentClass 由来の `-t beamer` 生成をスキップする。builtin 方式は現状どおり。
+    if (!isDefaults && profile.documentClass === "beamer") args.push("-t", "beamer");
   } else if (options.format === "latex") {
     args.push("-t", "latex");
-    if (profile.documentClass === "beamer") args.push("-t", "beamer");
+    if (!isDefaults && profile.documentClass === "beamer") args.push("-t", "beamer");
   } else if (options.format === "docx") {
     args.push("-t", "docx");
   }
@@ -82,24 +95,32 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   // されてしまい文書ごとの上書きが効かなくなるため、metadata-file に一本化する。
   // YAML の生成は buildLabelMetadataYaml、ファイル化は buildPandocExecutionPlan が担う。
 
-  if (profile.useMarginSize) args.push("-V", `geometry:margin=${profile.marginSize}`);
-  if (!profile.usePageNumber) args.push("-V", "pagestyle=empty");
+  // builtin 方式のみ: documentclass / geometry / fontsize 等の `-V` を GUI 設定値から生成する。
+  // defaults 方式は defaults file 側で `variables:` を管理するため、これらの `-V` 生成をスキップ
+  // する（Pandoc の precedence でコマンドライン `-V` が defaults file を上書きする衝突を回避）。
+  if (!isDefaults) {
+    if (profile.useMarginSize) args.push("-V", `geometry:margin=${profile.marginSize}`);
+    if (!profile.usePageNumber) args.push("-V", "pagestyle=empty");
 
-  if (profile.imageScale?.trim()) {
-    args.push("-V", `graphics=${profile.imageScale}`);
+    if (profile.imageScale?.trim()) {
+      args.push("-V", `graphics=${profile.imageScale}`);
+    }
+
+    args.push("-V", `fontsize=${profile.fontSize}`);
+    args.push("-V", `documentclass=${profile.documentClass}`);
+    if (profile.documentClassOptions?.trim())
+      args.push("-V", `classoption=${profile.documentClassOptions}`);
   }
-
-  args.push("-V", `fontsize=${profile.fontSize}`);
-  args.push("-V", `documentclass=${profile.documentClass}`);
-  if (profile.documentClassOptions?.trim())
-    args.push("-V", `classoption=${profile.documentClassOptions}`);
 
   args.push("--highlight-style=tango");
 
   const extraArgs = filterPandocExtrasForFormat(options.extraArgs || [], options.format);
   if (extraArgs.length) args.push(...extraArgs);
 
-  if (profile.useStandalone) args.push("--standalone");
+  // defaults 方式では standalone 制御も defaults file（`standalone:`）で管理する。これにより
+  // `standalone: false` で本文フラグメントを出力するユースケース（CONTEXT.md）が実現できる。
+  // builtin 方式は現状どおり GUI の useStandalone で `--standalone` を制御する。
+  if (!isDefaults && profile.useStandalone) args.push("--standalone");
 
   const pandocPath = profile.pandocPath.trim() || "pandoc";
   return { command: pandocPath, args };

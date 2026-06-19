@@ -206,3 +206,98 @@ describe("ラベルメタデータのメタデータ-file 移行", () => {
     expect(yaml).toContain('figureTitle: "a\\"b\\\\c"');
   });
 });
+
+describe("文書テンプレート方式（ADR-007）", () => {
+  it("defaults 方式は -d を渡し、documentclass 系の 6 つの -V を生成しない", () => {
+    // Pandoc の precedence でコマンドライン -V が defaults file を上書きしてしまうため、
+    // defaults 方式では -d で枠を委譲しつつ documentclass 系の -V 生成をスキップする。
+    const profile = createDefaultProfile();
+    profile.documentTemplateMode = "defaults";
+    profile.defaultsFilePath = "/vault/defaults.yaml";
+
+    const result = buildPandocCommand({
+      profile,
+      format: "pdf",
+      outputPath: "/tmp/out.pdf",
+      workingDir: "/tmp",
+    });
+
+    const dIdx = result.args.indexOf("-d");
+    expect(dIdx).toBeGreaterThan(-1);
+    expect(result.args[dIdx + 1]).toBe("/vault/defaults.yaml");
+
+    // 6 つの -V が含まれないこと
+    expect(result.args).not.toContain("documentclass=ltjarticle");
+    expect(result.args).not.toContain("fontsize=11pt");
+    expect(result.args.some(a => a.startsWith("geometry:margin="))).toBe(false);
+    expect(result.args.some(a => a.startsWith("graphics="))).toBe(false);
+    expect(result.args).not.toContain("pagestyle=empty");
+    expect(result.args.some(a => a.startsWith("classoption="))).toBe(false);
+  });
+
+  it("defaults 方式は useStandalone=true でも --standalone を付与しない", () => {
+    // standalone 制御も defaults file の standalone: に委譲する（本文フラグメント出力のため）。
+    const profile = createDefaultProfile();
+    profile.documentTemplateMode = "defaults";
+    profile.defaultsFilePath = "/vault/defaults.yaml";
+    profile.useStandalone = true;
+
+    const result = buildPandocCommand({
+      profile,
+      format: "pdf",
+      outputPath: "/tmp/out.pdf",
+      workingDir: "/tmp",
+    });
+
+    expect(result.args).not.toContain("--standalone");
+  });
+
+  it("defaults + documentClass=beamer でも documentClass 由来の -t beamer を付与しない", () => {
+    // beamer ターゲットも defaults file の to: で管理するためスキップする。
+    const profile = createDefaultProfile();
+    profile.documentTemplateMode = "defaults";
+    profile.defaultsFilePath = "/vault/defaults.yaml";
+    profile.documentClass = "beamer";
+
+    const result = buildPandocCommand({
+      profile,
+      format: "pdf",
+      outputPath: "/tmp/out.pdf",
+      workingDir: "/tmp",
+    });
+
+    expect(result.args.indexOf("beamer")).toBe(-1);
+  });
+
+  it("defaults 方式で defaultsFilePath が空なら -d を渡さない（呼び出し側でガード）", () => {
+    const profile = createDefaultProfile();
+    profile.documentTemplateMode = "defaults";
+    profile.defaultsFilePath = "   ";
+
+    const result = buildPandocCommand({
+      profile,
+      format: "pdf",
+      outputPath: "/tmp/out.pdf",
+      workingDir: "/tmp",
+    });
+
+    expect(result.args).not.toContain("-d");
+  });
+
+  it("builtin 方式は -d を渡さず、従来どおり -V と --standalone を生成する（回帰）", () => {
+    const profile = createDefaultProfile();
+    profile.documentTemplateMode = "builtin";
+
+    const result = buildPandocCommand({
+      profile,
+      format: "pdf",
+      outputPath: "/tmp/out.pdf",
+      workingDir: "/tmp",
+    });
+
+    expect(result.args).not.toContain("-d");
+    expect(result.args).toContain("documentclass=ltjarticle");
+    expect(result.args).toContain("fontsize=11pt");
+    expect(result.args).toContain("--standalone");
+  });
+});
