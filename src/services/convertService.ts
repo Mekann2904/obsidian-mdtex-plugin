@@ -7,21 +7,28 @@ import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
 import * as path from "path";
 import * as os from "os";
 import * as fs from "fs/promises";
-import * as fsSync from "fs";
-import { ProfileSettings } from "../MdTexPluginSettings";
+import { isDefaultsTemplateMode, ProfileSettings } from "../MdTexPluginSettings";
 import {
-  replaceWikiLinksRecursivelyAsync,
+  replaceWikiLinksAndCodeAsync,
   unwrapValidWikiLinks,
   stripObsidianComments,
 } from "../utils/markdownTransforms";
-import { cleanLatexPreamble, appendLabelOverrides } from "../utils/latexPreamble";
+import { appendLabelOverrides, ensureCodelistingEnvironment } from "../utils/latexPreamble";
 import { CALLOUT_PREAMBLE } from "../utils/calloutTheme";
 import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
+import { DOCX_TEX_LUA_FILTER } from "../assets/docxTexFilter";
+import { MERMAID_STRIP_LUA_FILTER } from "../assets/mermaid-filter";
 import { expandTransclusions } from "../utils/transclusion";
+import { detectDuplicateLabels } from "../utils/crossrefLabels";
 import type { PluginContext } from "./lintService";
 import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
 import { t } from "../lang/helpers";
-import { buildPandocCommand, OutputFormat, PandocCommandResult } from "./pandocCommandBuilder";
+import {
+  buildPandocCommand,
+  buildLabelMetadataYaml,
+  OutputFormat,
+  PandocCommandResult,
+} from "./pandocCommandBuilder";
 import { runCommand } from "../utils/processRunner";
 import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
 
@@ -37,6 +44,25 @@ async function createTempLuaFilter(): Promise<{ luaPath: string; tempDir: string
     const luaPath = joinFsPath(tempDir, fileName);
     await fs.writeFile(luaPath, CALLOUT_LUA_FILTER, "utf8");
     return { luaPath, tempDir };
+  } catch (error) {
+    await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
+    throw error;
+  }
+}
+
+// プロファイル既定値のラベル／接頭辞を Pandoc メタデータ YAML として一時生成する。
+// 値が全て空なら null を返し、呼び出し側は --metadata-file を省略する。
+async function createTempMetadataFile(
+  profile: ProfileSettings,
+): Promise<{ metadataPath: string; tempDir: string } | null> {
+  const body = buildLabelMetadataYaml(profile);
+  if (!body) return null;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-metadata-"));
+  try {
+    const fileName = `labels-${Date.now()}-${Math.random().toString(16).slice(2)}.yaml`;
+    const metadataPath = joinFsPath(tempDir, fileName);
+    await fs.writeFile(metadataPath, body, "utf8");
+    return { metadataPath, tempDir };
   } catch (error) {
     await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
     throw error;
@@ -152,6 +178,15 @@ export async function convertCurrentPage(
   new Notice(t("notice_converting", [format.toUpperCase()]));
 
   const activeProfile = ctx.getActiveProfileSettings();
+
+  // ガードレール（ADR-007）: defaults 方式は defaults file（`-d`）に枠を委譲するため、
+  // パス未指定なら変換前にブロックする。`-d` に空パスを渡すと Pandoc が不可解なエラーを
+  // 出すため、設定不備を分かりやすく通知して処理を中断する。
+  if (isDefaultsTemplateMode(activeProfile) && !activeProfile.defaultsFilePath?.trim()) {
+    new Notice(t("notice_defaults_file_required"));
+    return;
+  }
+
   const fileAdapter = ctx.app.vault.adapter as FileSystemAdapter;
   const vaultBasePath = fileAdapter.getBasePath();
   const inputFilePath = fileAdapter.getFullPath(activeFile.path);
@@ -186,11 +221,10 @@ export async function convertCurrentPage(
     // Obsidianコメント (%% ... %%) をPDF等に出さないよう事前に除去
     content = stripObsidianComments(content);
 
-    // 実験的Mermaidを使わない場合は、Pandoc listings が unknown language を吐かないよう
-    // フェンス言語を外してプレーンコードとして扱う
-    if (!ctx.settings.enableExperimentalMermaid) {
-      content = stripMermaidLanguage(content);
-    }
+    // Mermaid コードブロックの言語削除は TS 正規表現（stripMermaidLanguage）から
+    // Lua フィルタ（MERMAID_STRIP_LUA_FILTER）へ移行した（ADR-005）。
+    // 適用判定は buildPandocExecutionPlan の stripMermaid フラグで行うため、
+    // ここでの前処理は不要。
 
     // mdtex固有の --draft フラグをPandoc引数から分離してLaTeXにだけ伝える
     const { extras: pandocExtraArgs, isDraft } = parseDraftFlag(activeProfile.pandocExtraArgs);
@@ -227,30 +261,58 @@ export async function convertCurrentPage(
       }
     }
 
-    // ユーザー設定プリアンブルにコールアウト定義を付与し、listing名の上書きを加える
-    const baseHeader = activeProfile.headerIncludes || "";
-    const withCallout = baseHeader.includes("obsidiancallout")
-      ? baseHeader
-      : `${baseHeader.trim()}\n\n${CALLOUT_PREAMBLE}`.trim();
-    const cleanedHeader = cleanLatexPreamble(withCallout);
-    const headerWithListings = appendLabelOverrides(cleanedHeader, {
-      figureLabel: activeProfile.figureLabel,
-      figPrefix: activeProfile.figPrefix,
-      tableLabel: activeProfile.tableLabel,
-      tblPrefix: activeProfile.tblPrefix,
-      codeLabel: activeProfile.codeLabel,
-      lstPrefix: activeProfile.lstPrefix,
-      equationLabel: activeProfile.equationLabel,
-      eqnPrefix: activeProfile.eqnPrefix,
-    });
+    // 文書テンプレート方式（ADR-007）: defaults 方式は文書の「枠」（プリアンブル・
+    // documentclass 系・ページ番号・キャプション名）を defaults file 側で管理する。
+    // 一方、CALLOUT_PREAMBLE（Obsidian コールアウト変換）と codelisting 環境定義
+    // （`--listings` 常時付与に伴う Pandoc 3.8+ 互換）と draftSnippet（Obsidian frontmatter
+    // 連動）は MdTex 固有レイヤとして方式に関わらず維持する。
+    const isDefaultsMode = isDefaultsTemplateMode(activeProfile);
+
+    // ユーザー設定プリアンブルにコールアウト定義を付与する
+    // プリアンブルは生 .tex として --include-in-header で渡すため、YAML(header-includes) 時代の
+    // クリーニングは行わず、ユーザー設定 + コールアウト定義をそのまま素通りさせる。
+    // defaults 方式では headerIncludes も defaults file 側の include-in-header で管理するため
+    // 空扱いとし、CALLOUT_PREAMBLE と codelisting 定義だけを残す。
+    const baseHeader = isDefaultsMode ? "" : activeProfile.headerIncludes || "";
+    // Pandoc 3.8+ は --listings 時にキャプション付きコードブロックを \begin{codelisting} で
+    // 出力する。codelisting 環境は DEFAULT_LATEX_PREAMBLE に定義済みだが、旧版からの移行等で
+    // 独自プリアンブルを持つ場合は定義が欠け「Environment codelisting undefined.」で停止するため、
+    // 欠けていれば冪等に補完する（コールアウト定義付与と同じ層で処理）。
+    // defaults 方式でも --listings を常時付与するため codelisting 補完は維持する。
+    const withCallout = ensureCodelistingEnvironment(
+      baseHeader.includes("obsidiancallout")
+        ? baseHeader
+        : `${baseHeader.trim()}\n\n${CALLOUT_PREAMBLE}`.trim(),
+    );
+    // crossref-ON 時はキャプション語／参照接頭辞をメタデータ経路
+    // （--metadata-file / frontmatter）に一本化し、\renewcommand との二重管理を避ける。
+    // crossref-OFF 時はメタデータの消費先がないため、プロファイル値で LaTeX ネイティブの
+    // キャプション名（\figurename 等）を上書きするフォールバックを残す。
+    // いずれにせよ defaults 方式ではキャプション名も defaults file 側で管理するため、
+    // appendLabelOverrides はスキップする（builtin + crossref-OFF のみ注入）。
+    const headerWithListings =
+      isDefaultsMode || activeProfile.usePandocCrossref
+        ? withCallout
+        : appendLabelOverrides(withCallout, {
+            figureLabel: activeProfile.figureLabel,
+            figPrefix: activeProfile.figPrefix,
+            tableLabel: activeProfile.tableLabel,
+            tblPrefix: activeProfile.tblPrefix,
+            codeLabel: activeProfile.codeLabel,
+            lstPrefix: activeProfile.lstPrefix,
+            equationLabel: activeProfile.equationLabel,
+            eqnPrefix: activeProfile.eqnPrefix,
+          });
 
     //
     // LaTeX の \maketitle はタイトルページを強制的に plain スタイルにする。
     // ページ番号をオフにしても、plain スタイルのままだと1ページ目だけ数字が出る。
     // plain → empty に差し替えてタイトルページも無番号に統一する。
-    const pageNumberSnippet = activeProfile.usePageNumber
-      ? ""
-      : "\\makeatletter\\let\\ps@plain\\ps@empty\\makeatother";
+    // defaults 方式ではページ番号制御も defaults file 側で管理するためスキップする。
+    const pageNumberSnippet =
+      isDefaultsMode || activeProfile.usePageNumber
+        ? ""
+        : "\\makeatletter\\let\\ps@plain\\ps@empty\\makeatother";
 
     const draftSnippet = draftRequested
       ? [
@@ -273,27 +335,36 @@ export async function convertCurrentPage(
     // 有効な WikiLink のみ [[ ]] を外してテキストにする
     content = unwrapValidWikiLinks(content, ctx.app, activeFile.path);
 
-    content = await replaceWikiLinksRecursivelyAsync(
+    content = await replaceWikiLinksAndCodeAsync(
       content,
       ctx.app,
       activeProfile,
       activeFile.path,
-      cache,
     );
 
-    if (format === "docx") {
-      content = content
-        .replace(/\\textbf\{([^}]+)\}/g, "**$1**")
-        .replace(/\\textit\{([^}]+)\}/g, "*$1*")
-        .replace(/\\footnote\{([^}]+)\}/g, "^[$1]")
-        .replace(/\\centerline\{([^}]+)\}/g, '::: {custom-style="Center"}\n$1\n:::')
-        .replace(/\\rightline\{([^}]+)\}/g, '::: {custom-style="Right"}\n$1\n:::')
-        .replace(/\\vspace\{[^}]+\}/g, "\n\n")
-        .replace(/\\kenten\{([^}]+)\}/g, '[$1]{custom-style="Kenten"}')
-        .replace(/\\newpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
-        .replace(/\\clearpage/g, '```{=openxml}\n<w:p><w:r><w:br w:type="page"/></w:r></w:p>\n```')
-        .replace(/\\noindent/g, "");
+    // 方式W: crossref ラベルの重複検出。メイン文書内のユーザーミス、および
+    // 同一ファイル複数回埋め込みによる crossref 制約衝突を、Pandoc 実行前に検出して
+    // 分かりやすく通知する（ADR-005 関連）。GHC の CallStack ではなく日本語で原因を示す。
+    const duplicates = detectDuplicateLabels(content);
+    if (duplicates.length > 0) {
+      const summary = duplicates
+        .map(d => `${d.label} (${d.count}回)`)
+        .join(", ");
+      new Notice(t("notice_duplicate_labels", [summary]));
+      if (!ctx.settings.suppressDeveloperLogs) {
+        console.warn(
+          `[MdTex] Duplicate cross-reference labels: ${duplicates.map(d => `${d.label}(${d.count})`).join(", ")}`,
+          duplicates,
+        );
+      }
+      return;
     }
+
+    // NOTE: docx 出力時の LaTeX コマンド処理は文字列の正規表現逆変換では行わない。
+    // `[^}]+` 系パターンは波括弧のネスト・`\{` エスケープ・複数行・オプション引数に対応できず、
+    // ネストした LaTeX（例: \footnote{\textbf{重要}}）を破壊するため。
+    // 代わりに Pandoc の AST を直接処理する Lua フィルタ（DOCX_TEX_LUA_FILTER）へ一本化し、
+    // buildPandocExecutionPlan で実行時に一時ファイルとして渡す。
 
     if (lintEnabled) {
       // markdownlint 後の内容を Pandoc に渡すため、再度中間ファイルへ書き戻す
@@ -383,11 +454,6 @@ export async function convertCurrentPage(
   }
 }
 
-// Mermaidフェンスをプレーンコードフェンスに落とし込む（listingsの unknown language 回避用）
-function stripMermaidLanguage(md: string): string {
-  return md.replace(/```mermaid[^\n]*\n([\s\S]*?)```/g, "```\n$1```");
-}
-
 async function runPandoc(
   ctx: PluginContext,
   activeProfile: ProfileSettings,
@@ -411,6 +477,7 @@ async function runPandoc(
       inputPath: inputFile,
       pandocExtraArgs,
       resourcePath: resourcePathOverride,
+      stripMermaid: !ctx.settings.enableExperimentalMermaid,
     });
 
     return await executePandocCommand(plan, ctx, outputFile);
@@ -442,6 +509,7 @@ async function runPandocWithStdin(
       pandocExtraArgs,
       useStdin: true,
       resourcePath: resourcePathOverride,
+      stripMermaid: !ctx.settings.enableExperimentalMermaid,
     });
 
     return await executePandocCommand(plan, ctx, outputFile, inputContent);
@@ -456,12 +524,34 @@ interface PandocExecutionPlan {
   workingDir: string;
 }
 
-function resolveDocxLuaFilter(profile: ProfileSettings, format: OutputFormat): string | null {
-  if (format !== "docx") return null;
-  if (!profile.enableAdvancedTexCommands) return null;
-  const luaFilterPath = profile.luaFilterPath.trim();
-  if (!luaFilterPath) return null;
-  return fsSync.existsSync(luaFilterPath) ? luaFilterPath : null;
+// DOCX 出力用の AST ベース Lua フィルタ（DOCX_TEX_LUA_FILTER）を一時生成する。
+// 従来の loose ファイル（tex-to-docx.lua）依存は廃止し、配布物（main.js）に埋め込んだ
+// フィルタを実行時に一時ファイルへ書き出すことで、全環境で正しく適用されるようにする。
+// 同パターンで Mermaid 言語削除フィルタ（MERMAID_STRIP_LUA_FILTER）も生成する。
+async function createTempLuaFilterContent(
+  content: string,
+  prefix: string,
+): Promise<{ luaPath: string; tempDir: string }> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  try {
+    const fileName = `${prefix}${Date.now()}-${Math.random().toString(16).slice(2)}.lua`;
+    const luaPath = joinFsPath(tempDir, fileName);
+    await fs.writeFile(luaPath, content, "utf8");
+    return { luaPath, tempDir };
+  } catch (error) {
+    await fs.rm(tempDir, { recursive: true, force: false }).catch(() => {});
+    throw error;
+  }
+}
+
+async function createTempDocxFilter(): Promise<{ luaPath: string; tempDir: string }> {
+  return createTempLuaFilterContent(DOCX_TEX_LUA_FILTER, "mdtex-docx-");
+}
+
+// Mermaid 言語削除フィルタ（pdf/latex 用）を一時生成する。
+// 適用条件（enableExperimentalMermaid が無効）は buildPandocExecutionPlan 側で判定する。
+async function createTempMermaidFilter(): Promise<{ luaPath: string; tempDir: string }> {
+  return createTempLuaFilterContent(MERMAID_STRIP_LUA_FILTER, "mdtex-mermaid-");
 }
 
 async function isInsideBaseDir(target: string, base: string): Promise<boolean> {
@@ -493,6 +583,9 @@ async function buildPandocExecutionPlan(params: {
   inputPath?: string;
   useStdin?: boolean;
   resourcePath?: string;
+  // Mermaid 言語削除フィルタを適用するか（enableExperimentalMermaid が無効な場合 true）。
+  // pdf/latex 出力でのみ意味を持ち、--listings の unknown language 警告を防ぐ（ADR-005）。
+  stripMermaid?: boolean;
 }): Promise<PandocExecutionPlan> {
   const tempFiles: string[] = [];
   const luaFilters: string[] = [];
@@ -501,10 +594,40 @@ async function buildPandocExecutionPlan(params: {
     const created = await createTempLuaFilter();
     luaFilters.push(created.luaPath);
     tempFiles.push(created.luaPath, created.tempDir);
+
+    // 実験的 Mermaid 無効時: Mermaid コードブロックの言語を削除し、--listings の
+    // unknown language 警告を防ぐ。従来の stripMermaidLanguage（TS 正規表現）に代わる
+    // AST ベース処理（ADR-005）。
+    if (params.stripMermaid) {
+      const mermaid = await createTempMermaidFilter();
+      luaFilters.push(mermaid.luaPath);
+      tempFiles.push(mermaid.luaPath, mermaid.tempDir);
+    }
   }
 
-  const docxLua = resolveDocxLuaFilter(params.profile, params.format);
-  if (docxLua) luaFilters.push(docxLua);
+  if (params.format === "docx" && params.profile.enableAdvancedTexCommands) {
+    const docxFilter = await createTempDocxFilter();
+    luaFilters.push(docxFilter.luaPath);
+    tempFiles.push(docxFilter.luaPath, docxFilter.tempDir);
+  }
+
+  // プロファイル既定値をメタデータとして渡し、文書 frontmatter で上書き可能にする。
+  // ただし figureTitle / figPrefix 等は pandoc-crossref 専用メタデータなので、
+  // crossref-OFF では消費先がなく無意味。その場合は LaTeX ネイティブの
+  // \renewcommand フォールバック（convertCurrentPage 側）に任せ、不要な
+  // 一時ファイル生成を避ける。
+  // defaults 方式ではキャプション語／参照接頭辞も defaults file 側の `metadata:` で管理する。
+  // コマンドライン `--metadata-file` は defaults file より優先されてしまうため、defaults 方式
+  // では生成をスキップし、precedence 衝突を回避する（builtin 方式は従来どおり crossref-ON のみ生成）。
+  const metadata =
+    params.profile.usePandocCrossref && !isDefaultsTemplateMode(params.profile)
+      ? await createTempMetadataFile(params.profile)
+      : null;
+  let metadataFile: string | undefined;
+  if (metadata) {
+    metadataFile = metadata.metadataPath;
+    tempFiles.push(metadata.metadataPath, metadata.tempDir);
+  }
 
   try {
     const command = buildPandocCommand({
@@ -513,6 +636,7 @@ async function buildPandocExecutionPlan(params: {
       inputPath: params.useStdin ? undefined : params.inputPath,
       outputPath: params.outputFile,
       headerPath: params.headerFilePath,
+      metadataFile,
       workingDir: params.workingDir,
       extraArgs: params.pandocExtraArgs,
       luaFilters,
@@ -528,7 +652,7 @@ async function buildPandocExecutionPlan(params: {
   }
 }
 
-const TEMP_PREFIXES = ["mdtex-lua-", "mdtex-mermaid-", "mdtex-"];
+const TEMP_PREFIXES = ["mdtex-lua-", "mdtex-mermaid-", "mdtex-docx-", "mdtex-"];
 
 async function cleanupTemporaryFiles(files: string[]) {
   if (!files?.length) return;

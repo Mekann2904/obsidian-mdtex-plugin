@@ -184,6 +184,36 @@ def hello():
 ```
 ````
 
+### キャプションと相互参照（Listing）
+
+コードブロックにキャプションとラベルを付け、本文から参照できます。ハイライト・
+キャプション・ラベルの生成はすべて **Pandoc ネイティブ**（`fenced_code_attributes`
+＋ `--listings`）へ委譲しています。次の2つの記法をどちらも受け付けます。
+
+**標準記法（Pandoc 公式）**:
+
+````markdown
+```{#lst:demo .python caption="サンプルコード"}
+print("hello")
+```
+````
+
+**非標準記法（Obsidian 書きやすさ配慮・属性を言語の直後に配置）**:
+
+````markdown
+```python{#lst:demo caption="サンプルコード"}
+print("hello")
+```
+````
+
+どちらも同じ `` \begin{lstlisting}[language=Python, caption={サンプルコード}, label=lst:demo] ``
+を出力します。本文からの参照は `[@lst:demo]` のように行います（pandoc-crossref 有効時）。
+
+> **言語認識の範囲**: 言語名の正規化は行わず、Pandoc の `--listings`（skylighting 互換）
+> に委譲します。`python` / `bash` / `c` / `cpp` / `java` / `html` などはハイライトされますが、
+> `javascript` / `js` / `typescript` / `ts` / `json` / `css` などは listings 側の非対応言語のため
+> `language=` が付かず**素の等幅表示**になります（ハイライトなしでもコード本文は保持されます）。
+
 ---
 
 ## 数式

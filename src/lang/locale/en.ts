@@ -38,7 +38,10 @@ const en = {
   notice_pandoc_more_logs: "Pandoc: additional logs are available in the console.",
   notice_generated: "Successfully generated: {0}",
   notice_pandoc_exit_code: "Error: Pandoc process exited with code {0}",
+  notice_duplicate_labels: "Conversion aborted: duplicate cross-reference labels detected: {0}. Please make labels unique (fig:, tbl:, lst:, eq:, sec:).",
   notice_pandoc_launch_error: "Error launching Pandoc: {0}",
+  notice_defaults_file_required:
+    "Document template mode is 'Defaults file', but no defaults file path is set. Set the path in the profile settings.",
 
   notice_markdownlint_missing: "markdownlint-cli2 not found. Specify the path in settings.",
   notice_lint_ok: "Lint completed: no issues.",
@@ -106,6 +109,16 @@ const en = {
   setting_image_scale_name: "Image Scale",
   setting_image_scale_desc: "Default image scaling (e.g. width=0.8\\textwidth).",
 
+  setting_template_mode_name: "Document Template Mode",
+  setting_template_mode_desc:
+    "Choose how the document frame is built. 'Built-in' injects the GUI settings as Pandoc variables; 'Defaults file' delegates the frame (document class, font size, preamble, etc.) to a Pandoc defaults file (-d).",
+  option_template_builtin: "Built-in (GUI settings)",
+  option_template_defaults: "Defaults file (advanced)",
+  setting_defaults_file_path_name: "Defaults File Path",
+  setting_defaults_file_path_desc:
+    "Path to the Pandoc defaults YAML file passed with -d. Required when the mode is 'Defaults file'. Use ${.} inside the file to reference its own directory, so a template bundle can live in one folder.",
+  placeholder_defaults_file_path: "/path/to/defaults.yaml",
+
   heading_preamble: "LaTeX Preamble",
   preamble_desc:
     "Enter pure LaTeX code only. YAML delimiters (---) and 'header-includes:' are injected automatically. This field supports full-width editing.",
@@ -119,7 +132,8 @@ const en = {
   notice_preamble_copied: "Preamble copied to clipboard.",
 
   heading_localization: "Localization (Labels & Prefixes)",
-  heading_localization_desc: "Set the labels used for captions and cross-references.",
+  heading_localization_desc:
+    "Set the labels used for captions and cross-references. You can override these per document via frontmatter keys (figureTitle / figPrefix / tableTitle / tblPrefix / listingTitle / lstPrefix / eqnPrefix), which take precedence over the profile settings.",
   placeholder_label: "Label",
   placeholder_prefix: "Prefix",
   label_figures: "Figures (Label / Prefix)",
@@ -133,9 +147,7 @@ const en = {
   setting_crossref_path_name: "Pandoc Crossref Path",
   setting_crossref_path_desc: "Path to pandoc-crossref executable.",
   setting_enable_advtex_name: "Enable Advanced LaTeX Commands",
-  setting_enable_advtex_desc: "Enable Lua filters (e.g. for docx raw output).",
-  setting_lua_filter_name: "Lua Filter Path",
-  setting_lua_filter_desc: "Path to custom lua filter.",
+  setting_enable_advtex_desc: "Convert LaTeX commands (e.g. \\textbf, \\footnote) in DOCX output via AST.",
   setting_pandoc_extra_args_name: "Pandoc Extra Arguments",
   setting_pandoc_extra_args_desc: "Any other arguments to pass to pandoc.",
   placeholder_pandoc_extra_args: "--toc --number-sections",

@@ -90,6 +90,72 @@ describe("convertCurrentPage", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
+  it("crossref-ON ではプリアンブルに \\renewcommand を注入せず --metadata-file でメタデータを渡す", async () => {
+    // frontmatter 優先を実現するため、crossref-ON 時はキャプション語をメタデータ経路
+    // （--metadata-file / frontmatter）に一本化し、\renewcommand との二重管理を解消する。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-xref-on-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "# Title\nHello", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir, usePandocCrossref: true };
+    const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    const [, args] = mockedRunCommand.mock.calls[0];
+    expect(args).toContain("--metadata-file");
+
+    const preamble = await fs.readFile(path.join(tmpDir, "note.preamble.tex"), "utf8");
+    expect(preamble).not.toContain("\\renewcommand{\\figurename}");
+    expect(preamble).not.toContain("\\renewcommand{\\tablename}");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("crossref-OFF ではプロファイル値で \\renewcommand を注入するフォールバックが残る", async () => {
+    // crossref-OFF 時はメタデータの消費先がないため、プロファイル値で LaTeX ネイティブの
+    // キャプション名を上書きするフォールバックを維持する（後方互換）。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-xref-off-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "# Title\nHello", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = {
+      ...DEFAULT_PROFILE,
+      outputDirectory: tmpDir,
+      usePandocCrossref: false,
+      figureLabel: "図",
+    };
+    const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    // crossref-OFF では crossref 専用メタデータに消費先がないため、--metadata-file
+    // を渡さず LaTeX ネイティブの \renewcommand フォールバックのみを使う。
+    const [, offArgs] = mockedRunCommand.mock.calls[0];
+    expect(offArgs).not.toContain("--metadata-file");
+
+    const preamble = await fs.readFile(path.join(tmpDir, "note.preamble.tex"), "utf8");
+    expect(preamble).toContain("\\renewcommand{\\figurename}{図}");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
   it("Pandoc が異常終了した場合はエラーノーティスを出す", async () => {
     const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-err-"));
     const inputPath = path.join(tmpDir, "note.md");
@@ -117,6 +183,225 @@ describe("convertCurrentPage", () => {
 
     const lastNotice = Notice.messages.pop() || "";
     expect(lastNotice.toLowerCase()).toContain("pandoc");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("実験的 Mermaid 無効時は mermaid 言語削除 Lua フィルタが --lua-filter に含まれる", async () => {
+    // ADR-005: stripMermaidLanguage（TS 正規表現）を Lua フィルタへ移行した。
+    // enableExperimentalMermaid が false のとき pdf 出力で mermaid-filter が適用されることを検証。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-mermaid-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "```mermaid\ngraph LR\nA-->B\n```", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      profiles: { Default: profile },
+      activeProfile: "Default",
+      enableExperimentalMermaid: false,
+    };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    const [, args] = mockedRunCommand.mock.calls[0];
+    // --lua-filter が2つ（callout + mermaid）含まれること
+    const luaFilterArgs = args.filter((_: string, i: number) => args[i - 1] === "--lua-filter");
+    expect(luaFilterArgs.length).toBe(2);
+    // 2つめのフィルタパスに mdtex-mermaid- が含まれること
+    expect(luaFilterArgs[1]).toContain("mdtex-mermaid-");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("実験的 Mermaid 有効時は mermaid 言語削除 Lua フィルタが適用されない", async () => {
+    // enableExperimentalMermaid が true のときは mermaid を PNG 化するため言語削除フィルタ不要。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-mermaid-on-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "# Title", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      profiles: { Default: profile },
+      activeProfile: "Default",
+      enableExperimentalMermaid: true,
+    };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    const [, args] = mockedRunCommand.mock.calls[0];
+    const luaFilterArgs = args.filter((_: string, i: number) => args[i - 1] === "--lua-filter");
+    // mermaid-filter は適用されず callout のみ（1つ）
+    expect(luaFilterArgs.length).toBe(1);
+    expect(luaFilterArgs[0]).not.toContain("mdtex-mermaid-");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("crossref ラベル重複時は変換を中止して Notice で原因を通知する", async () => {
+    // 方式W: メイン文書内のユーザーミスも、同一ファイル複数回埋め込みによる重複も、
+    // Pandoc 実行前に検出して分かりやすい日本語で通知する（GHC CallStack ではなく）。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-dup-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    // メイン文書内で fig:hoge を2回使用（ユーザーミス）
+    await fs.writeFile(
+      inputPath,
+      "![[a.png]]{#fig:hoge}\n\n![[b.png]]{#fig:hoge}",
+      "utf8",
+    );
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      profiles: { Default: profile },
+      activeProfile: "Default",
+    };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    // 重複検出で変換中止: Pandoc は呼ばれない
+    expect(mockedRunCommand).not.toHaveBeenCalled();
+    const lastNotice = Notice.messages.pop() || "";
+    // 原因ラベルが通知に含まれる（ロケール非依存の確認）
+    expect(lastNotice).toContain("fig:hoge");
+    expect(lastNotice).toMatch(/duplicate|重複/);
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("重複なしの場合は通常通り Pandoc が呼ばれる", async () => {
+    // 対照実験: 重複がなければ detectDuplicateLabels は邪魔をしない。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-nodup-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "![[a.png]]{#fig:one}\n\n![[b.png]]{#fig:two}", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = { ...DEFAULT_PROFILE, outputDirectory: tmpDir };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      profiles: { Default: profile },
+      activeProfile: "Default",
+    };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    // 重複なしなので Pandoc が呼ばれる
+    expect(mockedRunCommand).toHaveBeenCalledTimes(1);
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("defaults 方式は -d を渡し、documentclass 系 -V / --standalone / --metadata-file を生成せず、プリアンブルは CALLOUT+codelisting のみ", async () => {
+    // ADR-007: defaults 方式は defaults file に枠を委譲する。headerFilePath 構成は
+    // CALLOUT_PREAMBLE（Obsidian コールアウト）と codelisting 環境定義（--listings 常時付与に
+    // 伴う Pandoc 3.8+ 互換）だけを残し、baseHeader / appendLabelOverrides / pageNumberSnippet
+    // は defaults file 側で管理するためスキップする。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-defaults-"));
+    const defaultsYaml = path.join(tmpDir, "defaults.yaml");
+    await fs.writeFile(defaultsYaml, "from: markdown\n", "utf8");
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "# Title\nHello", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = {
+      ...DEFAULT_PROFILE,
+      outputDirectory: tmpDir,
+      documentTemplateMode: "defaults" as const,
+      defaultsFilePath: defaultsYaml,
+    };
+    const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    const [, args] = mockedRunCommand.mock.calls[0];
+    // -d が渡る
+    const dIdx = args.indexOf("-d");
+    expect(dIdx).toBeGreaterThan(-1);
+    expect(args[dIdx + 1]).toBe(defaultsYaml);
+    // documentclass 系 -V / --standalone / --metadata-file は生成しない（枠とキャプション名は defaults file 側）
+    expect(args).not.toContain("documentclass=ltjarticle");
+    expect(args).not.toContain("fontsize=11pt");
+    expect(args.some((a: string) => a.startsWith("geometry:margin="))).toBe(false);
+    expect(args).not.toContain("--standalone");
+    expect(args).not.toContain("--metadata-file");
+
+    // プリアンブル構成: CALLOUT と codelisting は含む、baseHeader / \renewcommand / ページ番号スニペットは含まない
+    const preamble = await fs.readFile(path.join(tmpDir, "note.preamble.tex"), "utf8");
+    expect(preamble).toContain("obsidiancallout");
+    expect(preamble).toContain("codelisting");
+    expect(preamble).not.toContain("luatexja-fontspec"); // DEFAULT_LATEX_PREAMBLE（baseHeader）は含まない
+    expect(preamble).not.toContain("\\renewcommand{\\figurename}");
+    expect(preamble).not.toContain("\\let\\ps@plain\\ps@empty");
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("defaults 方式で defaultsFilePath 未指定なら変換前にブロックして Notice で通知する", async () => {
+    // ガードレール: -d に空パスを渡すと Pandoc が不可解なエラーを出すため、分かりやすく通知する。
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "mdtex-test-defaults-empty-"));
+    const inputPath = path.join(tmpDir, "note.md");
+    await fs.writeFile(inputPath, "# Title\nHello", "utf8");
+
+    const app = new App();
+    app.vault.adapter = new FileSystemAdapter(tmpDir);
+    app.workspace.getActiveFile = () => ({ path: "note.md" }) as TFile;
+    app.workspace.activeLeaf = null;
+
+    const profile = {
+      ...DEFAULT_PROFILE,
+      outputDirectory: tmpDir,
+      documentTemplateMode: "defaults" as const,
+      defaultsFilePath: "",
+    };
+    const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
+    const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
+
+    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+
+    await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
+
+    expect(mockedRunCommand).not.toHaveBeenCalled();
+    const lastNotice = Notice.messages.pop() || "";
+    expect(lastNotice.toLowerCase()).toContain("defaults");
 
     await fs.rm(tmpDir, { recursive: true, force: true });
   });

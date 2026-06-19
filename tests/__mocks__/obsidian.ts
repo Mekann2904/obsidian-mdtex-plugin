@@ -47,7 +47,14 @@ export class App {
     getActiveFile: () => null,
     activeLeaf: null,
   };
-  vault: any = { adapter: new FileSystemAdapter() };
+  vault: any = {
+    adapter: new FileSystemAdapter(),
+    getAbstractFileByPath: () => null,
+    getFiles: () => [],
+  };
+  metadataCache: any = {
+    getFirstLinkpathDest: () => null,
+  };
 }
 
 export class Modal {

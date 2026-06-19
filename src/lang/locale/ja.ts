@@ -41,7 +41,10 @@ const ja: Record<TranslationKeys, string> = {
   notice_pandoc_more_logs: "Pandoc: 追加のログはコンソールを確認してください。",
   notice_generated: "生成に成功: {0}",
   notice_pandoc_exit_code: "エラー: Pandoc がコード {0} で終了しました",
+  notice_duplicate_labels: "変換を中止しました: 相互参照ラベルが重複しています: {0}。ラベル（fig:, tbl:, lst:, eq:, sec:）を一意にしてください。",
   notice_pandoc_launch_error: "Pandoc の起動に失敗: {0}",
+  notice_defaults_file_required:
+    "文書テンプレート方式が「defaults file」ですが、defaults file のパスが未設定です。プロファイル設定でパスを指定してください。",
 
   notice_markdownlint_missing: "markdownlint-cli2 が見つかりません。設定でパスを指定してください。",
   notice_lint_ok: "Lint 完了: 問題なし",
@@ -107,6 +110,16 @@ const ja: Record<TranslationKeys, string> = {
   setting_image_scale_name: "画像スケール",
   setting_image_scale_desc: "デフォルトの画像スケール（例: width=0.8\\textwidth）。",
 
+  setting_template_mode_name: "文書テンプレート方式",
+  setting_template_mode_desc:
+    "文書の「枠」の構築方法を選びます。「組み込み」は GUI 設定値を Pandoc 変数として注入します。「defaults file」は枠（ドキュメントクラス・フォントサイズ・プリアンブル等）を Pandoc の defaults file（-d）に委譲します。",
+  option_template_builtin: "組み込み（GUI 設定）",
+  option_template_defaults: "defaults file（上級者向け）",
+  setting_defaults_file_path_name: "defaults file のパス",
+  setting_defaults_file_path_desc:
+    "Pandoc の defaults YAML ファイル（-d で渡す）へのパス。方式が「defaults file」のとき必須です。ファイル内で ${.} を使うと自身のディレクトリを参照できるため、テンプレ一式を1つのフォルダで管理できます。",
+  placeholder_defaults_file_path: "/path/to/defaults.yaml",
+
   heading_preamble: "LaTeX プリアンブル",
   preamble_desc:
     "LaTeX コードのみ入力してください。YAML の --- と header-includes は自動付与されます。全角入力にも対応します。",
@@ -120,7 +133,8 @@ const ja: Record<TranslationKeys, string> = {
   notice_preamble_copied: "プリアンブルをコピーしました。",
 
   heading_localization: "ラベルと言語設定",
-  heading_localization_desc: "キャプションや参照に使うラベルとプレフィックスを設定します。",
+  heading_localization_desc:
+    "キャプションや参照に使うラベルとプレフィックスを設定します。文書の frontmatter に figureTitle / figPrefix / tableTitle / tblPrefix / listingTitle / lstPrefix / eqnPrefix を書くと、このプロファイル設定より優先されます（文書ごとに上書き可能）。",
   placeholder_label: "ラベル",
   placeholder_prefix: "プレフィックス",
   label_figures: "図（ラベル / プレフィックス）",
@@ -134,9 +148,7 @@ const ja: Record<TranslationKeys, string> = {
   setting_crossref_path_name: "pandoc-crossref のパス",
   setting_crossref_path_desc: "pandoc-crossref 実行ファイルへのパス。",
   setting_enable_advtex_name: "高度な LaTeX コマンドを有効",
-  setting_enable_advtex_desc: "Lua フィルタを有効にします（docx の raw 出力など）。",
-  setting_lua_filter_name: "Lua フィルタのパス",
-  setting_lua_filter_desc: "カスタム Lua フィルタへのパス。",
+  setting_enable_advtex_desc: "DOCX 出力の LaTeX コマンド（\\textbf, \\footnote など）を AST ベースで処理します。",
   setting_pandoc_extra_args_name: "Pandoc 追加引数",
   setting_pandoc_extra_args_desc: "pandoc に渡す追加引数。",
   placeholder_pandoc_extra_args: "--toc --number-sections",

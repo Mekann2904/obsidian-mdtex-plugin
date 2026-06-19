@@ -123,6 +123,66 @@ Vitest をテストフレームワークとして使用する。
 
 ---
 
+### ADR-005: 変換パイプラインを Pandoc Lua フィルタ基盤 + 最小 TS 前処理に再構成
+
+**ステータス**: 採用
+
+Obsidian 記法（コメント・WikiLink・埋め込み・トランスクルージョン）の処理を、TS の正規表現・自前ステートマシンから、Pandoc が認識できる標準 Markdown へ正規化する最小の TS 前処理と、AST を変換する Lua フィルタの協調構成へ移行する。責務分担は「Obsidian vault API（ファイル解決・読み込み・DOM 描画）が必要なら TS、純粋な構造変換なら Lua」。TS で JSON AST を直接操作せず（Pandoc 2 回起動を避け）、Pandoc 公式推奨の Lua フィルタ経路を採る。
+
+**考慮した代替案**:
+- 方式 A（Lua フィルタのみ）: Pandoc が認識できない `%% %%` 記法で reader 前に壊れるため不可。
+- 方式 B（TS で JSON AST を直接操作）: Pandoc を 2 回起動し、スキーマ追従リスク・往復シリアライズのオーバーヘッドを自ら抱え込む。Pandoc 公式（John MacFarlane）が JSON フィルタの欠点として挙げる点と一致し、自由度の利得が確実性向上に結びつかない。
+
+**結果**:
+TS の文字列処理が薄く・純粋・テスト可能になり、フェンス保護等の脆い正規表現工作を消せる。構文解析の正確性を Pandoc に委ねられる。代償として Lua フィルタのテストには実 Pandoc が必要（integration test で対応）。
+
+---
+
+### ADR-006: Obsidian コメント（`%% %%`）の除去は TS 前処理で維持する
+
+**ステータス**: 採用
+
+ADR-005 の Lua 基盤化でも、`%% %%` コメントの除去だけは TS 前処理に残す。Pandoc が構文認識できない記法で、reader 通過後の AST からブロックコメント境界を復元するのは困難（`%%` が複数ノードに分散するため）。HTML コメント（`<!-- -->`）へ変換して Pandoc に任せる案も、変換時に同じフェンス/数式保護ステートマシンが要り、複雑性が移動するだけで減らない。「TS は Pandoc が認識できない記法を扱う」という ADR-005 の責務分担ルールに合致。
+
+**結果**:
+`%% %%` 除去の TS ステートマシンは残るが、characterization test で振る舞いを錨付けし、他の前処理ステップから責務を分離して単純化する。
+
+---
+
+### ADR-007: 文書テンプレート方式を 2 値（`builtin` / `defaults`）で公開する
+
+**ステータス**: 採用
+
+**コンテキスト**:
+ADR-005 のパイプラインでは、MdTex は Pandoc の**組み込みデフォルトテンプレート**（`default.latex`）を無改造で使い、`documentclass` / `fontsize` / `geometry` / `classoption` を `-V` 変数スロットに、ユーザープリアンブルを `--include-in-header` に注入するだけだった。`--template`（独自テンプレート）や `--defaults`（defaults file）といった Pandoc の高度なカスタマイズ経路は UI から隠され、`pandocExtraArgs`（「Pandoc 追加引数」）という隠しハッチ経由でしかアクセスできなかった。結果として、学会公式テンプレート（IEEEtran / acmart 等）のタイトル・著者ブロック構造、縦書き（`ltjtarticle`）、段組、複数ファイルの `\input` 構成といった「文書の枠」を完全に制御したい上級ユーザーの要求を、GUI で満たせなかった。
+
+**決定**:
+プロファイルに**文書テンプレート方式**（`documentTemplateMode`）を 2 値で導入する。
+
+- **`builtin`（既定・現状維持）**: MdTex が GUI 設定値から `-V documentclass` 等を生成し、デフォルトテンプレに注入する。初心者体験は一切変わらない。
+- **`defaults`（上級者向け）**: ユーザーが用意した **defaults file**（Pandoc の `-d` / `--defaults` で読む YAML）に文書の「枠」の構築を委譲する。MdTex は `-d <path>` を渡し、`documentclass` / `fontsize` / `geometry` / `classoption` 系の `-V` 生成をスキップする（Pandoc の precedence でコマンドライン `-V` が defaults file を上書きしてしまう衝突を避けるため）。
+
+MdTex 固有レイヤ（Obsidian 記法の TS 前処理・callout/mermaid/docx の Lua フィルタ・`--pdf-engine`・`--resource-path`）は、**方式に関わらず継続**する。つまり `defaults` 方式は「Obsidian 統合 × Pandoc 全機能」のブリッジであり、文書の「枠」だけを defaults file に渡す。3 つのユースケース（縦書き・段組・学会テンプレート、および `standalone: false` による本文フラグメント出力）は、いずれも defaults file 内で表現可能なため、MdTex 側にモードを増やさない。
+
+**考慮した代替案**:
+- 方式 A（3 モード動的 UI: `builtin` / `custom` / `fragment`）: MdTex 側で 3 モードと組合せ衝突（custom + 非空プリアンブル等）のガードレールを自前実装する。組合せ爆発と保守負荷を招く。調査の結果、`custom` は defaults file の `template:`、`fragment` は defaults file の `standalone: false` で表現可能と判明したため、MdTex 側のモードは不要と判断した。
+- 方式 B（defaults file への完全外部化・ GUI 全廃）: GUI 設定と `DEFAULT_LATEX_PREAMBLE`（luatexja・Noto フォント・listings 等）による「日本語環境で GUI ポチポチで即動く」初心者価値を失う。既存ユーザー全員への破壊的影響。ADR-001「ユーザーは既存の LaTeX 知識を活用できる」は両層を想定するため、片方を切り捨てる本案は不適。
+- 方式 C（`pandocExtraArgs` 経由の `--template` / `--defaults` を文書化するだけ）: 既にパススルー自体は通るが、MdTex の `-V` 系生成との precedence 衝突を解決できず、`defaults` でも `documentclass` 等が GUI 値で上書きされて効かない。実用的でない。
+
+**結果**:
+
+**ポジティブ**:
+- 既存ユーザーへの影響ゼロ（既定 `builtin` で `data.json` 互換）。漸進的開示により、初心者と上級者を同一 UI で両立。
+- 上級ユーザーは defaults file で Pandoc 全機能へ到達。学会テンプレ一式をフォルダ単位で配置・Git 管理できる（`${.}` で同フォルダ参照）。
+- モードが 2 値に抑えられ、組合せガードレールが不要。Pandoc が defaults file のバリデーションを担う。
+
+**ネガティブ**:
+- `defaults` 方式時の `-V` 生成スキップは、`buildPandocCommand` に方式分岐を導入し、純粋関数のテストケースを増やす。
+- defaults file に委譲した設定項目は GUI と二重管理の温床となるため、`defaults` 時は当該 GUI 項目を折りたたみ・非表示にする UI 整理がセットで必要。
+- 上級ユーザーは MdTex 固有レイヤ（Lua フィルタ等）と defaults file の相互作用を理解する必要がある。これは文書化で対応する。
+
+---
+
 ## トレードオフ
 
 ### 外部ツールの使用

@@ -8,14 +8,6 @@ import * as path from "path";
 import { ProfileSettings } from "../MdTexPluginSettings";
 import { getLinkTargetFile } from "./linkUtils";
 
-export const escapeSpecialCharacters = (code: string): string =>
-  code
-    .replace(/\\/g, "\\textbackslash{}")
-    .replace(/%/g, "\\%")
-    .replace(/#/g, "\\#")
-    .replace(/~/g, "\\textasciitilde")
-    .replace(/&/g, "\\&");
-
 /**
  * Obsidian の `%% ... %%` コメントを Pandoc へ渡す前に取り除く。
  * コードフェンス内は手を付けない。
@@ -147,9 +139,19 @@ export function stripObsidianComments(markdown: string): string {
       }
 
       if (isInRanges(idx, protectedRanges)) {
+        // 保護区間（インラインコード / 数式）に入った %% はコメント走査対象にしない。
+        // 従来は区間終端まで読み飛ばすだけで lineOut へ出力しておらず、結果として
+        // コード/数式の中身ごと出力から落ちていた（C1/C2/D2 のバグ）。
+        // 修正: 保護区間は「そのまま出力に残す」べきなので、区間内容を lineOut へコピーする。
         const range = protectedRanges.find(([s, e]) => idx >= s && idx < e)!;
         if (!inComment && range[0] > cursor) {
           lineOut += line.slice(cursor, range[0]);
+        }
+        // コメント中でない限り、保護区間全体をそのまま出力へ残す。
+        // コメント中の場合は区間内でコメントが始まっていることはない（%% は区間外でのみ開始）
+        // ので、cursor を進めるだけで出力しない。
+        if (!inComment) {
+          lineOut += line.slice(range[0], range[1]);
         }
         cursor = range[1];
         continue;
@@ -216,11 +218,13 @@ export async function replaceWikiLinksAndCodeAsync(
   app: App,
   profile: ProfileSettings,
   sourcePath: string,
-  cache: Map<string, string>,
-  inBlockquote = false,
 ): Promise<string> {
+  // 画像(![[...]]) とコードフェンスを1つの正規表現で扱う。
+  // コードフェンスは Pandoc（fenced_code_attributes + --listings）へ委譲するため
+  // 単独の capture を持たないが、パターンに含めておくことでコードブロック内の
+  // ![[...]] 画像/WikiLink が最左最長マッチで保護され置換対象にならない。
   const regex =
-    /(^[ \t]*> ?)?!\[\[([^\]]+)\]\](?:\{#([^}]+)\})?(?:\[(.*?)\])?|```(?:([\w-]+))?(?:\s*\{([^}]*)\})?\n([\s\S]*?)```/gm;
+    /(^[ \t]*> ?)?!\[\[([^\]]+)\]\](?:\{#([^}]+)\})?(?:\[(.*?)\])?|```(?:[\w-]+)?(?:\s*\{[^}]*\})?\n(?:[\s\S]*?)```/gm;
   let result = "";
   let lastIndex = 0;
 
@@ -229,16 +233,7 @@ export async function replaceWikiLinksAndCodeAsync(
     const match = regex.exec(markdown);
     if (!match) break;
 
-    const [
-      fullMatch,
-      blockquotePrefix,
-      imageLink,
-      imageLabel,
-      imageCaption,
-      codeLang,
-      codeAttrs,
-      codeBody,
-    ] = match;
+    const [fullMatch, blockquotePrefix, imageLink, imageLabel, imageCaption] = match;
     result += markdown.slice(lastIndex, match.index);
     lastIndex = regex.lastIndex;
 
@@ -265,75 +260,46 @@ export async function replaceWikiLinksAndCodeAsync(
         : absPath.split(path.sep).join("/");
 
       if (resolvedFile.extension.toLowerCase() === "md") {
-        try {
-          const vaultRelative = resolvedFile.path;
-          const embedded = await readFileCached(app, resolvedFile, cache);
-          const inlined = await replaceWikiLinksRecursivelyAsync(
-            embedded,
-            app,
-            profile,
-            vaultRelative,
-            cache,
-            inBlockquote || !!blockquotePrefix,
-          );
-          result += applyBlockquotePrefix(inlined, blockquotePrefix);
-          continue;
-        } catch {
-          const linkText = (imageCaption || pipeCaption || targetLink || "").trim() || targetLink;
-          const fallback = `[${escapeSpecialCharacters(linkText)}](${latexPath})`;
-          result += applyBlockquotePrefix(fallback, blockquotePrefix);
-          continue;
-        }
-      }
-
-      const isBlockquote = !!blockquotePrefix || inBlockquote;
-      if (isBlockquote) {
-        const widthOpt = profile.imageScale ? `{${profile.imageScale}}` : "{width=100%}";
-        const caption = (imageCaption || pipeCaption || "").trim();
-        const imageMarkdown = `![${escapeSpecialCharacters(caption)}](${latexPath})${widthOpt}`;
-        result += applyBlockquotePrefix(imageMarkdown, blockquotePrefix);
-        continue;
-      }
-
-      const labelPart = imageLabel
-        ? `#${imageLabel.startsWith("fig:") ? "" : "fig:"}${imageLabel}`
-        : "";
-      const rawCaption = imageCaption || pipeCaption || " ";
-      const captionPart = rawCaption.trim() ? escapeSpecialCharacters(rawCaption) : " ";
-      const scalePart = profile.imageScale ? profile.imageScale : "";
-      const separator = labelPart && scalePart ? " " : "";
-
-      const imageMarkdown = `![${captionPart}](${latexPath}){${labelPart}${separator}${scalePart}}`;
-      result += applyBlockquotePrefix(imageMarkdown, blockquotePrefix);
-      continue;
-    }
-
-    if (codeBody) {
-      if (!codeLang && !codeAttrs) {
+        // 到達不能: 実パイプラインでは上位の expandTransclusions（transclusion.ts）が
+        // すべての .md 埋め込みを先に展開済みのため、ここへ .md が来ることはない。
+        // 従来は独自の再帰展開（replaceWikiLinksRecursivelyAsync）を抱え expandTransclusions
+        // と重複していたが、Q5-1 でトランスクルージョン展開を transclusion.ts に集約し
+        // こちらは削除した。安全のため、万が一 .md が残っていた場合は元の埋め込み記法を
+        // そのまま出力して expandTransclusions の漏れを目立たせる（黙って誤展開しない）。
         result += fullMatch;
         continue;
       }
 
-      const rawCode = codeBody.trimEnd();
-      const resolvedLang = normalizeListingLanguage(codeLang);
-      let labelOption = "",
-        captionOption = "",
-        langOption = "";
-      if (codeAttrs) {
-        const labelMatch = codeAttrs.match(/#lst:([\w-]+)/);
-        if (labelMatch) labelOption = `,label={lst:${labelMatch[1]}}`;
-        const captionMatch = codeAttrs.match(/caption\s*=\s*"(.*?)"/);
-        if (captionMatch) captionOption = `,caption={${escapeSpecialCharacters(captionMatch[1])}}`;
-      }
-      if (resolvedLang) langOption = `language=${resolvedLang}`;
-      const options = [langOption, labelOption.slice(1), captionOption.slice(1)]
-        .filter(Boolean)
-        .join(",");
-      const optWrapped = options ? `[${options}]` : "";
-      result += `\\begin{lstlisting}${optWrapped}\n${rawCode}\n\\end{lstlisting}`;
+      // 画像（.md 以外）を標準 Markdown の画像記法へ変換する。
+      // Pandoc は ![caption](path){#id width=...} を reader で Image ノードへ正しくパースするため、
+      // TS は標準記法を吐くだけで LaTeX 化は Pandoc/crossref に委ねる（ADR-005/Q4-1）。
+      //   - label: pandoc-crossref は図参照に #fig:<name> を要求するため、fig: 接頭辞を補完する。
+      //     これは Pandoc の構文解釈ではなく crossref の参照解決要件で、TS が担う唯一の変換。
+      //   - scale: profile.imageScale は "width=0.8\\textwidth" 形式の完全な属性値を想定。
+      //   - caption: Pandoc が Markdown として解釈し出力フォーマット向けにエスケープするため、
+      //     TS 側の escapeLatex は行わない（Q4-3）。
+      // 引用の有無にかかわらず一律に標準記法を吐く。引用プレフィックスの付与は
+      // applyBlockquotePrefix が行ごとに行う（blockquotePrefix は行頭 > を検出した場合のみ設定）。
+      // 従来は inBlockquote で引用内画像を別扱い（width=100% デフォルト）していたが、
+      // この分岐は imageScale デフォルト値の存在で事実上デッドコード化しており、
+      // コメントと実装が不一致だったため廃止した（ADR-005）。
+      const rawCaption = (imageCaption || pipeCaption || "").trim();
+      const captionPart = rawCaption || " "; // 空なら空白1つでキャプション省略を表現
+
+      const labelAttr = imageLabel
+        ? `#${imageLabel.startsWith("fig:") ? "" : "fig:"}${imageLabel}`
+        : "";
+      const scaleAttr = profile.imageScale || "";
+      const attrs = [labelAttr, scaleAttr].filter(Boolean).join(" ");
+      const attrBlock = attrs ? `{${attrs}}` : "";
+
+      const imageMarkdown = `![${captionPart}](${latexPath})${attrBlock}`;
+      result += applyBlockquotePrefix(imageMarkdown, blockquotePrefix);
       continue;
     }
 
+    // コードフェンスは画像以外の一致（fullMatch に丸ごと含まれる）。
+    // lstlisting 生成は Pandoc へ委譲するため加工せずパススルーする。
     result += fullMatch;
   }
 
@@ -351,42 +317,6 @@ function applyBlockquotePrefix(text: string, blockquotePrefix?: string): string 
 }
 
 /**
- * ![[...]] とコードフェンスの置換を収束するまで繰り返す簡易ループ。
- * 最大5回で打ち切り、循環や極端なネストを防ぐ。
- */
-export async function replaceWikiLinksRecursivelyAsync(
-  markdown: string,
-  app: App,
-  profile: ProfileSettings,
-  sourcePath: string,
-  cache: Map<string, string>,
-  inBlockquote = false,
-  depth = 0,
-): Promise<string> {
-  if (depth > 5) return markdown;
-
-  const transformed = await replaceWikiLinksAndCodeAsync(
-    markdown,
-    app,
-    profile,
-    sourcePath,
-    cache,
-    inBlockquote,
-  );
-  if (transformed === markdown) return transformed;
-
-  return replaceWikiLinksRecursivelyAsync(
-    transformed,
-    app,
-    profile,
-    sourcePath,
-    cache,
-    inBlockquote,
-    depth + 1,
-  );
-}
-
-/**
  * 有効な WikiLink だけ [[ ]] を外してテキストにする。コードフェンス内は手を付けない。
  */
 export function unwrapValidWikiLinks(markdown: string, app: App, sourcePath: string): string {
@@ -395,9 +325,14 @@ export function unwrapValidWikiLinks(markdown: string, app: App, sourcePath: str
   const lines = markdown.split("\n");
   let inFence = false;
 
+  // CommonMark 互換のフェンス開閉行: 0個以上の空白 + (``` または ~~~) 3本以上。
+  // 従来は /^```/ のみ判定しチルダフェンス（~~~）を認識しないバグがあった
+  // （チルダフェンス内の [[...]] が誤って展開されていた）。
+  const fenceLineRegex = /^\s*(`{3,}|~{3,})/;
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (/^```/.test(line)) {
+    if (fenceLineRegex.test(line)) {
       inFence = !inFence;
       continue;
     }
@@ -413,33 +348,6 @@ export function unwrapValidWikiLinks(markdown: string, app: App, sourcePath: str
   }
 
   return lines.join("\n");
-}
-
-function normalizeListingLanguage(codeLang: string | undefined): string | undefined {
-  if (!codeLang) return undefined;
-  const lang = codeLang.toLowerCase();
-  const mapping: Record<string, string> = {
-    python: "Python",
-    py: "Python",
-    bash: "bash",
-    sh: "bash",
-    zsh: "bash",
-    javascript: "JavaScript",
-    js: "JavaScript",
-    typescript: "JavaScript",
-    ts: "JavaScript",
-    json: "JavaScript",
-    html: "HTML",
-    css: "CSS",
-    c: "C",
-    cpp: "C++",
-    java: "Java",
-    text: "",
-    plain: "",
-  };
-  const mapped = mapping[lang];
-  if (mapped === "") return undefined;
-  return mapped || codeLang;
 }
 
 function resolveLinkFile(
@@ -463,11 +371,3 @@ function resolveLinkFile(
   return match || null;
 }
 
-async function readFileCached(app: App, file: TFile, cache: Map<string, string>): Promise<string> {
-  const cached = cache.get(file.path);
-  if (cached !== undefined) return cached;
-
-  const content = await app.vault.read(file);
-  cache.set(file.path, content);
-  return content;
-}
