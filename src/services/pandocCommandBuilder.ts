@@ -38,7 +38,7 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
     args.push(normalizeFsPath(options.inputPath));
   }
 
-  args.push(...getInputFormatArgs(options.format));
+  args.push(...INPUT_FORMAT_ARGS);
 
   // 文書テンプレート方式（ADR-007 / ADR-008）: defaults 方式は defaults file（`-d`）に文書の「枠」を委譲する。
   // コマンドライン `-V` は defaults file より優先されてしまうため、documentclass 系の `-V` は
@@ -168,7 +168,7 @@ export function buildLabelMetadataYaml(profile: ProfileSettings): string {
 }
 
 /**
- * Pandoc の入力フォーマット引数（`-f`）を返す。
+ * Pandoc の入力フォーマット引数（`-f`）。
  *
  * 全出力形式（pdf/latex/docx）で共通の Markdown 拡張セットを明示する。
  * Pandoc 3.x のデフォルト `markdown` は `+raw_tex +raw_html +fenced_divs
@@ -177,14 +177,11 @@ export function buildLabelMetadataYaml(profile: ProfileSettings): string {
  * （生 LaTeX / `:::` fenced div / `{=latex}` `{=openxml}` raw block /
  * `{#lst:...}` コード属性）を Pandoc のバージョン差や設定ドリフトに
  * 依存せず安定して有効化するため明示する。
- *
- * `format` は歴史的に出力形式ごとの分岐に使われていた引数だが、現状は
- * すべて同じ結果を返す。呼び出し側（`buildPandocCommand`）の意図と API
- * 安定性を保つため受け取り続け、分岐は行わない。
  */
-export function getInputFormatArgs(format: string): string[] {
-  return ["-f", "markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes"];
-}
+const INPUT_FORMAT_ARGS: readonly string[] = [
+  "-f",
+  "markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes",
+];
 
 export function filterPandocExtrasForFormat(extras: string[], format: string): string[] {
   if (!extras.length) return [];
