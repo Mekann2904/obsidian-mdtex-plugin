@@ -94,7 +94,7 @@ const en = {
   heading_latex_engine: "LaTeX / PDF Engine Settings",
   setting_latex_engine_name: "LaTeX Engine",
   setting_latex_engine_desc:
-    "Engine used for PDF generation. Click Detect to auto-discover and pick from the dropdown, or type an engine name (lualatex) or a full path manually. Full paths are normalized to the basename and resolved via PATH, so they survive TeX Live upgrades.",
+    "Engine used for PDF generation. TeX engines are auto-discovered when you open this settings tab — pick from the dropdown, or type an engine name (lualatex) or a full path manually. Full paths are normalized to the basename and resolved via PATH, so they survive TeX Live upgrades.",
   setting_latex_engine_custom: "Custom (enter path)",
   setting_latex_engine_not_found_dropdown:
     "(no TeX engine found — enter path below)",

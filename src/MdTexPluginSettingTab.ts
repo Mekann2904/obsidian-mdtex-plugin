@@ -21,7 +21,7 @@ import { discoverTexEngines, type DiscoveredEngine } from "./utils/texDiscover";
 
 export class PandocPluginSettingTab extends PluginSettingTab {
   plugin: MdTexPlugin;
-  /** 「検出」ボタンで探索した TeX エンジン一覧。再描画を跨いで保持する。 */
+  /** 設定タブ描画時に自動探索した TeX エンジン一覧。再描画を跨いで保持する。 */
   private discoveredEngines: DiscoveredEngine[] | undefined;
 
   constructor(app: App, plugin: MdTexPlugin) {

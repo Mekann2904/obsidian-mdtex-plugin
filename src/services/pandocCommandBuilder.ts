@@ -217,8 +217,10 @@ export function filterPandocExtrasForFormat(extras: string[], format: string): s
  * 空白・空トークンを除外する。latexmk のサブエンジン指定（`-lualatex`）や latexmk 固有
  * オプション（`-interaction=nonstopmode`）など、トークン内に空白を含まない単純なフラグ・値を
  * 想定する。各トークンは `--pdf-engine-opt=<token>` として Pandoc に渡される。
+ *
+ * citationPipeline.resolveLatexInvocation でも latexmk 引数の構築に再利用する（重複実装回避）。
  */
-function tokenizePdfEngineOpts(opts: string): string[] {
+export function tokenizePdfEngineOpts(opts: string): string[] {
   return (opts ?? "")
     .split(/\s+/)
     .map(s => s.trim())

@@ -75,10 +75,9 @@ describe("getTexBinCandidates", () => {
     expect(c.some(p => p.includes("x86_64-linux"))).toBe(true);
   });
 
-  it("win32 は TeX Live と MiKTeX の規定配置を返す", () => {
+  it("win32 は TeX Live の規定配置を返す", () => {
     const c = getTexBinCandidates("win32");
     expect(c.some(p => p.includes("texlive") && p.includes("bin\\windows"))).toBe(true);
-    expect(c.some(p => p.includes("MiKTeX"))).toBe(true);
   });
 
   it("未知のプラットフォームは空配列を返す", () => {

@@ -29,7 +29,7 @@ import {
   OutputFormat,
   PandocCommandResult,
 } from "./pandocCommandBuilder";
-import { runReactiveLatexPhase } from "./citationPipeline";
+import { runReactiveLatexPhase, resolveLatexInvocation } from "./citationPipeline";
 import { buildTexAwareEnv } from "../utils/texPath";
 import { runCommand } from "../utils/processRunner";
 import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
@@ -465,16 +465,20 @@ interface PandocExecutionPlan {
   command: PandocCommandResult;
   tempFiles: string[];
   workingDir: string;
-  // ADR-009 反応型フェーズでエンジン解決（resolveLatexInvocation）と検索パス再構築に使う。
-  profile: ProfileSettings;
-  // ADR-009: defaults 方式でテンプレートパックフォルダを LaTeX 検索パス（TEXINPUTS /
-  // BIBINPUTS / BSTINPUTS）に注入する環境変数。空オブジェクトのときは既存 env を上書きしない
-  // （executePandocCommand でスプレッドマージの末尾に置く）。
+  // ADR-009: 反応型 LaTeX フェーズでエンジン解決（resolveLatexInvocation）と検索パス再構築に使う。
+  // executePandocCommand で一度だけ env を構築し、runReactiveLatexPhase にそのまま渡すため、
+  // 本モジュール側で env 再構築は行わない。
   envExtra: NodeJS.ProcessEnv;
   // ADR-009: citation モード（natbib/citeproc）有効時の2フェーズ実行情報。設定時、command は
   // PDF ではなく standalone .tex を生成するよう構築され、executePandocCommand は反応型 LaTeX
-  // フェーズ（draft→.aux→plainnat 除去→latexmk）に引き継ぐ。
-  citation?: { texPath: string; pdfPath: string };
+  // フェーズ（draft→.aux→plainnat 除去→latexmk）に引き継ぐ。latexmkArgs/draftEngine は
+  // buildPandocExecutionPlan 時に1回だけ resolveLatexInvocation で解決済み。
+  citation?: {
+    texPath: string;
+    pdfPath: string;
+    latexmkArgs: string[];
+    draftEngine: string;
+  };
 }
 
 // 変換パイプラインで使う一時 Lua/YAML ファイルは、生成プリミティブ（createTempFile）の
@@ -588,15 +592,23 @@ async function buildPandocExecutionPlan(params: {
     });
 
     // ADR-009: 反応型修正は latexmk が .tex を処理する2フェーズでのみ意味がある。citation モード時は
-    // buildLatexSearchEnv でパックフォルダを検索パスに注入する。
+    // buildLatexSearchEnv でパックフォルダを検索パスに注入する。latexmk 引数/draft エンジンは
+    // ここで1回だけ解決して plan.citation に載せ、executePandocCommand → runReactiveLatexPhase へ
+    // そのまま引き継ぐ（env 再構築と resolveLatexInvocation の重複呼び出しを廃止）。
     const envExtra = buildLatexSearchEnv(params.profile, process.platform);
+    const citation = citationActive
+      ? {
+          texPath: texOutputPath,
+          pdfPath: params.outputFile,
+          ...resolveLatexInvocation(params.profile),
+        }
+      : undefined;
     return {
       command,
       tempFiles,
       workingDir: params.workingDir,
-      profile: params.profile,
       envExtra,
-      citation: citationActive ? { texPath: texOutputPath, pdfPath: params.outputFile } : undefined,
+      citation,
     };
   } catch (error) {
     await cleanupTemporaryFiles(tempFiles);
@@ -659,11 +671,18 @@ async function executePandocCommand(
         new Notice(t("notice_pandoc_exit_code", [texResult.exitCode]));
         return false;
       }
-      const ok = await runReactiveLatexPhase(plan.citation.texPath, plan.citation.pdfPath, plan.profile, plan.workingDir, {
-        onStdout: handlers.onStdout,
-        onStderr: handlers.onStderr,
-        suppressLogs: ctx.settings.suppressDeveloperLogs,
-      });
+      const ok = await runReactiveLatexPhase(
+        plan.citation.texPath,
+        plan.citation.pdfPath,
+        env,
+        plan.citation.latexmkArgs,
+        plan.citation.draftEngine,
+        {
+          onStdout: handlers.onStdout,
+          onStderr: handlers.onStderr,
+          suppressLogs: ctx.settings.suppressDeveloperLogs,
+        },
+      );
       if (ok) {
         new Notice(t("notice_generated", [path.basename(outputFile)]));
         return true;

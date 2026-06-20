@@ -62,7 +62,9 @@ export interface DiscoveredEngine {
  *
  * macOS: `/Library/TeX/texbin`（全年度の集約シンボリックリンク）を最優先。
  * Linux: ディストリ配布（/usr/local/bin, /usr/bin）と TeX Live 公式配置の両方。
- * Windows: TeX Live の規定配置と MiKTeX の規定配置。
+ * Windows: TeX Live の規定配置のみ。MiKTeX（`%LOCALAPPDATA%\Programs\MiKTeX\...`）は
+ *   env var placeholder 展開を expandGlob が持たないため現状では発見できない。
+ *   env 展開機能を expandGlob に追加した段階で復活させる（TODO）。
  */
 export function getTexBinCandidates(platform: NodeJS.Platform): string[] {
   switch (platform) {
@@ -71,7 +73,7 @@ export function getTexBinCandidates(platform: NodeJS.Platform): string[] {
     case "linux":
       return ["/usr/local/bin", "/usr/bin", "/usr/local/texlive/*/bin/x86_64-linux", "/opt/texlive/*/bin/x86_64-linux"];
     case "win32":
-      return ["C:\\texlive\\*\\bin\\windows", "%LOCALAPPDATA%\\Programs\\MiKTeX\\miktex\\bin\\x64"];
+      return ["C:\\texlive\\*\\bin\\windows"];
     default:
       return [];
   }

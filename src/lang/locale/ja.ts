@@ -95,7 +95,7 @@ const ja: Record<TranslationKeys, string> = {
   heading_latex_engine: "LaTeX / PDF エンジン設定",
   setting_latex_engine_name: "LaTeX エンジン",
   setting_latex_engine_desc:
-    "PDF 生成に使うエンジン。「検出」で自動探索してドロップダウンから選ぶか、エンジン名（lualatex）やフルパスを手入力してください。フルパスは basename に正規化して PATH で解決するため、TeX Live の年度更新でも壊れません。",
+    "PDF 生成に使うエンジン。設定タブを開くと自動的に検出し、ドロップダウンから選べます。またはエンジン名（lualatex）やフルパスを手入力してください。フルパスは basename に正規化して PATH で解決するため、TeX Live の年度更新でも壊れません。",
   setting_latex_engine_custom: "カスタム（パスを入力）",
   setting_latex_engine_not_found_dropdown: "（TeX エンジン未検出 — 下にパスを入力）",
   setting_latex_engine_placeholder: "lualatex, latexmk, またはフルパス",

@@ -2,7 +2,7 @@
 // Purpose: GUI アプリ（Obsidian）で process.env.PATH に TeX の bin ディレクトリが
 //          含まれない問題を解決する（ADR-009 関連: citation パイプラインで latexmk が
 //          lualatex を PATH から探す必要がある）。
-// Reason: Obsidian は GUI アプリで launchd/サービス由_, の貧弱な PATH を持つ。TeX 配布は
+// Reason: Obsidian は GUI アプリで launchd/サービス由来の貧弱な PATH を持つ。TeX 配布は
 //          プラットフォームごとに規定配置（macOS:/Library/TeX/texbin, Linux:/usr/local/bin,
 //          Windows:C:\texlive\*\bin\windows 等）に置かれるが、これはデフォルト PATH に
 //          含まれないことがある。citation パイプラインは latexmk → lualatex と2段階呼び出しする
@@ -11,18 +11,6 @@
 
 import * as fs from "fs";
 import { getTexBinCandidates, expandGlob, defaultTexFsLayer } from "./texDiscover";
-
-/**
- * macOS の標準的な TeX bin 配置先。`/usr/local/texlive/<year>/bin/<arch>` はシンボリックリンクで
- * `/Library/TeX/texbin` に集約されるため、この1パスを PATH に追加すれば全 TeX Live 年度をカバーできる。
- */
-const MACOS_TEX_BIN = "/Library/TeX/texbin";
-
-/**
- * macOS の典型的な TeX bin 候補（シンボリックリンクの実体側）。/Library/TeX/texbin が
- * 存在しない環境（手動インストール等）のフォールバック。
- */
-const MACOS_TEX_BIN_FALLBACKS = ["/usr/local/texlive/2025/bin/universal-darwin", "/usr/local/texlive/2024/bin/universal-darwin"];
 
 /**
  * 現在の PATH に TeX の bin ディレクトリを追加する（存在する・未登録のものだけ）。
@@ -49,22 +37,18 @@ export function augmentPathString(
  * プラットフォームの規定配置から TeX bin を PATH に追加する（クロスプラットフォーム）。
  * 既に PATH に含まれる候補は追加しない。
  *
- * 候補は getTexBinCandidates（texDiscover.ts）から取得する。macOS は /Library/TeX/texbin を
- * 最優先、Linux は /usr/local/bin 等、Windows は C:\texlive\*\bin\windows 等。
- * macOS のみ旧来の固定年度フォールバック（MACOS_TEX_BIN_FALLBACKS）も残す。
+ * 候補ディレクトリの真理源は `getTexBinCandidates`（texDiscover.ts）の1箇所。glob を含む候補
+ * （例: TeX Live 年度ディレクトリ `/usr/local/texlive/2025/bin/universal-darwin`）は `expandGlob` で実在
+ * ディレクトリに展開してから PATH に追加する。実行用（PATH 追加）と UI 用（エンジン列挙:
+ * discoverTexEngines）で bin リストが二重化されない。
  *
  * @returns TeX bin を追加した PATH 文字列。元の PATH は保持される。
  */
 export function augmentPathForTex(currentPath: string): string {
-  const candidates = getTexBinCandidates(process.platform);
-  // macOS では固定年度フォールバックも加える（getTexBinCandidates の glob は存在チェック前に
-  // 展開されないため、augmentPathString の単純 existsSync で拾えない年度を補う）。
-  const all = process.platform === "darwin" ? [MACOS_TEX_BIN, ...MACOS_TEX_BIN_FALLBACKS, ...candidates] : candidates;
-  // 重複除去（getTexBinCandidates と MACOS_TEX_BIN が重なるため）。
-  const dedup = Array.from(new Set(all));
-  // glob（*）を含む候補は実ディレクトリに展開してから PATH に追加する。glob 無しはそのまま。
-  const expanded = dedup.flatMap(pattern => expandGlob(pattern, defaultTexFsLayer));
-  return augmentPathString(currentPath, expanded);
+  const candidates = getTexBinCandidates(process.platform).flatMap(pattern =>
+    expandGlob(pattern, defaultTexFsLayer),
+  );
+  return augmentPathString(currentPath, candidates);
 }
 
 /**

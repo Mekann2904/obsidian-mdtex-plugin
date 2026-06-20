@@ -1,11 +1,12 @@
 // File: src/services/citationPipeline.test.ts
-// Purpose: citation パイプラインの純粋関数（エンジン解決・.tex コマンド構築）の単体テスト（ADR-009）。
-// Reason: 2フェーズ実行の前段（コマンド組み立て）が正しいことを保証する。実行部（runCommand）は
-//          実 Pandoc/LaTeX が必要なため integration 系だが、コマンド組み立ては純粋で検証可能。
+// Purpose: citation パイプラインの純粋関数（resolveLatexInvocation）の単体テスト（ADR-009）。
+// Reason: 2フェーズ実行の前段（latexmk 引数と draft エンジンの解決）が正しいことを保証する。
+//          実行部（runCommand / runReactiveLatexPhase）は実 Pandoc/LaTeX が必要なため integration
+//          系だが、エンジン解決は純粋で検証可能。
 // Related: src/services/citationPipeline.ts
 
 import { describe, expect, it } from "vitest";
-import { resolveLatexInvocation, buildCitationTexCommand } from "./citationPipeline";
+import { resolveLatexInvocation } from "./citationPipeline";
 import { createDefaultProfile } from "./profileManager";
 
 describe("resolveLatexInvocation（ADR-009）", () => {
@@ -74,41 +75,5 @@ describe("resolveLatexInvocation（ADR-009）", () => {
     profile.pdfEngineOpts = "-lualatex";
     const { latexmkArgs } = resolveLatexInvocation(profile);
     expect(latexmkArgs).toEqual(["-lualatex"]);
-  });
-});
-
-describe("buildCitationTexCommand（ADR-009）", () => {
-  it("format=latex で standalone .tex を生成するコマンドを構築する", () => {
-    const profile = createDefaultProfile();
-    profile.citationMode = "natbib";
-    const cmd = buildCitationTexCommand({
-      profile,
-      useStdin: false,
-      inputPath: "/tmp/in.md",
-      texOutputPath: "/tmp/out.tex",
-      pdfOutputPath: "/tmp/out.pdf",
-      workingDir: "/tmp",
-    });
-    // .tex 出力なので -t latex、--pdf-engine 系は出ない
-    expect(cmd.args).toContain("-t");
-    expect(cmd.args).toContain("latex");
-    expect(cmd.args.some(a => a.startsWith("--pdf-engine"))).toBe(false);
-    // natbib は .tex 生成でも意味がある（\citep 変換）
-    expect(cmd.args).toContain("--natbib");
-    expect(cmd.args).toContain("/tmp/out.tex");
-  });
-
-  it("useStdin のとき inputPath を渡さず -o のみ", () => {
-    const profile = createDefaultProfile();
-    const cmd = buildCitationTexCommand({
-      profile,
-      useStdin: true,
-      inputContent: "body",
-      texOutputPath: "/tmp/out.tex",
-      pdfOutputPath: "/tmp/out.pdf",
-      workingDir: "/tmp",
-    });
-    expect(cmd.args).not.toContain("/tmp/in.md");
-    expect(cmd.args).toContain("/tmp/out.tex");
   });
 });

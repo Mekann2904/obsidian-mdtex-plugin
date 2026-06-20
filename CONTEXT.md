@@ -65,7 +65,7 @@ LaTeX ソースから参考文献リストを生成するための、`latex` →
 _Avoid_: 文献コンパイル（より曖昧）
 
 **bibstyle 衝突**:
-`.aux` に `\bibstyle{...}` が複数回出力され、bibtex が "Illegal, another `\bibstyle` command" で non-zero exit する障害。学会公式クラスが `\bibliographystyle{<学会指定>}` を内蔵する一方、Pandoc の LaTeX テンプレート（Pandoc 3.7 では `common.latex`）が `--natbib` 時に `\bibliographystyle{...}` を自動挿入することで発生する。MdTex 側に特別処理は置かず、テンプレートパックが Pandoc テンプレート（`template:` 参照の `.tex`）から当該行を削除することで構造的に解決する（ADR-009）。`latexmk -f` で突破すると引用形式まで壊れるため採用しない。
+`.aux` に `\bibstyle{...}` が複数回出力され、bibtex が "Illegal, another `\bibstyle` command" で non-zero exit する障害。学会公式クラスが `\bibliographystyle{<学会指定>}` を内蔵する一方、Pandoc の LaTeX テンプレート（Pandoc 3.7 では `common.latex`）が `--natbib` 時に `\bibliographystyle{...}` を自動挿入することで発生する。MdTex は citation モード有効時に**反応型**に解決する: citation パイプラインが draft パスで `.aux` を読み、plainnat 以外の bibstyle が1つでもあれば（=クラス/パッケージが内蔵、ACL 等）、Pandoc が自動挿入した `\bibliographystyle{plainnat}` 行を `.tex` から除去して依存状態を掃除し、latexmk に正しい `.aux` を再生成させる（ADR-009）。クラスを知らなくても ACL/acmart/IEEEtran の全てで動く。`latexmk -f` で突破すると引用形式まで壊れるため採用しない。
 _Avoid_: bst 衝突（`.bst` ファイル自体の問題と混同されやすい。本項目は `.aux` の `\bibstyle` 重複の問題）
 
 ## Flagged ambiguities
