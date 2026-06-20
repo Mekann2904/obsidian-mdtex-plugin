@@ -5,6 +5,8 @@
 
 import { isDefaultsTemplateMode, ProfileSettings } from "../MdTexPluginSettings";
 import { normalizeFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
+import { normalizeLatexEngine } from "../utils/texDiscover";
+import * as path from "path";
 
 export type OutputFormat = "pdf" | "latex" | "docx";
 
@@ -66,7 +68,15 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   args.push("-o", normalizeFsPath(options.outputPath));
 
   if (options.format === "pdf") {
-    args.push(`--pdf-engine=${profile.latexEngine}`);
+    // latexEngine にフルパスが入力されても basename に正規化する（年度更新耐性）。
+    // Pandoc は basename を PATH から探す（buildTexAwareEnv で TeX bin が PATH に追加済み）。
+    const engineBare = normalizeLatexEngine(profile.latexEngine) || "lualatex";
+    args.push(`--pdf-engine=${engineBare}`);
+    // ADR-009: latexmk 等の PDF エンジンに追加オプションを渡す。各トークンを
+    // --pdf-engine-opt=<token> に展開する（latexmk のサブエンジン指定 -lualatex 等に使用）。
+    for (const opt of tokenizePdfEngineOpts(profile.pdfEngineOpts)) {
+      args.push(`--pdf-engine-opt=${opt}`);
+    }
     // defaults 方式では beamer ターゲット（`-t beamer`）も defaults file の `to:` で管理するため、
     // documentClass 由来の `-t beamer` 生成をスキップする。builtin 方式は現状どおり。
     if (!isDefaults && profile.documentClass === "beamer") args.push("-t", "beamer");
@@ -117,6 +127,16 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   }
 
   args.push("--highlight-style=tango");
+
+  // ADR-009: citation モードで Markdown の @key / [@key] を LaTeX の引用コマンドへ変換する。
+  // --natbib は defaults file で指定できない（実証: Unknown option "natbib"）ためコマンドライン必須。
+  // natbib モードは学会公式クラス（acl.sty / acmart 等）が \RequirePackage{natbib} で内蔵する
+  // natbib と協調する。bibstyle 衝突の回避は defaults file 側のテンプレート（template:）で行う。
+  if (profile.citationMode === "natbib") {
+    args.push("--natbib");
+  } else if (profile.citationMode === "citeproc") {
+    args.push("--citeproc");
+  }
 
   const extraArgs = filterPandocExtrasForFormat(options.extraArgs || [], options.format);
   if (extraArgs.length) args.push(...extraArgs);
@@ -189,4 +209,68 @@ export function filterPandocExtrasForFormat(extras: string[], format: string): s
     if (format !== "docx" && arg.startsWith("--reference-doc")) return false;
     return true;
   });
+}
+
+/**
+ * pdfEngineOpts（スペース区切り文字列）をトークン配列に分割する（ADR-009）。
+ *
+ * 空白・空トークンを除外する。latexmk のサブエンジン指定（`-lualatex`）や latexmk 固有
+ * オプション（`-interaction=nonstopmode`）など、トークン内に空白を含まない単純なフラグ・値を
+ * 想定する。各トークンは `--pdf-engine-opt=<token>` として Pandoc に渡される。
+ */
+function tokenizePdfEngineOpts(opts: string): string[] {
+  return (opts ?? "")
+    .split(/\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+/**
+ * defaults 方式で選択中テンプレートパックのフォルダを LaTeX の検索パスに注入する（ADR-009）。
+ *
+ * 学会公式クラス（`acl.sty` / `acmart` 等）や `.bst` / `.bib` をパック内に配置した際、LaTeX
+ * （および bibtex）がこれらを発見できるように `TEXINPUTS` / `BIBINPUTS` / `BSTINPUTS` にパック
+ * フォルダを追記する。TeX の検索パスは**末尾セパレータで「標準パスも併せて検索」を意味する**
+ * ため、必ず末尾にセパレータを付ける（付けないと kpsewhich の標準パスが見えなくなる）。
+ *
+ * 純粋関数: 既存の環境変数は `existingEnv` で注入可能（既定は `process.env`）。`platform` も
+ * 外から渡せ、POSIX は `:`・Windows は `;` をセパレータに使う。defaults 方式でない、または
+ * `defaultsFilePath` が空のときは空オブジェクトを返す（呼び出し側で空なら上書きしない）。
+ *
+ * `defaultsFilePath` は呼び出し側（convertService）が ADR-008 のパス解決を済ませた
+ * **解決済み絶対パス**が入っている前提。純粋関数を保つため、vault I/O を伴う解決は行わない。
+ */
+export function buildLatexSearchEnv(
+  profile: ProfileSettings,
+  platform: NodeJS.Platform,
+  existingEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  if (!isDefaultsTemplateMode(profile)) return {};
+  const defaultsPath = profile.defaultsFilePath?.trim();
+  if (!defaultsPath) return {};
+
+  // platform に応じて posix / win32 の path API を使い分ける。Node の既定の path は実行 OS
+  // 依存で、darwin 上で Windows パスを dirname すると `.` になる（純粋関数テストで顕在化）。
+  // 区切り文字（delimiter）も OS 依存（POSIX は ':'、Windows は ';'）。
+  const pathApi = platform === "win32" ? path.win32 : path.posix;
+  const packDir = pathApi.dirname(defaultsPath);
+  const sep = pathApi.delimiter;
+  return {
+    TEXINPUTS: appendSearchPath(existingEnv.TEXINPUTS, packDir, sep),
+    BIBINPUTS: appendSearchPath(existingEnv.BIBINPUTS, packDir, sep),
+    BSTINPUTS: appendSearchPath(existingEnv.BSTINPUTS, packDir, sep),
+  };
+}
+
+/**
+ * TeX の検索パス変数の既存値の末尾に `dir` を追加し、さらにセパレータで終える。
+ * `existing` が undefined / 空文字のときは `dir` 単独＋末尾セパレータを返す。
+ */
+function appendSearchPath(
+  existing: string | undefined,
+  dir: string,
+  sep: string,
+): string {
+  const base = existing && existing.length > 0 ? existing + sep : "";
+  return `${base}${dir}${sep}`;
 }

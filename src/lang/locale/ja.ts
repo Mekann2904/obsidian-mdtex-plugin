@@ -94,7 +94,14 @@ const ja: Record<TranslationKeys, string> = {
 
   heading_latex_engine: "LaTeX / PDF エンジン設定",
   setting_latex_engine_name: "LaTeX エンジン",
-  setting_latex_engine_desc: "PDF 生成に使うエンジン（例: lualatex, xelatex, pdflatex）。",
+  setting_latex_engine_desc:
+    "PDF 生成に使うエンジン。「検出」で自動探索してドロップダウンから選ぶか、エンジン名（lualatex）やフルパスを手入力してください。フルパスは basename に正規化して PATH で解決するため、TeX Live の年度更新でも壊れません。",
+  setting_latex_engine_custom: "カスタム（パスを入力）",
+  setting_latex_engine_not_found_dropdown: "（TeX エンジン未検出 — 下にパスを入力）",
+  setting_latex_engine_placeholder: "lualatex, latexmk, またはフルパス",
+  setting_pdf_engine_opts_name: "PDF エンジン追加オプション",
+  setting_pdf_engine_opts_desc:
+    "PDF エンジン（latexmk 等）に渡す追加オプションを --pdf-engine-opt で指定します（スペース区切り）。latexmk のサブエンジン（例: -lualatex）や latexmk 固有オプション（例: -interaction=nonstopmode）に使います。参考文献の bibtex/biber ラウンドトリップを有効にします。PDF 出力時のみ有効。",
   setting_document_class_name: "ドキュメントクラス",
   setting_document_class_desc: "LaTeX の documentclass（例: ltjarticle, article, book）。",
   setting_document_class_opts_name: "ドキュメントクラスのオプション",
@@ -172,6 +179,12 @@ const ja: Record<TranslationKeys, string> = {
   placeholder_pandoc_extra_args: "--toc --number-sections",
   setting_use_standalone_name: "--standalone を付与",
   setting_use_standalone_desc: "--standalone フラグを付けて完全なドキュメントを生成します。",
+  setting_citation_mode_name: "引用モード",
+  setting_citation_mode_desc:
+    "Markdown の @key / [@key] を LaTeX の引用コマンドに変換します。natbib は学会公式クラス（acl.sty / acmart 等）が内蔵する natbib と協調します（bibstyle 衝突の解決にはテンプレートパック側の対応が必要: ADR-009）。defaults file 方式でのみ表示します。",
+  option_citation_none: "なし",
+  option_citation_natbib: "natbib (--natbib)",
+  option_citation_citeproc: "citeproc (--citeproc)",
 
   heading_global: "グローバル設定",
   setting_enable_lint_fix_name: "Markdownlint --fix を実行",

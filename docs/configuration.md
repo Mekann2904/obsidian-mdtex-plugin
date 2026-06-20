@@ -167,8 +167,30 @@ my-templates/
 PDF生成に使用するLaTeXエンジンを指定します。
 
 - **デフォルト**: `lualatex`
-- **選択肢**: `lualatex`、`xelatex`、`pdflatex`
+- **選択肢**: `lualatex`、`xelatex`、`pdflatex`、`latexmk`
 - **推奨**: LuaLaTeXは日本語処理に最適です
+- **参考文献を扱う場合**: `latexmk` を指定すると bibtex/biber のラウンドトリップ（`latex`→`bibtex`→`latex`→`latex`）を latexmk が自動管理します。学会論文などで `\cite` を使う場合は `latexmk` を推奨します（→ [引用モード（ADR-009）](#引用モードadr-009)）
+
+### PDFエンジン追加オプション（ADR-009）
+
+PDFエンジン（latexmk 等）に追加オプションを渡します。スペース区切りで複数指定でき、各トークンが Pandoc の `--pdf-engine-opt=<トークン>` になります。
+
+- **デフォルト**: 空
+- **例**: `-lualatex`、`-lualatex -interaction=nonstopmode`
+- **用途**: `latexEngine` を `latexmk` にしたとき、サブエンジン（`-lualatex` / `-xelatex` / `-pdflatex`）と latexmk 固有オプションを指定します。`latexmk` は既定で pdflatex を使うため、日本語を含む文書では `-lualatex` の指定が実質必須です。
+- **PDF 出力時のみ有効**。LaTeX（`.tex`）出力時には無視されます。
+
+### 引用モード（ADR-009）
+
+Markdown の引用記法（`@key` / `[@key]`）を LaTeX の引用コマンド（`\citep` / `\citet` 等）に変換するかを選びます。**defaults 方式でのみ表示**されます（`builtin` 方式は対象外）。
+
+| 値 | Pandoc フラグ | 概要 |
+|---|---|---|
+| **なし（`none`・既定）** | （なし） | 変換しない。`@key` はそのまま残ります |
+| **natbib（`--natbib`）** | `--natbib` | 学会公式クラス（ACL / acmart / IEEEtran 等）と協調します。学会論文で参考文献を自動生成する場合はこれを選びます |
+| **citeproc（`--citeproc`）** | `--citeproc` | CSL ベースの引用処理。学会公式クラスではなく、 CSL スタイル + `.json`/`.bib` で参考文献体裁を制御したい場合 |
+
+> **natbib 選択時の自動解決（bibstyle 衝突）**: 学会公式クラスの多くは `\bibliographystyle` を内蔵します。一方、Pandoc の `--natbib` は `\bibliographystyle{plainnat}` を自動挿入するため、両者が `.aux` に2重に出力されて bibtex がエラーで止まることがあります。MdTex はこれを **自動的に解決** します（.aux を見て、クラス由来の bibstyle があるときだけ plainnat を除去）。**ユーザーは自分の使うクラスが bibliographystyle を内蔵するか知る必要はありません**。これには `latexEngine` を `latexmk` にする必要があります。詳細は [設計決定 ADR-009](./design-decisions.md) を参照してください。
 
 ### ドキュメントクラス
 

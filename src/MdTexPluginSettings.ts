@@ -72,6 +72,25 @@ export interface ProfileSettings {
    * 後方互換性のためフィールド自体は残しますが、実行時には使用されません。
    */
   luaFilterPath: string;
+  /**
+   * citation モード（ADR-009）。Markdown の `@key` / `[@key]` を LaTeX の `\citep` / `\citet`
+   * 等へ変換する Pandoc の出力モード。defaults 方式でのみ GUI で公開する（builtin は対象外）。
+   *
+   * - "none"（既定）: 変換しない。
+   * - "natbib": `--natbib`。学会公式クラス（acl.sty / acmart 等）が `\RequirePackage{natbib}`
+   *   で内蔵する natbib と協調する。`--natbib` は defaults file で指定できない（実証済み）ため、
+   *   MdTex 側でコマンドラインに明示的に出す必要がある。
+   * - "citeproc": `--citeproc`。CSL ベースの引用処理。
+   */
+  citationMode: "none" | "natbib" | "citeproc";
+  /**
+   * PDF エンジン（latexmk 等）に渡す追加オプション（ADR-009）。スペース区切りで複数指定可能。
+   * 各トークンが Pandoc の `--pdf-engine-opt=<token>` になる。latexmk のサブエンジン指定
+   * （例: `-lualatex`）や latexmk 固有オプション（例: `-interaction=nonstopmode`）に使う。
+   * bibtex / biber のラウンドトリップ制御は latexmk に一任する（MdTex はラウンドを自前管理しない）。
+   * `format` が `pdf` のときのみ意味を持つ。
+   */
+  pdfEngineOpts: string;
 }
 
 /**
@@ -318,6 +337,8 @@ export const DEFAULT_PROFILE: ProfileSettings = {
   enableAdvancedTexCommands: true,
   // @deprecated（使用されません。後方互換性のため既定値を維持）
   luaFilterPath: "tex-to-docx.lua",
+  citationMode: "none",
+  pdfEngineOpts: "",
 };
 
 /**

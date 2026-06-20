@@ -175,6 +175,41 @@ MdTexでは、複数の設定プロファイルを作成・管理できます。
 
 defaults 方式を選ぶと、ドキュメントクラス・フォントサイズ・余白・プリアンブル等の「枠」に関わる GUI 項目は折りたたまれ、それらはすべて defaults file 側で管理します。MdTex 固有の処理（Obsidian 記法・コールアウト・`--resource-path` 等）は方式に関わらず継続するため、Obsidian ノートをそのまま学会テンプレに流し込めます。defaults file の書き方と `${.}` の活用については [設定リファレンス](./configuration.md#文書テンプレート方式adr-007) を参照してください。
 
+### 例5: 参考文献付き学会論文（natbib + bibtex、ADR-009）
+
+**目的**: `\cite` で文献を引き、References セクションを自動生成する本格的な学会論文（ACL / acmart / IEEEtran 等）を MdTex で完結させる。
+
+```yaml
+プロファイル名: 学会論文用
+設定:
+  文書テンプレート方式: defaults file
+  テンプレートパック: （学会テンプレ一式を含むパックを選択）
+  出力フォーマット: pdf
+  LaTeX エンジン: latexmk
+  PDF エンジン追加オプション: -lualatex
+  引用モード: natbib (--natbib)
+```
+
+**仕組み**: `latexEngine: latexmk` + `pdfEngineOpts: -lualatex` で bibtex/biber のラウンドトリップを latexmk に一任します。`citationMode: natbib` で `@key` / `[@key]` を `\citep` / `\citet` に変換します。
+
+**bibstyle 衝突の自動解決**: 学会公式クラスの多くは `\bibliographystyle` を内蔵し、Pandoc の `--natbib` が挿入する `plainnat` と衝突して bibtex が止まることがあります。MdTex はこれを **`.aux` を見て反応型に解決** します（クラス由来の bibstyle があれば plainnat を除去）。**ユーザーは使うクラスが bibliographystyle を内蔵するか知る必要はありません** — ACL でも acmart でも IEEEtran でも動きます。
+
+**本文の書き方**: References は本文末尾に raw LaTeX で指定します（`\bibliography{<bib名>}`）。詳細と bibstyle 衝突の仕組みは [設定リファレンス — 引用モード](./configuration.md#引用モードadr-009) と [設計決定 ADR-009](./design-decisions.md) を参照してください。
+
+```markdown
+# Introduction
+
+先行研究 @andrew2007scalable と [@rasooli-tetrault-2015] を引用する。
+
+# Conclusion
+
+（本文）
+
+```{=latex}
+\bibliography{custom}
+```
+```
+
 ---
 
 ## ベストプラクティス

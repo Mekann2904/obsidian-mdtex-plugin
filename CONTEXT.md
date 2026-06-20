@@ -56,6 +56,18 @@ _Avoid_: テーマ（外観の変更と誤解されやすい。MdTex のテン�
 テンプレートパックを格納する vault 内のフォルダ。既定は `<vault>/MdTex Templates/`。直下の各サブフォルダが 1 つのテンプレートパックを表す。Obsidian の Templates / Templater と同じ「vault 内に置く」慣行で、Obsidian Sync / Git で同期・バックアップされ、プラグイン更新でも消えない。設定（パス）のみを `data.json` に保持する。
 _Avoid_: プラグインフォルダ（`data.json` が置かれる `.obsidian/plugins/<id>/` とは別物。プラグインの更新で同梱ファイルが置き換えられるため、ユーザーが作り込んだテンプレートパックはここに置くべきでない）
 
+**citation モード**:
+Markdown の引用記法（`@key` / `[@key]`）を LaTeX の `\citep` / `\citet` 等へ変換する Pandoc の出力モード。MdTex では `none`（変換しない）/ `natbib`（`--natbib`）/ `citeproc`（`--citeproc`）の 3 値をプロファイルで扱う（ADR-009）。`natbib` は defaults file では指定不可（コマンドライン `--natbib` 必須）なため、MdTex 側で明示的にフラグを立てる。学会公式クラス（acl.sty / acmart 等）が `\RequirePackage{natbib}` で内蔵する natbib と協調するためにはこのモードが必須。
+_Avoid_: 引用スタイル（より広い。出力の見た目ではなく Pandoc の変換モードを指す）、文献モード
+
+**bibtex ラウンドトリップ**:
+LaTeX ソースから参考文献リストを生成するための、`latex` → `bibtex` → `latex` → `latex` の複数ラウンド処理。`.aux` の引用情報を bibtex が `.bbl` にまとめ、後続ラウンドで取り込む。MdTex はこの制御を latexmk に一任し、自前ではラウンドを管理しない（ADR-009）。natbib + bibtex を前提とする学会公式クラスで References を載せるにはこのラウンドトリップが必須。
+_Avoid_: 文献コンパイル（より曖昧）
+
+**bibstyle 衝突**:
+`.aux` に `\bibstyle{...}` が複数回出力され、bibtex が "Illegal, another `\bibstyle` command" で non-zero exit する障害。学会公式クラスが `\bibliographystyle{<学会指定>}` を内蔵する一方、Pandoc の LaTeX テンプレート（Pandoc 3.7 では `common.latex`）が `--natbib` 時に `\bibliographystyle{...}` を自動挿入することで発生する。MdTex 側に特別処理は置かず、テンプレートパックが Pandoc テンプレート（`template:` 参照の `.tex`）から当該行を削除することで構造的に解決する（ADR-009）。`latexmk -f` で突破すると引用形式まで壊れるため採用しない。
+_Avoid_: bst 衝突（`.bst` ファイル自体の問題と混同されやすい。本項目は `.aux` の `\bibstyle` 重複の問題）
+
 ## Flagged ambiguities
 
 **「埋め込み」 vs 「トランスクルージョン」**:

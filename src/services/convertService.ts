@@ -25,15 +25,17 @@ import { t } from "../lang/helpers";
 import {
   buildPandocCommand,
   buildLabelMetadataYaml,
+  buildLatexSearchEnv,
   OutputFormat,
   PandocCommandResult,
 } from "./pandocCommandBuilder";
+import { runReactiveLatexPhase } from "./citationPipeline";
+import { buildTexAwareEnv } from "../utils/texPath";
 import { runCommand } from "../utils/processRunner";
 import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
 
 import {
   resolveDefaultsFilePath,
-  normalizeTemplateFolder,
 } from "./templatePackService";
 import {
   createTempFile,
@@ -463,6 +465,16 @@ interface PandocExecutionPlan {
   command: PandocCommandResult;
   tempFiles: string[];
   workingDir: string;
+  // ADR-009 反応型フェーズでエンジン解決（resolveLatexInvocation）と検索パス再構築に使う。
+  profile: ProfileSettings;
+  // ADR-009: defaults 方式でテンプレートパックフォルダを LaTeX 検索パス（TEXINPUTS /
+  // BIBINPUTS / BSTINPUTS）に注入する環境変数。空オブジェクトのときは既存 env を上書きしない
+  // （executePandocCommand でスプレッドマージの末尾に置く）。
+  envExtra: NodeJS.ProcessEnv;
+  // ADR-009: citation モード（natbib/citeproc）有効時の2フェーズ実行情報。設定時、command は
+  // PDF ではなく standalone .tex を生成するよう構築され、executePandocCommand は反応型 LaTeX
+  // フェーズ（draft→.aux→plainnat 除去→latexmk）に引き継ぐ。
+  citation?: { texPath: string; pdfPath: string };
 }
 
 // 変換パイプラインで使う一時 Lua/YAML ファイルは、生成プリミティブ（createTempFile）の
@@ -551,11 +563,20 @@ async function buildPandocExecutionPlan(params: {
   }
 
   try {
+    // ADR-009: citation モード（natbib/citeproc）有効かつ PDF 出力のとき、2フェーズ化する。
+    // Pandoc には standalone .tex を生成させ（format=latex）、executePandocCommand で反応型
+    // LaTeX フェーズに引き継ぐ。.tex パスは PDF 出力パスと同名・拡張子 .tex。
+    const citationActive =
+      params.format === "pdf" &&
+      (params.profile.citationMode === "natbib" || params.profile.citationMode === "citeproc");
+    const buildCmdFormat: OutputFormat = citationActive ? "latex" : params.format;
+    const texOutputPath = params.outputFile.replace(/\.pdf$/, ".tex");
+
     const command = buildPandocCommand({
       profile: params.profile,
-      format: params.format,
+      format: buildCmdFormat,
       inputPath: params.useStdin ? undefined : params.inputPath,
-      outputPath: params.outputFile,
+      outputPath: citationActive ? texOutputPath : params.outputFile,
       headerPath: params.headerFilePath,
       metadataFile,
       workingDir: params.workingDir,
@@ -566,7 +587,17 @@ async function buildPandocExecutionPlan(params: {
       useStdin: params.useStdin,
     });
 
-    return { command, tempFiles, workingDir: params.workingDir };
+    // ADR-009: 反応型修正は latexmk が .tex を処理する2フェーズでのみ意味がある。citation モード時は
+    // buildLatexSearchEnv でパックフォルダを検索パスに注入する。
+    const envExtra = buildLatexSearchEnv(params.profile, process.platform);
+    return {
+      command,
+      tempFiles,
+      workingDir: params.workingDir,
+      profile: params.profile,
+      envExtra,
+      citation: citationActive ? { texPath: texOutputPath, pdfPath: params.outputFile } : undefined,
+    };
   } catch (error) {
     await cleanupTemporaryFiles(tempFiles);
     throw error;
@@ -610,9 +641,43 @@ async function executePandocCommand(
   const handlers = createPandocNoticeHandlers(ctx);
 
   try {
+    // ADR-009 関連: Obsidian（GUI）の process.env.PATH は TeX bin を含まないことが多く、PDF
+    // エンジン（latexmk/lualatex）が command not found になる。/Library/TeX/texbin 等を PATH に
+    // 自動追加する（texPath.ts）。envExtra（TEXINPUTS/BIBINPUTS/BSTINPUTS 等）は末尾でマージし、
+    // defaults 方式のテンプレートパックフォルダを LaTeX 検索パスに加える。空オブジェクトなら影響しない。
+    const env = { ...buildTexAwareEnv(process.env), ...plan.envExtra };
+
+    if (plan.citation) {
+      const texResult = await runCommand(plan.command.command, plan.command.args, {
+        cwd: plan.workingDir,
+        env,
+        input: inputContent,
+        onStdout: handlers.onStdout,
+        onStderr: handlers.onStderr,
+      });
+      if (texResult.exitCode !== 0) {
+        new Notice(t("notice_pandoc_exit_code", [texResult.exitCode]));
+        return false;
+      }
+      const ok = await runReactiveLatexPhase(plan.citation.texPath, plan.citation.pdfPath, plan.profile, plan.workingDir, {
+        onStdout: handlers.onStdout,
+        onStderr: handlers.onStderr,
+        suppressLogs: ctx.settings.suppressDeveloperLogs,
+      });
+      if (ok) {
+        new Notice(t("notice_generated", [path.basename(outputFile)]));
+        return true;
+      }
+      new Notice(t("notice_pandoc_stdin_failed"));
+      return false;
+    }
+
     const result = await runCommand(plan.command.command, plan.command.args, {
       cwd: plan.workingDir,
-      env: { ...process.env, PATH: process.env.PATH ?? "" },
+      // ADR-009: envExtra（TEXINPUTS/BIBINPUTS/BSTINPUTS 等）を末尾でマージし、defaults 方式の
+      // テンプレートパックフォルダを LaTeX 検索パスに加える。process.env を先に置いて既存環境を
+      // 保ち、envExtra で上書きする。空オブジェクトなら影響しない。
+      env,
       input: inputContent,
       onStdout: handlers.onStdout,
       onStderr: handlers.onStderr,

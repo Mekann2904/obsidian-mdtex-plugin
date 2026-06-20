@@ -115,6 +115,8 @@ pandoc <本文>.md \
 | `! LaTeX Error: Environment codelisting undefined` | キャプション付きコードブロック | `\usepackage{newfloat}` + `\DeclareFloatingEnvironment[fileext=lol,name=Listing]{codelisting}` |
 | クラスオプション `9pt` が無視される | `ltjtarticle`/`ltjsarticle` は一部サイズを無視 | `\AtBeginDocument{\fontsize{...}{...}\selectfont}` で本文サイズを明示 |
 | 縦書きで `\jidori` が未定義 | `ltjtarticle` は `\jidori` を提供しない | `\makebox[幅][l]{...}` で代用（話者名の字取り等） |
+| `Citation 'X' undefined` / References が空 | bibtex が回っていない | LaTeX エンジンを `latexmk`、PDF エンジン追加オプションを `-lualatex`、引用モードを `natbib` にする（ADR-009）。bibstyle 衝突は MdTex が自動解決するが、`latexmk` 以外では bibtex ラウンドトリップが走らない |
+| `! Emergency stop` / bibtex が bbl を生成しない | `.bib` が LaTeX に見つかっていない | `.bib` をテンプレートパックフォルダに置く。MdTex はパックフォルダを `BIBINPUTS`/`BSTINPUTS` に自動追加する（ADR-009） |
 
 ---
 
@@ -128,6 +130,13 @@ pandoc <本文>.md \
 - **責務分離**: `defaults.yaml`（Pandoc 設定）/ `*.tex`（枠）/ `preamble.tex`（見た目）/ `*.lua`（記法拡張）。
 - builtin 方式の GUI 設定と混同しない。defaults 方式では
   documentclass / fontsize / geometry は **defaults.yaml 側** で管理する。
+- **参考文献付き論文のパックを作るときはbibstyle 衝突を気にしなくてよい（ADR-009）。**
+  学会公式クラスが `\bibliographystyle` を内蔵する場合でも、MdTex が `.aux` を見て
+  **自動的に** 解決する（Pandoc の `plainnat` と衝突したときだけ plainnat を除去）。パック作成者は
+  Pandoc テンプレートを編集して bibliographystyle 行を削除する必要は**ない**。ユーザーは引用モードを
+  `natbib` にし、LaTeX エンジンを `latexmk`、PDF エンジン追加オプションを `-lualatex` にするだけで
+  参考文献（`\bibliography{...}`）が自動生成される。本文末尾の raw LaTeX で `\bibliography{<bib名>}` を
+  指定する設計にする。詳細は [設計決定 ADR-009](../docs/design-decisions.md) を参照。
 
 ---
 

@@ -93,7 +93,15 @@ const en = {
 
   heading_latex_engine: "LaTeX / PDF Engine Settings",
   setting_latex_engine_name: "LaTeX Engine",
-  setting_latex_engine_desc: "Engine used for PDF generation (e.g. lualatex, xelatex, pdflatex).",
+  setting_latex_engine_desc:
+    "Engine used for PDF generation. Click Detect to auto-discover and pick from the dropdown, or type an engine name (lualatex) or a full path manually. Full paths are normalized to the basename and resolved via PATH, so they survive TeX Live upgrades.",
+  setting_latex_engine_custom: "Custom (enter path)",
+  setting_latex_engine_not_found_dropdown:
+    "(no TeX engine found — enter path below)",
+  setting_latex_engine_placeholder: "lualatex, latexmk, or full path",
+  setting_pdf_engine_opts_name: "PDF Engine Extra Options",
+  setting_pdf_engine_opts_desc:
+    "Extra options passed to the PDF engine via --pdf-engine-opt (space-separated). Use for a latexmk sub-engine (e.g. -lualatex) and latexmk-specific options (e.g. -interaction=nonstopmode). Enables bibtex/biber round-trips for references. Effective for PDF output only.",
   setting_document_class_name: "Document Class",
   setting_document_class_desc: "LaTeX document class (e.g. ltjarticle, article, book).",
   setting_document_class_opts_name: "Document Class Options",
@@ -171,6 +179,12 @@ const en = {
   placeholder_pandoc_extra_args: "--toc --number-sections",
   setting_use_standalone_name: "Use Standalone",
   setting_use_standalone_desc: "Pass --standalone flag (produces full document with header).",
+  setting_citation_mode_name: "Citation Mode",
+  setting_citation_mode_desc:
+    "Convert @key / [@key] into LaTeX citation commands. natbib cooperates with natbib built into academic class files (acl.sty, acmart, etc.); it requires a template pack that resolves the bibliography-style conflict (ADR-009). Shown only in defaults file mode.",
+  option_citation_none: "None",
+  option_citation_natbib: "natbib (--natbib)",
+  option_citation_citeproc: "citeproc (--citeproc)",
 
   heading_global: "Global Settings",
   setting_enable_lint_fix_name: "Enable Markdownlint Fix",

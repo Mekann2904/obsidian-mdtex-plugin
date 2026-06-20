@@ -17,9 +17,12 @@ import {
   scaffoldSampleTemplatePacks,
 } from "./services/templatePackService";
 import { t } from "./lang/helpers";
+import { discoverTexEngines, type DiscoveredEngine } from "./utils/texDiscover";
 
 export class PandocPluginSettingTab extends PluginSettingTab {
   plugin: MdTexPlugin;
+  /** 「検出」ボタンで探索した TeX エンジン一覧。再描画を跨いで保持する。 */
+  private discoveredEngines: DiscoveredEngine[] | undefined;
 
   constructor(app: App, plugin: MdTexPlugin) {
     super(app, plugin);
@@ -40,6 +43,13 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     const settings = this.plugin.settings;
     const activeProfileKey = settings.activeProfile;
     const currentProfile = settings.profiles[activeProfileKey];
+
+    // ADR-009: 設定タブ描画時に TeX エンジンを自動探索（初回のみ、以降キャッシュ）。
+    // 検出ボタンは廃止し「開いたら自動で選べる」ようにする。同期だが実測 1ms 未満で UI を固めない。
+    // Obsidian 再起動で再探索されるため、TeX をインストールし直しても次回起動で反映される。
+    if (this.discoveredEngines === undefined) {
+      this.discoveredEngines = discoverTexEngines(process.platform, process.env.PATH ?? "");
+    }
 
     // =================================================================
     // 1. プロファイル管理セクション
@@ -208,14 +218,70 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       await this.renderDefaultsModeSettings(currentProfile);
     }
 
-    new Setting(containerEl)
+    // ADR-009: latexEngine は「自動検出＋ドロップダウン選択」が基本。ドロップダウンの末尾に
+    // 「カスタム」を用意し、それを選んだときだけテキスト入力を出す（漸進的開示）。
+    // どちらを選んでも実行時は normalizeLatexEngine で basename に正規化され PATH 解決される
+    // ため、年度更新に強い（texDiscover.ts）。TeX が見つからない環境ではテキスト入力で手動指定。
+    const engines = this.discoveredEngines ?? [];
+    const hasDetected = engines.length > 0;
+    const currentBinPaths = engines.map(e => e.binPath);
+    const isCustomValue = currentProfile.latexEngine !== "" && !currentBinPaths.includes(currentProfile.latexEngine);
+
+    const engineSetting = new Setting(containerEl)
       .setName(t("setting_latex_engine_name"))
       .setDesc(t("setting_latex_engine_desc"))
+      .addDropdown(dropdown => {
+        if (!hasDetected) {
+          // TeX が見つからない環境：ドロップダウンは無効化し、テキスト入力で手動指定を促す。
+          dropdown.setDisabled(true);
+          dropdown.addOption("", t("setting_latex_engine_not_found_dropdown"));
+          dropdown.setValue("");
+        } else {
+          for (const e of engines) {
+            dropdown.addOption(e.binPath, `${e.engine} (${e.dir})`);
+          }
+          dropdown.addOption("__custom__", t("setting_latex_engine_custom"));
+          // 現在値が検出済み binPath に一致すればそれ、さもなくば「カスタム」。
+          dropdown.setValue(isCustomValue ? "__custom__" : currentProfile.latexEngine);
+        }
+        dropdown.onChange(async value => {
+          if (value === "__custom__") {
+            // latexEngine は維持したままテキスト入力を表示するため再描画。
+            this.display();
+          } else if (value) {
+            currentProfile.latexEngine = value;
+            await this.plugin.saveSettings();
+            this.display();
+          }
+        });
+      });
+    // テキスト入力は「カスタム」選択時、または検出0件（TeX未検出）で手動指定が必要な場合のみ表示。
+    // 通常は非表示にして「入力が必須」感を消す。
+    if (!hasDetected || isCustomValue) {
+      engineSetting.addText(text =>
+        text
+          .setPlaceholder(t("setting_latex_engine_placeholder"))
+          .setValue(currentProfile.latexEngine)
+          .onChange(async value => {
+            currentProfile.latexEngine = value;
+            await this.plugin.saveSettings();
+          }),
+      );
+    }
+
+    // ADR-009: latexmk 等の PDF エンジンに追加オプション（--pdf-engine-opt）を渡す。
+    // bibtex/biber のラウンドトリップを通す学会論文などで latexmk + -lualatex を使う場合に必要。
+    new Setting(containerEl)
+      .setName(t("setting_pdf_engine_opts_name"))
+      .setDesc(t("setting_pdf_engine_opts_desc"))
       .addText(text =>
-        text.setValue(currentProfile.latexEngine).onChange(async value => {
-          currentProfile.latexEngine = value;
-          await this.plugin.saveSettings();
-        }),
+        text
+          .setValue(currentProfile.pdfEngineOpts ?? "")
+          .setPlaceholder("-lualatex")
+          .onChange(async value => {
+            currentProfile.pdfEngineOpts = value;
+            await this.plugin.saveSettings();
+          }),
       );
 
     // 委譲対象の GUI 項目（ドキュメントクラス・フォントサイズ・マージン・ページ番号・画像スケール）は
@@ -626,6 +692,23 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }),
       );
+
+    // ADR-009: 引用モード（@key / [@key] を LaTeX の引用コマンドに変換）。defaults 方式限定。
+    // natbib は学会公式クラスが内蔵する natbib と協調する。bibstyle 衝突の解決はテンプレート
+    // パック側（template: 参照の .tex から bibliographystyle 行を削除）で行う。
+    new Setting(containerEl)
+      .setName(t("setting_citation_mode_name"))
+      .setDesc(t("setting_citation_mode_desc"))
+      .addDropdown(dropdown => {
+        dropdown.addOption("none", t("option_citation_none"));
+        dropdown.addOption("natbib", t("option_citation_natbib"));
+        dropdown.addOption("citeproc", t("option_citation_citeproc"));
+        dropdown.setValue(currentProfile.citationMode ?? "none");
+        dropdown.onChange(async value => {
+          currentProfile.citationMode = value as "none" | "natbib" | "citeproc";
+          await this.plugin.saveSettings();
+        });
+      });
 
     // defaults file の指定方法: パック選択 / カスタムパス
     new Setting(containerEl)

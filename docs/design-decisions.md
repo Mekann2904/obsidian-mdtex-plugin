@@ -217,6 +217,56 @@ ADR-007 で `defaults` 方式（defaults file 委譲）を導入したが、GUI 
 
 ---
 
+### ADR-009: 引用処理（natbib + bibtex ラウンドトリップ）を `defaults` 方式で厳格に開く
+
+**ステータス**: 採用
+
+**コンテキスト**:
+ADR-007/008 で `defaults` 方式（defaults file 委譲）とテンプレートパックが整い、学会公式テンプレ（IEEEtran / acmart / ACL 等）の「文書の枠」は defaults file で表現できるようになった。しかし**参考文献付きの本格論文**（`\cite` で文献を引き、References を自動生成する）は、MdTex 現状では実用的に扱えなかった。理由は引用処理が完全にユーザー任せ（`pandocExtraArgs` の隠し設定）で、かつ bibtex のラウンドトリップに必要な経路（latexmk のサブエンジン指定・`BIBINPUTS`・natbib モード）が MdTex 側に存在しなかったため。
+
+ACL 公式スタイル（`acl.sty`）を実機検証した結果、参考文献を載せるための真の障壁は1点に帰着した。学会公式クラスの多くは `\usepackage{acl}` の時点で `\RequirePackage{natbib}` と `\bibliographystyle{acl_natbib}` を**内蔵**する。一方、Pandoc の LaTeX テンプレート（Pandoc 3.7 では `common.latex` に分割）は `--natbib` 指定時に `\bibliographystyle{$if(biblio-style)$$biblio-style$$else$plainnat$endif$}` を**自動挿入**する。この結果 `.aux` に `\bibstyle` が2重に出力され、bibtex が "Illegal, another `\bibstyle` command" で non-zero exit し、latexmk が `.bbl` の取り込みを含む最終ラウンドをスキップする。References は載らず、`\cite` は未解決のまま壊れる。
+
+検証過程で `latexmk -f`（force）でこの衝突を突破する案を試したが、**これは採用しない**。`-f` は bibtex の non-zero exit を握りつぶして最終ラウンドを回すが、その副作用で natbib の引用形式まで崩れることを実証した（正しい `Andrew and Gao (2007)` が `[2007]` の角括弧に化ける）。エラーを隠蔽する手法は厳格でなく、出力の正しさすら保証できない。
+
+**決定**:
+`defaults` 方式限定で、natbib + bibtex のラウンドトリップを通す3つの経路を最小限で開く。`builtin` 方式は対象外（ラフな文書向けで、引用処理は上級ユースケースであり、ADR-007 の責務分担「枠は defaults file」に反するため）。**bibstyle 衝突の解決は「テンプレートパックが静的に解決する」のではなく、MdTex が `.aux` を見て反応型に解決する。** これにより、ユーザーは自分の使うクラス（ACL / acmart / IEEEtran 等）が bibliographystyle を内蔵するか知らなくても動く。
+
+1. **`latexmk` を正規 PDF エンジンとして扱い、サブエンジン指定を通す。** Pandoc の `--pdf-engine-opt`（複数可）の受け口を `buildPandocCommand` に導入し、`latexEngine: "latexmk"` のとき `-lualatex` 等のサブエンジンと latexmk 固有オプションを渡せるようにする。bibtex/biber のラウンドトリップは latexmk に一任する。
+
+2. **citation モード（`--natbib` / `--citeproc` / なし）をプロファイル項目で公開する。** `--natbib` は defaults file では指定不可（実証: `Unknown option "natbib"`）のためコマンドライン必須であり、`pandocExtraArgs` の隠し設定ではなく明示的なプロファイル設定にする。
+
+3. **bibstyle 衝突は反応型（`.aux` フィードバック）で解決する。** citation モード有効時の PDF 生成は2フェーズ化し、MdTex が LaTeX の実行を監理する（Pandoc に `--pdf-engine` で PDF まで一任しない）。シーケンス:
+   1. Pandoc で standalone `.tex` を生成（`\bibliographystyle{plainnat}` を含む）。
+   2. latex 1パス（draftmode）を走らせ `.aux` を得る。
+   3. `.aux` の `\bibstyle{...}` を読む。plainnat **以外**の bibstyle が1つでもあれば（=クラス/パッケージが内蔵）、`.tex` から `\bibliographystyle{plainnat}` 行を除去する。そうでなければそのまま維持する。
+   4. latexmk で `.tex` → PDF を生成。
+
+   **なぜ反応型か**: 実証（ACL/acmart/IEEEtran の3クラス）で、bibstyle を内蔵するクラス（ACL は `acl_natbib` を即時実行）と内蔵しないクラス（IEEEtran/acmart）があることが判明した。「plainnat を常に除去」は IEEEtran/acmart で bibstyle が消失して参考文献が壊滅し、「常に維持」は ACL で `.aux` に2重出力され bibtex が死ぬ。**単一の静的ルールで全クラスに効く変換は存在しない。** `.aux` の実態を見て分岐する反応型のみが、クラスを知らなくても全クラスで動く（3クラス全てで参考文献描画まで実証済み）。藤原惟氏『Pandocテンプレート』が最も強く推奨した「Phase1: Pandoc MD→LaTeX、Phase2: LaTeX→PDF を Makefile で分離」と同じワークフローを MdTex 内に組み込む。
+
+4. **defaults 方式で選択中テンプレートパックのフォルダを `TEXINPUTS` / `BIBINPUTS` / `BSTINPUTS` に注入する。** `.sty` / `.bst` / `.bib` を LaTeX に発見させる。`executePandocCommand` の `env`（既存の `process.env` マージ箇所）で、パス区切りで連結して既存値に追記する。
+
+**考慮した代替案**:
+- 方式 A（`latexmk -f` で衝突を突破）: bibtex の non-zero exit を握りつぶして最終ラウンドを回す。実装は最小だが、**エラー隠蔽により natbib の引用形式が壊れることを実証した**（正しい `Andrew and Gao (2007)` が `[2007]` の角括弧に化ける）。「厳格な構築」の方針にも反する。
+- 方式 B（テンプレートパックが Pandoc テンプレートを同條して静的に bibliographystyle 行を削除）: これは **ACL には効くが IEEEtran/acmart を壊す**（bibstyle が消失）ことが実証で判明した。加えて Pandoc バージョン（3.7 で `common.latex` 分割等）に追従するコストをパック作成者に押し付ける。ユーザーが「クラスを知らなくても動く」要件を満たさない。
+- 方式 C（MdTex 側で生成 `.tex` の `\bibliographystyle` 重複を常に除去）: 方式 B と同様、IEEEtran/acmart で bibstyle 消失を招く。静的ルールは不可（上記）。
+- 方式 D（`.sty` を走査してクラス内蔵 bibstyle を推定）: `\def\bibliographystyle`（acmart のような再定義）と実際の呼び出しを区別できず脆い。`.aux` の実態が真実。
+- 方式 E（citeproc に一本化し natbib を使わない）: 学会公式クラスが natbib 前提（`\RequirePackage{natbib}`）のため、citeproc では References の体裁が学会要件を満たさない。
+
+**結果**:
+
+**ポジティブ**:
+- ACL / acmart / IEEEtran 等、bibstyle を内蔵するクラスとしないクラスの**両方**で、参考文献付き本格論文が MdTex で完結する。ネイティブ LaTeX（手書き）と同等の引用形式（`\citet` → "Author (Year)"、References セクション）を出力することを3クラス全てで実証済み。
+- 衝突解決が反応型（`.aux` フィードバック）のため、ユーザーは自分の使うクラスが bibliographystyle を内蔵するか知る必要がない。テンプレートパック作成者にも Pandoc テンプレートの編集を求めない。
+- `-f` 不使用により、LaTeX/bibtex のエラーが隠蔽されず、ユーザーが原因を特定しやすい。
+
+**ネガティブ**:
+- citation モード有効時の PDF 生成が2フェーズ化（Pandoc→`.tex`→latex パス→反応型修正→latexmk）し、MdTex が LaTeX の実行を監理する。これは Pandoc `--pdf-engine` に PDF まで一任する現状パイプラインからの逸脱で、ADR-005「純粋パイプライン」の精神と部分的に緊張する。ただし反応型修正は `\bibliographystyle{plainnat}` の固定パターン除去に限定され、Pandoc バージョン非依存である。
+- `--pdf-engine-opt` の受け口と citation モード設定により、`buildPandocCommand` の引数生成と `ProfileSettings` の項目が増える。citation モードは `defaults` 方式時のみ有効化し、`builtin` では隠す UI 整理がセットで必要。
+- 2フェーズ化により中間 `.tex` と `.aux` の一時ファイル管理が増え、`tempFiles.ts` の lifecycle 対象を拡張する必要がある。
+- 反応型判定は「`.aux` に plainnat 以外の bibstyle があるか」に依存する。ユーザーが意図的に plainnat 互換の独自 bst を `-V biblio-style` で指定した場合、それが plainnat 以外なら plainnat 除去が働き、ユーザー指定の bst が残る（期待挙動）。エッジケースは文書化で対応する。
+
+---
+
 ## トレードオフ
 
 ### 外部ツールの使用
