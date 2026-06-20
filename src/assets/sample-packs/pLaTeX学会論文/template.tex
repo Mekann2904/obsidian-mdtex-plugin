@@ -1,0 +1,47 @@
+% template.tex — pLaTeX 専用クラス用 Pandoc カスタムテンプレート
+%
+% `pandoc -D latex` から派生。Pandoc 標準の partial（fonts.latex / font-settings.latex /
+% common.latex / hypersetup.latex / after-header-includes.latex）を意図的に呼ばない。
+% これらが fontspec / unicode-math / hyperref 等 pTeX 非互換パッケージをロードし、
+% pLaTeX 専用クラスと衝突するため。クラス側が本体（紙面・段組・フォント・見出し）を担う。
+%
+% partial を除外すると以下のマクロが未定義になる（default.latex 本体に直書きされている）。
+% これらは preamble.tex で補う:
+%   \pandocbounded  (画像のサイズ自動収め。依存: graphicx)
+%   \tightlist      (箇条書きの詰め)
+%   \phantomsection (数式ラベル用アンカー。依存: hyperref)
+%   \passthrough    (inline code。依存: listings)
+%
+% 【本文の書き方】クラスの公式サンプルと同様、タイトル・著者・所属・概要は本文先頭の
+% raw LaTeX ブロック（コードフェンスで {=latex}）で記述する。例（ipsj の場合）:
+%
+%   ```{=latex}
+%   \setcounter{巻数}{1}
+%   \title{和文タイトル}
+%   \etitle{English Title}
+%   \affiliate{LAB}{所属\\Affiliation}
+%   \author{和名}{English Name}{LAB}
+%   \begin{abstract}
+%   概要。
+%   \end{abstract}
+%   \maketitle
+%   ```
+%
+% 節構造は Markdown の # / ## で書く（Pandoc が \section / \subsection に変換し、
+% クラスが連番付きで組版する。見出しに手書きで番号を入れないこと）。
+
+\documentclass[
+$for(classoption)$
+  $classoption$$sep$,
+$endfor$
+]{$documentclass$}
+
+$for(header-includes)$
+$header-includes$
+$endfor$
+
+\begin{document}
+
+$body$
+
+\end{document}

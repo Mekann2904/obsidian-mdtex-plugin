@@ -15,6 +15,17 @@ import infoTemplate from "./sample-packs/情報系論文風/info-paper.tex";
 import infoPreamble from "./sample-packs/情報系論文風/preamble.tex";
 import infoTable from "./sample-packs/情報系論文風/simple-table.lua";
 
+import platexDefaults from "./sample-packs/pLaTeX学会論文/defaults.yaml";
+import platexTemplate from "./sample-packs/pLaTeX学会論文/template.tex";
+import platexPreamble from "./sample-packs/pLaTeX学会論文/preamble.tex";
+import platexSanitize from "./sample-packs/pLaTeX学会論文/sanitize-images.lua";
+import platexTable from "./sample-packs/pLaTeX学会論文/simple-table.lua";
+import platexCode from "./sample-packs/pLaTeX学会論文/code-blocks.lua";
+import platexSample from "./sample-packs/pLaTeX学会論文/sample.md";
+
+import skillDoc from "./templateDocs/SKILL.md";
+import readmeDoc from "./templateDocs/README.md";
+
 export interface SampleTemplateFile {
   /** テンプレートパックフォルダ内での相対ファイル名。 */
   name: string;
@@ -48,4 +59,34 @@ export const SAMPLE_TEMPLATE_PACKS: SampleTemplatePack[] = [
       { name: "simple-table.lua", content: infoTable },
     ],
   },
+  {
+    // pLaTeX 専用クラス（情報処理学会 ipsj 等）用の土台。LuaLaTeX で動くクラス
+    // （ltjsarticle / 情報系論文風）ではなく、pLaTeX/upLaTeX 専用 .cls を使う場合。
+    // ipsj.cls は著作権で同梱できないため、ユーザーに公式配布物を配置してもらう
+    // （defaults.yaml のコメントに手順）。partial 全除外の自前テンプレで pTeX 非互換
+    // パッケージを回避し、3 つの Lua フィルタで pLaTeX+dvi 経路特有の問題を解決する。
+    name: "pLaTeX学会論文",
+    files: [
+      { name: "defaults.yaml", content: platexDefaults },
+      { name: "template.tex", content: platexTemplate },
+      { name: "preamble.tex", content: platexPreamble },
+      { name: "sanitize-images.lua", content: platexSanitize },
+      { name: "simple-table.lua", content: platexTable },
+      { name: "code-blocks.lua", content: platexCode },
+      { name: "sample.md", content: platexSample },
+    ],
+  },
+];
+
+/**
+ * テンプレートフォルダ直下に置くガイド文書（ADR-008 の拡張）。
+ *
+ * SKILL.md（パック自作ガイド）と README.md（使い方）を、テンプレートフォルダの
+ * 初回 scaffold 時に展開する。パック（defaults.yaml を含むサブフォルダ）とは違い、
+ * これらはフォルダ直下のファイルでパック扱いされない。sampleTemplatePacks と同じく
+ * 「存在しない場合だけ作る」原則で、ユーザー編集を上書きしない。
+ */
+export const TEMPLATE_DOC_FILES: SampleTemplateFile[] = [
+  { name: "SKILL.md", content: skillDoc },
+  { name: "README.md", content: readmeDoc },
 ];

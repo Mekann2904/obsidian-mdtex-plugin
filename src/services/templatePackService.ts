@@ -11,6 +11,7 @@ import { ProfileSettings } from "../MdTexPluginSettings";
 import {
   SAMPLE_TEMPLATE_PACKS,
   SampleTemplatePack,
+  TEMPLATE_DOC_FILES,
 } from "../assets/sampleTemplatePacks";
 
 /**
@@ -108,6 +109,32 @@ export async function scaffoldSampleTemplatePacks(
     if (createdNow) created.push(pack.name);
   }
   return created;
+}
+
+/**
+ * テンプレートフォルダ直下のガイド文書（SKILL.md / README.md）を展開する。
+ *
+ * `TEMPLATE_DOC_FILES`（パック自作ガイド・使い方ガイド）をテンプレートフォルダ直下に
+ * 配置する。パック（defaults.yaml を含むサブフォルダ）とは違い、これらは直下のファイル
+ * でパック扱いされない。sampleTemplatePacks と同じく「存在しない場合だけ作る」原則で、
+ * ユーザーが編集したドキュメントを決して上書きしない（ADR-008）。
+ *
+ * ※新バージョンでガイドを更新しても、既存ユーザーには届かない（上書きしない原則）。
+ *   最新版はプラグインリポジトリの `src/assets/templateDocs/` を参照。
+ */
+export async function scaffoldTemplateDocs(
+  app: App,
+  templateFolder: string,
+): Promise<void> {
+  const folderPath = normalizeTemplateFolder(templateFolder);
+  if (!folderPath) return;
+
+  await ensureFolder(app, folderPath);
+
+  for (const file of TEMPLATE_DOC_FILES) {
+    const filePath = [folderPath, file.name].join("/");
+    await createIfMissing(app, filePath, file.content);
+  }
 }
 
 async function scaffoldSinglePack(

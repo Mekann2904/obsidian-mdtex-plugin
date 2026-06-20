@@ -15,6 +15,7 @@ import { addProfile, removeProfile } from "./services/profileManager";
 import {
   listTemplatePacks,
   scaffoldSampleTemplatePacks,
+  scaffoldTemplateDocs,
 } from "./services/templatePackService";
 import { t } from "./lang/helpers";
 import { discoverTexEngines, type DiscoveredEngine } from "./utils/texDiscover";
@@ -787,6 +788,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
 
     packSetting.addButton(button =>
       button.setButtonText(t("button_install_samples")).onClick(async () => {
+        await scaffoldTemplateDocs(this.app, currentProfile.templateFolder);
         const created = await scaffoldSampleTemplatePacks(
           this.app,
           currentProfile.templateFolder,

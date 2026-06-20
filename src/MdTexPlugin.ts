@@ -21,7 +21,7 @@ import {
   loadSettings as loadSettingsService,
   saveSettings as saveSettingsService,
 } from "./services/settingsService";
-import { scaffoldSampleTemplatePacks } from "./services/templatePackService";
+import { scaffoldSampleTemplatePacks, scaffoldTemplateDocs } from "./services/templatePackService";
 import { t } from "./lang/helpers";
 import { LatexCommandModal } from "./modal/LatexCommandModal";
 import { buildLatexCommands } from "./data/latexCommands";
@@ -135,8 +135,16 @@ export default class MdTexPlugin extends Plugin {
    * sampleTemplatesScaffolded を立てて再実行しない。
    */
   private async maybeScaffoldSamplePacks(): Promise<void> {
-    if (this.settings.sampleTemplatesScaffolded) return;
     const folder = this.getActiveProfileSettings().templateFolder || "MdTex Templates";
+    // ガイド文書（SKILL.md / README.md）は sampleTemplatesScaffolded フラグとは独立して毎回
+    // 試みる。createIfMissing が「存在しない場合だけ作る」なので安全で、バージョンアップで
+    // ガイドが追加されても既存ユーザーに届く（ユーザー編集分は上書きしない）。
+    try {
+      await scaffoldTemplateDocs(this.app, folder);
+    } catch (e) {
+      this.debugLog(`MdTexPlugin: template docs scaffold failed: ${e}`);
+    }
+    if (this.settings.sampleTemplatesScaffolded) return;
     try {
       await scaffoldSampleTemplatePacks(this.app, folder);
     } catch (e) {

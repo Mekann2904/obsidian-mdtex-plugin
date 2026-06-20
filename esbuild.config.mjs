@@ -46,6 +46,9 @@ const context = await esbuild.context({
 		".tex": "text",
 		".lua": "text",
 		".yaml": "text",
+		// テンプレートフォルダ直下のガイド（SKILL.md / README.md）とパックの sample.md
+		// も文字列として埋め込み、初回 scaffold で vault へ展開する。
+		".md": "text",
 	},
 });
 

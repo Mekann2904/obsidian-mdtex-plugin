@@ -12,6 +12,8 @@ MdTex Obsidianプラグインのすべての重要な変更をこのファイル
 - LaTeXコマンドのインラインゴーストテキスト補完
 - エラーハンドリング用診断サービス
 - コアサービスのユニットテストカバレッジ
+- pLaTeX 専用クラス（情報処理学会 ipsj 等）用サンプルテンプレートパック `pLaTeX学会論文`（partial 全除外の自前テンプレ＋pLaTeX 固有問題対応の Lua フィルタ 3 種）
+- テンプレートフォルダ直下のガイド文書（SKILL.md / README.md）の初回自動展開（`scaffoldTemplateDocs`）
 
 ### ドキュメント
 - 包括的なアーキテクチャドキュメントの追加（ARCHITECTURE.md）
@@ -22,6 +24,7 @@ MdTex Obsidianプラグインのすべての重要な変更をこのファイル
 - 設計決定ドキュメントの追加（docs/design-decisions.md）
 - リリースガイドドキュメントの追加（docs/release-guide.md）
 - README.mdの開発者ドキュメントリンクの更新
+- テンプレートパック作成ガイド（SKILL.md）に pLaTeX 専用クラスのセクション追加（LuaLaTeX/pLaTeX 決定木・partial 取捨選択ガイド・マクロ補完セット・デバッグ手順）
 
 ### 変更
 - Markdown lint統合の改善
