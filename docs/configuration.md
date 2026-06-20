@@ -106,7 +106,8 @@ PDF生成後に一時ファイル（.tex、.temp.md）を削除するかどう�
 MdTex は `-d <defaultsFilePath>` を渡し、以下を **defaults file 側で管理** します（コマンドライン `-V` が defaults file より優先される Pandoc の precedence 衝突を避けるため、MdTex 側では生成しません）。
 
 - `documentclass` / `classoption` / `fontsize` / `geometry:margin` / `graphics`（画像スケール）/ `pagestyle`（ページ番号）の各 `-V`
-- `--standalone`（defaults file の `standalone:` で制御。`standalone: false` で本文フラグメントを出力）
+- `pdf-engine` / `pdf-engine-opts`（LaTeX エンジンと PDF エンジン追加オプション）
+- `standalone`（defaults file の `standalone:` で制御。`standalone: false` で本文フラグメントを出力）
 - ユーザープリアンブル（`headerIncludes`）とキャプション語／参照接頭辞（defaults file の `metadata:` / `include-in-header` で管理）
 - beamer ターゲット（defaults file の `to: beamer` で管理）
 
@@ -114,7 +115,7 @@ MdTex は `-d <defaultsFilePath>` を渡し、以下を **defaults file 側で�
 
 - Obsidian 記法の TS 前処理（`%% %%` コメント・WikiLink・トランスクルージョン・コールアウト等）
 - Lua フィルタ（コールアウト / Mermaid 言語削除 / DOCX の LaTeX コマンド処理）
-- `--pdf-engine`（LaTeX エンジン）、`--resource-path`、出力フォーマット（pdf/docx/latex）
+- `--resource-path`、出力フォーマット（pdf/docx/latex）
 - `--include-in-header` に注入する MdTex 固有の断片（Obsidian コールアウト定義・`--listings` 互換の codelisting 環境定義・ドラフトモードスニペット）
 
 > **ガードレール**: `defaults` 方式で defaults file のパスが未指定のときは、変換前にエラー通知してブロックします。
@@ -164,7 +165,7 @@ my-templates/
 
 ### LaTeXエンジン
 
-PDF生成に使用するLaTeXエンジンを指定します。
+PDF生成に使用するLaTeXエンジンを指定します。**builtin 方式でのみ表示・使用されます**。defaults 方式では defaults file の `pdf-engine` が使用されます。
 
 - **デフォルト**: `lualatex`
 - **選択肢**: `lualatex`、`xelatex`、`pdflatex`、`latexmk`
@@ -173,7 +174,7 @@ PDF生成に使用するLaTeXエンジンを指定します。
 
 ### PDFエンジン追加オプション（ADR-009）
 
-PDFエンジン（latexmk 等）に追加オプションを渡します。スペース区切りで複数指定でき、各トークンが Pandoc の `--pdf-engine-opt=<トークン>` になります。
+PDFエンジン（latexmk 等）に追加オプションを渡します。**builtin 方式でのみ表示・使用されます**。defaults 方式では defaults file の `pdf-engine-opts` が使用されます。スペース区切りで複数指定でき、各トークンが Pandoc の `--pdf-engine-opt=<トークン>` になります。
 
 - **デフォルト**: 空
 - **例**: `-lualatex`、`-lualatex -interaction=nonstopmode`

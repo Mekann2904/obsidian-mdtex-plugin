@@ -5,7 +5,7 @@
 
 import { isDefaultsTemplateMode, ProfileSettings } from "../MdTexPluginSettings";
 import { normalizeFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
-import { normalizeLatexEngine } from "../utils/texDiscover";
+import { normalizeLatexEngine } from "../utils/binDiscover";
 import * as path from "path";
 
 export type OutputFormat = "pdf" | "latex" | "docx";
@@ -68,14 +68,20 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   args.push("-o", normalizeFsPath(options.outputPath));
 
   if (options.format === "pdf") {
-    // latexEngine にフルパスが入力されても basename に正規化する（年度更新耐性）。
-    // Pandoc は basename を PATH から探す（buildTexAwareEnv で TeX bin が PATH に追加済み）。
-    const engineBare = normalizeLatexEngine(profile.latexEngine) || "lualatex";
-    args.push(`--pdf-engine=${engineBare}`);
-    // ADR-009: latexmk 等の PDF エンジンに追加オプションを渡す。各トークンを
-    // --pdf-engine-opt=<token> に展開する（latexmk のサブエンジン指定 -lualatex 等に使用）。
-    for (const opt of tokenizePdfEngineOpts(profile.pdfEngineOpts)) {
-      args.push(`--pdf-engine-opt=${opt}`);
+    // builtin 方式では MdTex プロファイルが PDF エンジンを所有する。
+    // defaults 方式では defaults.yaml の `pdf-engine` / `pdf-engine-opts` に委譲する。
+    // コマンドライン `--pdf-engine` は defaults file より優先されるため、defaults 方式でここに出すと
+    // テンプレートパック（例: pLaTeX 学会論文の latexmk + -latex=platex + -pdfdvi）を壊す。
+    if (!isDefaults) {
+      // latexEngine にフルパスが入力されても basename に正規化する（年度更新耐性）。
+      // Pandoc は basename を PATH から探す（buildTexAwareEnv で TeX bin が PATH に追加済み）。
+      const engineBare = normalizeLatexEngine(profile.latexEngine) || "lualatex";
+      args.push(`--pdf-engine=${engineBare}`);
+      // ADR-009: latexmk 等の PDF エンジンに追加オプションを渡す。各トークンを
+      // --pdf-engine-opt=<token> に展開する（latexmk のサブエンジン指定 -lualatex 等に使用）。
+      for (const opt of tokenizePdfEngineOpts(profile.pdfEngineOpts)) {
+        args.push(`--pdf-engine-opt=${opt}`);
+      }
     }
     // defaults 方式では beamer ターゲット（`-t beamer`）も defaults file の `to:` で管理するため、
     // documentClass 由来の `-t beamer` 生成をスキップする。builtin 方式は現状どおり。
@@ -146,6 +152,9 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   // builtin 方式は現状どおり GUI の useStandalone で `--standalone` を制御する。
   if (!isDefaults && profile.useStandalone) args.push("--standalone");
 
+  // pandocPath は trim のみ（basename 正規化しない）。TeX と違い pandoc は年度更新でパスが
+  // 消滅しないため、ユーザーがフルパス（= 自動検出ドロップダウンで選んだ binPath、または
+  // 手入力した特定バージョン）を入れたらそのまま尊重する。空なら PATH の `pandoc`。
   const pandocPath = profile.pandocPath.trim() || "pandoc";
   return { command: pandocPath, args };
 }
@@ -268,11 +277,7 @@ export function buildLatexSearchEnv(
  * TeX の検索パス変数の既存値の末尾に `dir` を追加し、さらにセパレータで終える。
  * `existing` が undefined / 空文字のときは `dir` 単独＋末尾セパレータを返す。
  */
-function appendSearchPath(
-  existing: string | undefined,
-  dir: string,
-  sep: string,
-): string {
+function appendSearchPath(existing: string | undefined, dir: string, sep: string): string {
   const base = existing && existing.length > 0 ? existing + sep : "";
   return `${base}${dir}${sep}`;
 }

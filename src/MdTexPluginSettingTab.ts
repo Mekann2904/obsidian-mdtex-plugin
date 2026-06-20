@@ -18,12 +18,42 @@ import {
   scaffoldTemplateDocs,
 } from "./services/templatePackService";
 import { t } from "./lang/helpers";
-import { discoverTexEngines, type DiscoveredEngine } from "./utils/texDiscover";
+import {
+  discoverTexEngines,
+  discoverPandoc,
+  discoverPandocCrossref,
+  discoverMarkdownlint,
+  type DiscoveredBinary,
+} from "./utils/binDiscover";
+
+/**
+ * 折りたたみセクションの「既定の開閉」。
+ * `true` = 既定で開、`false` = 既定で閉。
+ * `settings.collapsedSections[key]` でユーザーが明示的に変えた状態が優先される
+ * （`true` = 折りたたまれている = 閉、`false` = 展開されている = 開）。
+ *
+ * Profile / Output / LaTeX engine は設定の入口なので常時展開（この表に含めない）。
+ * Preamble / YAML palette / Localization / Extensions / Advanced は既定で閉じ、
+ * 必要なときだけ開く漸進的開示とする。
+ */
+const COLLAPSIBLE_DEFAULT_OPEN: Record<string, boolean> = {
+  preamble: false,
+  "latex-palette": false,
+  localization: false,
+  extensions: false,
+  advanced: false,
+  // セクション3 内の builtin 既定モード用サブセクション。
+  "document-frame": false, // 文書の体裁（ドキュメントクラス・フォントサイズ・マージン等）
+  "pdf-engine-advanced": false, // PDF エンジン追加オプション（latexmk 上級者向け）
+};
 
 export class PandocPluginSettingTab extends PluginSettingTab {
   plugin: MdTexPlugin;
-  /** 設定タブ描画時に自動探索した TeX エンジン一覧。再描画を跨いで保持する。 */
-  private discoveredEngines: DiscoveredEngine[] | undefined;
+  /** 設定タブ描画時に自動探索した外部バイナリ一覧。再描画を跨いで保持する。 */
+  private discoveredEngines: DiscoveredBinary[] | undefined;
+  private discoveredPandoc: DiscoveredBinary[] | undefined;
+  private discoveredPandocCrossref: DiscoveredBinary[] | undefined;
+  private discoveredMarkdownlint: DiscoveredBinary[] | undefined;
 
   constructor(app: App, plugin: MdTexPlugin) {
     super(app, plugin);
@@ -32,6 +62,136 @@ export class PandocPluginSettingTab extends PluginSettingTab {
 
   display(): void {
     void this.render();
+  }
+
+  /**
+   * 自動検出＋ドロップダウン式の「外部ツールのパス」設定行を描画する（共通ヘルパー）。
+   *
+   * pandoc / TeX エンジン / pandoc-crossref / markdownlint-cli2 で同じ UX を提供する:
+   * - 検出された binPath をドロップダウンで選べる
+   * - 末尾に「カスタム」を置き、選ぶとテキスト入力を出す（漸進的開示）
+   * - 1件も検出されなければドロップダウンは無効化し、テキスト入力で手動指定を促す
+   *
+   * pandoc/TeX 専用の i18n キーが既にあるため、各 i18n キーはリテラル型に絞って安全に受け取る。
+   * 返り値の Setting は、呼び出し側で settingEl.toggle() 等の後処理（連動表示）が必要な場合に使う。
+   */
+  private addDiscoveredBinarySetting(
+    parent: HTMLElement,
+    discovered: DiscoveredBinary[],
+    currentValue: string,
+    nameKey:
+      | "setting_pandoc_path_name"
+      | "setting_latex_engine_name"
+      | "setting_crossref_path_name"
+      | "setting_markdownlint_path_name",
+    descKey:
+      | "setting_pandoc_path_desc"
+      | "setting_latex_engine_desc"
+      | "setting_crossref_path_desc"
+      | "setting_markdownlint_path_desc",
+    notFoundKey:
+      | "setting_pandoc_path_not_found_dropdown"
+      | "setting_latex_engine_not_found_dropdown"
+      | "setting_crossref_path_not_found_dropdown"
+      | "setting_markdownlint_path_not_found_dropdown",
+    customKey:
+      | "setting_pandoc_path_custom"
+      | "setting_latex_engine_custom"
+      | "setting_crossref_path_custom"
+      | "setting_markdownlint_path_custom",
+    placeholderKey:
+      | "setting_pandoc_path_placeholder"
+      | "setting_latex_engine_placeholder"
+      | "setting_crossref_path_placeholder"
+      | "setting_markdownlint_path_placeholder",
+    onApply: (value: string) => Promise<void>,
+  ): Setting {
+    const hasDetected = discovered.length > 0;
+    const currentBinPaths = discovered.map(b => b.binPath);
+    const isCustomValue = currentValue !== "" && !currentBinPaths.includes(currentValue);
+
+    const setting = new Setting(parent)
+      .setName(t(nameKey))
+      .setDesc(t(descKey))
+      .addDropdown(dropdown => {
+        if (!hasDetected) {
+          dropdown.setDisabled(true);
+          dropdown.addOption("", t(notFoundKey));
+          dropdown.setValue("");
+        } else {
+          for (const b of discovered) {
+            dropdown.addOption(b.binPath, `${b.name} (${b.dir})`);
+          }
+          dropdown.addOption("__custom__", t(customKey));
+          dropdown.setValue(isCustomValue ? "__custom__" : currentValue);
+        }
+        dropdown.onChange(async value => {
+          if (value === "__custom__") {
+            // 設定値は維持したままテキスト入力を表示するため再描画。
+            this.display();
+          } else if (value) {
+            await onApply(value);
+            this.display();
+          }
+        });
+      });
+    // テキスト入力は「カスタム」選択時、または検出0件で手動指定が必要な場合のみ表示。
+    if (!hasDetected || isCustomValue) {
+      setting.addText(text =>
+        text
+          .setPlaceholder(t(placeholderKey))
+          .setValue(currentValue)
+          .onChange(async value => {
+            await onApply(value);
+          }),
+      );
+    }
+    return setting;
+  }
+
+  /**
+   * セクションを開くべきか（ユーザー設定 > 既定値）。
+   * `collapsedSections[key]` は「折りたたまれている（閉）」を意味するので、
+   * 開状態はその否定。未設定なら `COLLAPSIBLE_DEFAULT_OPEN` に従う。
+   */
+  private sectionOpen(sectionKey: string): boolean {
+    const collapsed = this.plugin.settings.collapsedSections[sectionKey];
+    if (collapsed !== undefined) return !collapsed;
+    return COLLAPSIBLE_DEFAULT_OPEN[sectionKey] ?? true;
+  }
+
+  private async persistSectionOpen(sectionKey: string, open: boolean): Promise<void> {
+    this.plugin.settings.collapsedSections[sectionKey] = !open;
+    await this.plugin.saveSettings();
+  }
+
+  /**
+   * 折りたたみセクション（`<details>/<summary>`）を生成し、内容を入れる body を返す。
+   *
+   * `<summary>` の中に `Setting#setHeading()` を置くことで Obsidian 公式の見出しスタイル
+   * （`.setting-item-heading`）をそのまま再利用し、テーマ間で外観が揃う。矢印は
+   * `summary::before`（styles.css）で出し、開閉で 90° 回転する。開閉状態は
+   * `data.json`（`collapsedSections`）へ永続化される。
+   */
+  private createCollapsibleSection(title: string, sectionKey: string): HTMLElement {
+    const details = this.containerEl.createEl("details", { cls: "mdtex-nested-settings" });
+    details.open = this.sectionOpen(sectionKey);
+    details.addEventListener("toggle", () => {
+      void this.persistSectionOpen(sectionKey, details.open);
+    });
+
+    // summary 自体を Obsidian の見出し行（setting-item-heading）として描画する。
+    // summary の中に Setting をネストすると、テーマ側の .setting-item レイアウトと
+    // details/summary のレイアウトが干渉して矢印と見出しがずれて見えるため、
+    // ここだけは最小限の DOM を明示的に作る。
+    const summary = details.createEl("summary", {
+      cls: "mdtex-settings-summary setting-item setting-item-heading",
+    });
+    const info = summary.createDiv({ cls: "setting-item-info" });
+    info.createDiv({ cls: "setting-item-name", text: title });
+    summary.createDiv({ cls: "setting-item-control" });
+
+    return details.createDiv({ cls: "mdtex-nested-settings-body" });
   }
 
   private async render(): Promise<void> {
@@ -51,12 +211,29 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     if (this.discoveredEngines === undefined) {
       this.discoveredEngines = discoverTexEngines(process.platform, process.env.PATH ?? "");
     }
+    // 外部バイナリも設定タブ描画時に自動探索（初回のみキャッシュ）。TeX エンジンと同じ仕組み。
+    if (this.discoveredPandoc === undefined) {
+      this.discoveredPandoc = discoverPandoc(process.platform, process.env.PATH ?? "");
+    }
+    if (this.discoveredPandocCrossref === undefined) {
+      this.discoveredPandocCrossref = discoverPandocCrossref(
+        process.platform,
+        process.env.PATH ?? "",
+      );
+    }
+    if (this.discoveredMarkdownlint === undefined) {
+      this.discoveredMarkdownlint = discoverMarkdownlint(process.platform, process.env.PATH ?? "");
+    }
 
     // =================================================================
-    // 1. プロファイル管理セクション
+    // 1. プロファイル管理セクション（常時展開）
     // =================================================================
-    containerEl.createEl("h3", { text: t("heading_profile") });
+    new Setting(containerEl).setName(t("heading_profile")).setHeading();
 
+    // アクティブプロファイル選択 ＋ 現在プロファイルの削除（ゴミ箱アイコン）を1行にまとめる。
+    // 削除は「現在アクティブなプロファイル」を消す操作なので、選択ドロップダウンの隣に
+    // コンパクトなアイコンボタンとして置く（Obsidian 標準の extra-button パターン）。
+    const profileCount = Object.keys(settings.profiles).length;
     new Setting(containerEl)
       .setName(t("setting_active_profile_name"))
       .setDesc(t("setting_active_profile_desc"))
@@ -70,54 +247,14 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
           this.display(); // 再描画して値を更新
         });
-      });
-
-    // 新規プロファイル作成
-    let newProfileName = "";
-    new Setting(containerEl)
-      .setName(t("setting_create_profile_name"))
-      .setDesc(t("setting_create_profile_desc"))
-      .addText(text =>
-        text.setPlaceholder(t("placeholder_new_profile")).onChange(value => {
-          newProfileName = value;
-        }),
-      )
-      .addButton(button =>
-        button
-          .setButtonText(t("button_add_profile"))
-          .setCta()
+      })
+      .addExtraButton(btn => {
+        btn
+          .setIcon("trash")
+          .setTooltip(t("button_delete_profile"))
+          .setDisabled(profileCount <= 1)
           .onClick(async () => {
-            if (!newProfileName || settings.profiles[newProfileName]) {
-              new Notice(t("notice_invalid_profile"));
-              return;
-            }
-            // 現在のプロファイルをコピーして作成
-            const createdName = newProfileName;
-            const nextState = addProfile(
-              { profiles: settings.profiles, activeProfile: settings.activeProfile },
-              createdName,
-              currentProfile,
-            );
-            settings.profiles = nextState.profiles;
-            settings.activeProfile = nextState.activeProfile;
-            await this.plugin.saveSettings();
-            newProfileName = "";
-            this.display();
-            new Notice(t("notice_profile_created", [createdName]));
-          }),
-      );
-
-    // プロファイル削除
-    new Setting(containerEl)
-      .setName(t("setting_delete_profile_name"))
-      .setDesc(t("setting_delete_profile_desc"))
-      .addButton(button => {
-        button
-          .setButtonText(t("button_delete_profile"))
-          .setWarning()
-          .setDisabled(Object.keys(settings.profiles).length <= 1)
-          .onClick(async () => {
-            if (Object.keys(settings.profiles).length <= 1) return;
+            if (profileCount <= 1) return;
             if (!confirm(t("confirm_delete_profile", [activeProfileKey]))) return;
 
             const nextState = removeProfile(
@@ -132,10 +269,52 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           });
       });
 
+    // 新規プロファイル作成（Enter キーでも作成できる）。現在のプロファイルをコピーして作る。
+    let newProfileName = "";
+    const createProfile = async () => {
+      if (!newProfileName || settings.profiles[newProfileName]) {
+        new Notice(t("notice_invalid_profile"));
+        return;
+      }
+      const createdName = newProfileName;
+      const nextState = addProfile(
+        { profiles: settings.profiles, activeProfile: settings.activeProfile },
+        createdName,
+        currentProfile,
+      );
+      settings.profiles = nextState.profiles;
+      settings.activeProfile = nextState.activeProfile;
+      await this.plugin.saveSettings();
+      newProfileName = "";
+      this.display();
+      new Notice(t("notice_profile_created", [createdName]));
+    };
+    new Setting(containerEl)
+      .setName(t("setting_create_profile_name"))
+      .setDesc(t("setting_create_profile_desc"))
+      .addText(text => {
+        text.setPlaceholder(t("placeholder_new_profile")).onChange(value => {
+          newProfileName = value;
+        });
+        // Enter で即作成（名前入力後、ボタンをクリックしなくて済む）
+        text.inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void createProfile();
+          }
+        });
+      })
+      .addButton(button =>
+        button
+          .setButtonText(t("button_add_profile"))
+          .setCta()
+          .onClick(() => void createProfile()),
+      );
+
     // =================================================================
-    // 2. 変換・出力設定 (General)
+    // 2. 変換・出力設定 (General)（常時展開）
     // =================================================================
-    containerEl.createEl("h3", { text: t("heading_general_output") });
+    new Setting(containerEl).setName(t("heading_general_output")).setHeading();
 
     new Setting(containerEl)
       .setName(t("setting_output_format_name"))
@@ -150,15 +329,24 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         });
       });
 
-    new Setting(containerEl)
-      .setName(t("setting_pandoc_path_name"))
-      .setDesc(t("setting_pandoc_path_desc"))
-      .addText(text =>
-        text.setValue(currentProfile.pandocPath).onChange(async value => {
-          currentProfile.pandocPath = value;
-          await this.plugin.saveSettings();
-        }),
-      );
+    // ADR-009: pandoc のパスも TeX エンジンと同じ「自動検出＋ドロップダウン選択」。
+    // 実行時は pandocCommandBuilder で trim のみ（basename 正規化しない）。フルパス（検出で選んだ
+    // binPath、または手入力した特定バージョン）をそのまま尊重する。TeX と違い pandoc は年度更新で
+    // パスが消滅しないため、正規化の安全網は不要（TeX 専用）。空なら PATH の `pandoc`。
+    this.addDiscoveredBinarySetting(
+      containerEl,
+      this.discoveredPandoc ?? [],
+      currentProfile.pandocPath,
+      "setting_pandoc_path_name",
+      "setting_pandoc_path_desc",
+      "setting_pandoc_path_not_found_dropdown",
+      "setting_pandoc_path_custom",
+      "setting_pandoc_path_placeholder",
+      async value => {
+        currentProfile.pandocPath = value;
+        await this.plugin.saveSettings();
+      },
+    );
 
     new Setting(containerEl)
       .setName(t("setting_output_dir_name"))
@@ -191,9 +379,9 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       );
 
     // =================================================================
-    // 3. LaTeX / PDF 設定
+    // 3. LaTeX / PDF 設定（常時展開：テンプレート方式の入口なので）
     // =================================================================
-    containerEl.createEl("h3", { text: t("heading_latex_engine") });
+    new Setting(containerEl).setName(t("heading_latex_engine")).setHeading();
 
     // 文書テンプレート方式（ADR-007）: このセクションの他項目の意味を決める「入口」。
     // builtin → GUI 設定値で枠を構築、defaults → defaults file に枠を委譲。
@@ -219,76 +407,55 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       await this.renderDefaultsModeSettings(currentProfile);
     }
 
-    // ADR-009: latexEngine は「自動検出＋ドロップダウン選択」が基本。ドロップダウンの末尾に
-    // 「カスタム」を用意し、それを選んだときだけテキスト入力を出す（漸進的開示）。
-    // どちらを選んでも実行時は normalizeLatexEngine で basename に正規化され PATH 解決される
-    // ため、年度更新に強い（texDiscover.ts）。TeX が見つからない環境ではテキスト入力で手動指定。
-    const engines = this.discoveredEngines ?? [];
-    const hasDetected = engines.length > 0;
-    const currentBinPaths = engines.map(e => e.binPath);
-    const isCustomValue = currentProfile.latexEngine !== "" && !currentBinPaths.includes(currentProfile.latexEngine);
-
-    const engineSetting = new Setting(containerEl)
-      .setName(t("setting_latex_engine_name"))
-      .setDesc(t("setting_latex_engine_desc"))
-      .addDropdown(dropdown => {
-        if (!hasDetected) {
-          // TeX が見つからない環境：ドロップダウンは無効化し、テキスト入力で手動指定を促す。
-          dropdown.setDisabled(true);
-          dropdown.addOption("", t("setting_latex_engine_not_found_dropdown"));
-          dropdown.setValue("");
-        } else {
-          for (const e of engines) {
-            dropdown.addOption(e.binPath, `${e.engine} (${e.dir})`);
-          }
-          dropdown.addOption("__custom__", t("setting_latex_engine_custom"));
-          // 現在値が検出済み binPath に一致すればそれ、さもなくば「カスタム」。
-          dropdown.setValue(isCustomValue ? "__custom__" : currentProfile.latexEngine);
-        }
-        dropdown.onChange(async value => {
-          if (value === "__custom__") {
-            // latexEngine は維持したままテキスト入力を表示するため再描画。
-            this.display();
-          } else if (value) {
-            currentProfile.latexEngine = value;
-            await this.plugin.saveSettings();
-            this.display();
-          }
-        });
-      });
-    // テキスト入力は「カスタム」選択時、または検出0件（TeX未検出）で手動指定が必要な場合のみ表示。
-    // 通常は非表示にして「入力が必須」感を消す。
-    if (!hasDetected || isCustomValue) {
-      engineSetting.addText(text =>
-        text
-          .setPlaceholder(t("setting_latex_engine_placeholder"))
-          .setValue(currentProfile.latexEngine)
-          .onChange(async value => {
-            currentProfile.latexEngine = value;
-            await this.plugin.saveSettings();
-          }),
-      );
-    }
-
-    // ADR-009: latexmk 等の PDF エンジンに追加オプション（--pdf-engine-opt）を渡す。
-    // bibtex/biber のラウンドトリップを通す学会論文などで latexmk + -lualatex を使う場合に必要。
-    new Setting(containerEl)
-      .setName(t("setting_pdf_engine_opts_name"))
-      .setDesc(t("setting_pdf_engine_opts_desc"))
-      .addText(text =>
-        text
-          .setValue(currentProfile.pdfEngineOpts ?? "")
-          .setPlaceholder("-lualatex")
-          .onChange(async value => {
-            currentProfile.pdfEngineOpts = value;
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    // 委譲対象の GUI 項目（ドキュメントクラス・フォントサイズ・マージン・ページ番号・画像スケール）は
-    // defaults 方式では defaults file 側で管理するため非表示。builtin 方式のみ表示する。
+    // LaTeX エンジン / PDF エンジン追加オプションは builtin 方式の責務。
+    // defaults 方式では defaults.yaml の `pdf-engine` / `pdf-engine-opts` に委譲するため、UI でも非表示にする。
     if (!isDefaultsMode) {
-      new Setting(containerEl)
+      // ADR-009: latexEngine は「自動検出＋ドロップダウン選択」が基本（他の外部バイナリと共通 UX）。
+      // 実行時は normalizeLatexEngine で basename に正規化され PATH 解決されるため、年度更新に強い
+      // （binDiscover.ts）。TeX が見つからない環境ではドロップダウンが無効化されテキスト入力で手動指定。
+      this.addDiscoveredBinarySetting(
+        containerEl,
+        this.discoveredEngines ?? [],
+        currentProfile.latexEngine,
+        "setting_latex_engine_name",
+        "setting_latex_engine_desc",
+        "setting_latex_engine_not_found_dropdown",
+        "setting_latex_engine_custom",
+        "setting_latex_engine_placeholder",
+        async value => {
+          currentProfile.latexEngine = value;
+          await this.plugin.saveSettings();
+        },
+      );
+
+      // ADR-009: latexmk 等の PDF エンジンに追加オプション（--pdf-engine-opt）を渡す。
+      // bibtex/biber のラウンドトリップを通す学会論文などで latexmk + -lualatex を使う場合に必要。
+      // ほとんどのユーザーは使わない上級者向け設定なので、折りたたみで隠す。
+      const pdfAdvBody = this.createCollapsibleSection(
+        t("heading_pdf_engine_advanced"),
+        "pdf-engine-advanced",
+      );
+      new Setting(pdfAdvBody)
+        .setName(t("setting_pdf_engine_opts_name"))
+        .setDesc(t("setting_pdf_engine_opts_desc"))
+        .addText(text =>
+          text
+            .setValue(currentProfile.pdfEngineOpts ?? "")
+            .setPlaceholder("-lualatex")
+            .onChange(async value => {
+              currentProfile.pdfEngineOpts = value;
+              await this.plugin.saveSettings();
+            }),
+        );
+
+      // 委譲対象の GUI 項目（ドキュメントクラス・フォントサイズ・マージン・ページ番号・画像スケール）は
+      // defaults 方式では defaults file 側で管理するため非表示。builtin 方式のみ折りたたみ「文書の体裁」に表示。
+      const frameBody = this.createCollapsibleSection(
+        t("heading_document_frame"),
+        "document-frame",
+      );
+
+      new Setting(frameBody)
         .setName(t("setting_document_class_name"))
         .setDesc(t("setting_document_class_desc"))
         .addText(text =>
@@ -298,7 +465,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           }),
         );
 
-      new Setting(containerEl)
+      new Setting(frameBody)
         .setName(t("setting_document_class_opts_name"))
         .setDesc(t("setting_document_class_opts_desc"))
         .addText(text =>
@@ -308,7 +475,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           }),
         );
 
-      new Setting(containerEl)
+      new Setting(frameBody)
         .setName(t("setting_font_size_name"))
         .setDesc(t("setting_font_size_desc"))
         .addText(text =>
@@ -318,30 +485,30 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           }),
         );
 
-      new Setting(containerEl)
+      // マージン指定トグル → マージン幅入力を局所的に表示/非表示（全再描画しない）。
+      // marginSizeSetting をクロージャで遅延参照し、フォーカス・スクロール位置を保持したまま表示切替。
+      new Setting(frameBody)
         .setName(t("setting_use_margin_name"))
         .setDesc(t("setting_use_margin_desc"))
         .addToggle(toggle =>
           toggle.setValue(currentProfile.useMarginSize).onChange(async value => {
             currentProfile.useMarginSize = value;
+            marginSizeSetting.settingEl.toggle(value);
             await this.plugin.saveSettings();
-            this.display(); // 再描画でMargin Size入力を有効/無効化
           }),
         );
+      const marginSizeSetting = new Setting(frameBody)
+        .setName(t("setting_margin_size_name"))
+        .setDesc(t("setting_margin_size_desc"))
+        .addText(text =>
+          text.setValue(currentProfile.marginSize).onChange(async value => {
+            currentProfile.marginSize = value;
+            await this.plugin.saveSettings();
+          }),
+        );
+      marginSizeSetting.settingEl.toggle(currentProfile.useMarginSize);
 
-      if (currentProfile.useMarginSize) {
-        new Setting(containerEl)
-          .setName(t("setting_margin_size_name"))
-          .setDesc(t("setting_margin_size_desc"))
-          .addText(text =>
-            text.setValue(currentProfile.marginSize).onChange(async value => {
-              currentProfile.marginSize = value;
-              await this.plugin.saveSettings();
-            }),
-          );
-      }
-
-      new Setting(containerEl)
+      new Setting(frameBody)
         .setName(t("setting_page_numbers_name"))
         .setDesc(t("setting_page_numbers_desc"))
         .addToggle(toggle =>
@@ -351,7 +518,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           }),
         );
 
-      new Setting(containerEl)
+      new Setting(frameBody)
         .setName(t("setting_image_scale_name"))
         .setDesc(t("setting_image_scale_desc"))
         .addText(text =>
@@ -363,32 +530,22 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     }
 
     // =================================================================
-    // 4. LaTeX Preamble (Custom Header) - Improved UI
+    // 4. LaTeX Preamble (Custom Header) - 折りたたみ
     // defaults 方式では headerIncludes も defaults file 側で管理するため非表示。
     // =================================================================
     if (!isDefaultsMode) {
-      containerEl.createEl("h3", { text: t("heading_preamble") });
+      const preambleBody = this.createCollapsibleSection(t("heading_preamble"), "preamble");
 
-      const preambleDesc = containerEl.createDiv({ cls: "setting-item-description" });
+      const preambleDesc = preambleBody.createDiv({ cls: "setting-item-description" });
       preambleDesc.setText(t("preamble_desc"));
       preambleDesc.style.marginBottom = "8px";
 
-      // Create a container for the textarea to give it specific styling
-      const editorContainer = containerEl.createDiv();
-      editorContainer.style.width = "100%";
-
-      const textArea = editorContainer.createEl("textarea");
-      textArea.style.width = "100%";
-      textArea.style.height = "400px"; // 十分な高さを確保
-      textArea.style.fontFamily = "var(--font-monospace)"; // 等幅フォント
-      textArea.style.fontSize = "13px";
-      textArea.style.whiteSpace = "pre"; // 自動折り返しを無効化（コードとして表示）
-      textArea.style.overflow = "auto"; // スクロールバー
-      textArea.style.resize = "vertical"; // 縦方向のみリサイズ可
-      textArea.spellcheck = false; // スペルチェック無効
-
+      // 大きなコード編集領域は Setting API（control 領域が狭くなる想定）ではなく
+      // 直接 textarea を置く。スタイルは共通クラス .mdtex-code-area に集約（インラインstyle排除）。
+      const textArea = preambleBody.createEl("textarea", { cls: "mdtex-code-area" });
       textArea.value = currentProfile.headerIncludes;
       textArea.placeholder = t("placeholder_preamble");
+      textArea.spellcheck = false; // スペルチェック無効
 
       textArea.addEventListener("change", async () => {
         currentProfile.headerIncludes = textArea.value;
@@ -396,7 +553,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       });
 
       // Reset / Copy / Fullscreen Buttons
-      const btnContainer = containerEl.createDiv();
+      const btnContainer = preambleBody.createDiv();
       btnContainer.style.marginTop = "8px";
       btnContainer.style.display = "flex";
       btnContainer.style.gap = "8px";
@@ -431,15 +588,15 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     } // end preamble section (defaults 方式では非表示)
 
     // =================================================================
-    // 5. LaTeX Command Palette (YAML)
+    // 5. LaTeX Command Palette (YAML) - 折りたたみ
     // =================================================================
-    containerEl.createEl("h3", { text: t("heading_latex_palette") });
-    containerEl.createEl("p", {
+    const paletteBody = this.createCollapsibleSection(t("heading_latex_palette"), "latex-palette");
+    paletteBody.createEl("p", {
       text: t("setting_latex_yaml_desc"),
       cls: "setting-item-description",
     });
 
-    new Setting(containerEl)
+    new Setting(paletteBody)
       .setName(t("setting_enable_latex_palette_name"))
       .setDesc(t("setting_enable_latex_palette_desc"))
       .addToggle(toggle =>
@@ -449,7 +606,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         }),
       );
 
-    new Setting(containerEl)
+    new Setting(paletteBody)
       .setName(t("setting_enable_latex_ghost_name"))
       .setDesc(t("setting_enable_latex_ghost_desc"))
       .addToggle(toggle =>
@@ -459,15 +616,11 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         }),
       );
 
-    const yamlArea = containerEl.createEl("textarea");
-    yamlArea.style.width = "100%";
-    yamlArea.style.height = "220px";
-    yamlArea.style.fontFamily = "var(--font-monospace)";
-    yamlArea.style.fontSize = "13px";
-    yamlArea.style.whiteSpace = "pre";
-    yamlArea.style.overflow = "auto";
-    yamlArea.spellcheck = false;
+    const yamlArea = paletteBody.createEl("textarea", {
+      cls: "mdtex-code-area mdtex-code-area--small",
+    });
     yamlArea.value = settings.latexCommandsYaml;
+    yamlArea.spellcheck = false;
     const saveYaml = debounce(
       async () => {
         await this.plugin.saveSettings();
@@ -481,7 +634,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       saveYaml();
     });
 
-    const yamlBtnRow = containerEl.createDiv({ cls: "setting-item" });
+    const yamlBtnRow = paletteBody.createDiv({ cls: "setting-item" });
     yamlBtnRow.style.display = "flex";
     yamlBtnRow.style.justifyContent = "flex-end";
     yamlBtnRow.style.gap = "8px";
@@ -495,109 +648,93 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     };
 
     // =================================================================
-    // 5. Localization (Labels & Prefixes)
+    // 6. Localization (Labels & Prefixes) - 折りたたみ
     // defaults 方式ではキャプション語／参照接頭辞も defaults file 側の metadata で管理するため非表示。
     // =================================================================
     if (!isDefaultsMode) {
-      containerEl.createEl("h3", { text: t("heading_localization") });
-      containerEl.createEl("p", {
+      const locBody = this.createCollapsibleSection(t("heading_localization"), "localization");
+      locBody.createEl("p", {
         text: t("heading_localization_desc"),
         cls: "setting-item-description",
       });
 
-      // Helper to create label settings pair
+      // 公式 Setting API で「ラベル / プレフィックス」の2入力を1行に並べる。
+      // リテラル型に絞ることで @ts-ignore を使わず型安全に ProfileSettings の string フィールドへ代入できる。
       const createLabelSetting = (
         name: string,
-        labelKey: keyof ProfileSettings,
-        prefixKey: keyof ProfileSettings,
+        labelKey: "figureLabel" | "tableLabel" | "codeLabel" | "equationLabel",
+        prefixKey: "figPrefix" | "tblPrefix" | "lstPrefix" | "eqnPrefix",
       ) => {
-        const div = containerEl.createDiv({ cls: "setting-item" });
-        div.style.display = "flex";
-        div.style.justifyContent = "space-between";
-        div.style.alignItems = "center";
-        div.style.padding = "0.75em 0";
-        div.style.borderTop = "1px solid var(--background-modifier-border)";
-
-        const info = div.createDiv({ cls: "setting-item-info" });
-        info.createDiv({ cls: "setting-item-name", text: name });
-
-        const control = div.createDiv({ cls: "setting-item-control" });
-        control.style.gap = "10px";
-
-        // Label Input
-        const labelInput = document.createElement("input");
-        labelInput.type = "text";
-        labelInput.placeholder = t("placeholder_label");
-        labelInput.value = String(currentProfile[labelKey]);
-        labelInput.style.width = "120px";
-        labelInput.onchange = async () => {
-          // @ts-ignore
-          currentProfile[labelKey] = labelInput.value;
-          await this.plugin.saveSettings();
-        };
-
-        // Prefix Input
-        const prefixInput = document.createElement("input");
-        prefixInput.type = "text";
-        prefixInput.placeholder = t("placeholder_prefix");
-        prefixInput.value = String(currentProfile[prefixKey]);
-        prefixInput.style.width = "120px";
-        prefixInput.onchange = async () => {
-          // @ts-ignore
-          currentProfile[prefixKey] = prefixInput.value;
-          await this.plugin.saveSettings();
-        };
-
-        control.appendChild(labelInput);
-        control.appendChild(prefixInput);
+        new Setting(locBody)
+          .setName(name)
+          .addText(text => {
+            text.setPlaceholder(t("placeholder_label")).setValue(currentProfile[labelKey]);
+            text.inputEl.style.width = "120px";
+            text.onChange(async value => {
+              currentProfile[labelKey] = value;
+              await this.plugin.saveSettings();
+            });
+          })
+          .addText(text => {
+            text.setPlaceholder(t("placeholder_prefix")).setValue(currentProfile[prefixKey]);
+            text.inputEl.style.width = "120px";
+            text.onChange(async value => {
+              currentProfile[prefixKey] = value;
+              await this.plugin.saveSettings();
+            });
+          });
       };
 
       createLabelSetting(t("label_figures"), "figureLabel", "figPrefix");
       createLabelSetting(t("label_tables"), "tableLabel", "tblPrefix");
       createLabelSetting(t("label_listings"), "codeLabel", "lstPrefix");
-      createLabelSetting(t("label_equations"), "equationLabel", "eqnPrefix"); // Added Equation
+      createLabelSetting(t("label_equations"), "equationLabel", "eqnPrefix");
     } // end localization section (defaults 方式では非表示)
 
     // =================================================================
-    // 6. Cross-referencing & Filters
+    // 7. Cross-referencing & Filters - 折りたたみ
     // =================================================================
-    containerEl.createEl("h3", { text: t("heading_extensions") });
+    const extBody = this.createCollapsibleSection(t("heading_extensions"), "extensions");
 
-    new Setting(containerEl)
+    // Use Crossref トグル → Crossref パス入力を局所的に表示/非表示。
+    // 遅延参照：margin と同様に toggle を先に作り、path を後から作ってクロージャで捕捉する。
+    new Setting(extBody)
       .setName(t("setting_use_crossref_name"))
       .setDesc(t("setting_use_crossref_desc"))
       .addToggle(toggle =>
         toggle.setValue(currentProfile.usePandocCrossref).onChange(async value => {
           currentProfile.usePandocCrossref = value;
+          crossrefPathSetting.settingEl.toggle(value);
           await this.plugin.saveSettings();
-          this.display();
         }),
       );
+    const crossrefPathSetting = this.addDiscoveredBinarySetting(
+      extBody,
+      this.discoveredPandocCrossref ?? [],
+      currentProfile.pandocCrossrefPath,
+      "setting_crossref_path_name",
+      "setting_crossref_path_desc",
+      "setting_crossref_path_not_found_dropdown",
+      "setting_crossref_path_custom",
+      "setting_crossref_path_placeholder",
+      async value => {
+        currentProfile.pandocCrossrefPath = value;
+        await this.plugin.saveSettings();
+      },
+    );
+    crossrefPathSetting.settingEl.toggle(currentProfile.usePandocCrossref);
 
-    if (currentProfile.usePandocCrossref) {
-      new Setting(containerEl)
-        .setName(t("setting_crossref_path_name"))
-        .setDesc(t("setting_crossref_path_desc"))
-        .addText(text =>
-          text.setValue(currentProfile.pandocCrossrefPath).onChange(async value => {
-            currentProfile.pandocCrossrefPath = value;
-            await this.plugin.saveSettings();
-          }),
-        );
-    }
-
-    new Setting(containerEl)
+    new Setting(extBody)
       .setName(t("setting_enable_advtex_name"))
       .setDesc(t("setting_enable_advtex_desc"))
       .addToggle(toggle =>
         toggle.setValue(currentProfile.enableAdvancedTexCommands).onChange(async value => {
           currentProfile.enableAdvancedTexCommands = value;
           await this.plugin.saveSettings();
-          this.display();
         }),
       );
 
-    new Setting(containerEl)
+    new Setting(extBody)
       .setName(t("setting_pandoc_extra_args_name"))
       .setDesc(t("setting_pandoc_extra_args_desc"))
       .addText(text =>
@@ -613,7 +750,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // --standalone 制御は defaults 方式では defaults file の standalone: で管理するため非表示。
     // builtin 方式のみ表示（本文フラグメント出力は defaults 方式の defaults file で行う）。
     if (!isDefaultsMode) {
-      new Setting(containerEl)
+      new Setting(extBody)
         .setName(t("setting_use_standalone_name"))
         .setDesc(t("setting_use_standalone_desc"))
         .addToggle(toggle =>
@@ -625,34 +762,38 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     }
 
     // =================================================================
-    // 7. Global Settings
+    // 8. Global Settings - 折りたたみ（Advanced）
     // =================================================================
-    containerEl.createEl("h3", { text: t("heading_global") });
+    const advBody = this.createCollapsibleSection(t("heading_global"), "advanced");
 
-    new Setting(containerEl)
+    // Markdownlint Fix トグル → markdownlint-cli2 パス入力を局所的に表示/非表示。
+    new Setting(advBody)
       .setName(t("setting_enable_lint_fix_name"))
       .setDesc(t("setting_enable_lint_fix_desc"))
       .addToggle(toggle =>
         toggle.setValue(settings.enableMarkdownlintFix).onChange(async value => {
           settings.enableMarkdownlintFix = value;
+          markdownlintPathSetting.settingEl.toggle(value);
           await this.plugin.saveSettings();
-          this.display();
         }),
       );
+    const markdownlintPathSetting = this.addDiscoveredBinarySetting(
+      advBody,
+      this.discoveredMarkdownlint ?? [],
+      settings.markdownlintCli2Path,
+      "setting_markdownlint_path_name",
+      "setting_markdownlint_path_desc",
+      "setting_markdownlint_path_not_found_dropdown",
+      "setting_markdownlint_path_custom",
+      "setting_markdownlint_path_placeholder",
+      async value => {
+        settings.markdownlintCli2Path = value;
+        await this.plugin.saveSettings();
+      },
+    );
+    markdownlintPathSetting.settingEl.toggle(settings.enableMarkdownlintFix);
 
-    if (settings.enableMarkdownlintFix) {
-      new Setting(containerEl)
-        .setName(t("setting_markdownlint_path_name"))
-        .setDesc(t("setting_markdownlint_path_desc"))
-        .addText(text =>
-          text.setValue(settings.markdownlintCli2Path).onChange(async value => {
-            settings.markdownlintCli2Path = value;
-            await this.plugin.saveSettings();
-          }),
-        );
-    }
-
-    new Setting(containerEl)
+    new Setting(advBody)
       .setName(t("setting_suppress_logs_name"))
       .setDesc(t("setting_suppress_logs_desc"))
       .addToggle(toggle =>
@@ -662,7 +803,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         }),
       );
 
-    new Setting(containerEl)
+    new Setting(advBody)
       .setName(t("setting_enable_mermaid_name"))
       .setDesc(t("setting_enable_mermaid_desc"))
       .addToggle(toggle =>
@@ -789,10 +930,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     packSetting.addButton(button =>
       button.setButtonText(t("button_install_samples")).onClick(async () => {
         await scaffoldTemplateDocs(this.app, currentProfile.templateFolder);
-        const created = await scaffoldSampleTemplatePacks(
-          this.app,
-          currentProfile.templateFolder,
-        );
+        const created = await scaffoldSampleTemplatePacks(this.app, currentProfile.templateFolder);
         await this.display();
         new Notice(t("notice_sample_packs_installed", [created.join(", ") || "（既存）"]));
       }),
@@ -815,13 +953,10 @@ class PreambleModal extends Modal {
     contentEl.empty();
     contentEl.createEl("h2", { text: t("modal_preamble_title") });
 
-    const area = contentEl.createEl("textarea", { text: this.initial });
-    area.style.width = "100%";
+    // 共通クラスでフォント等を統一しつつ、モーダル内は全高（70vh）で上書き。
+    const area = contentEl.createEl("textarea", { text: this.initial, cls: "mdtex-code-area" });
     area.style.height = "70vh";
-    area.style.fontFamily = "var(--font-monospace)";
-    area.style.fontSize = "13px";
     area.style.lineHeight = "1.45";
-    area.style.resize = "vertical";
     area.spellcheck = false;
 
     const note = contentEl.createEl("p", { text: t("modal_note") });

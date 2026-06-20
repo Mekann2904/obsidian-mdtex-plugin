@@ -41,7 +41,8 @@ const ja: Record<TranslationKeys, string> = {
   notice_pandoc_more_logs: "Pandoc: 追加のログはコンソールを確認してください。",
   notice_generated: "生成に成功: {0}",
   notice_pandoc_exit_code: "エラー: Pandoc がコード {0} で終了しました",
-  notice_duplicate_labels: "変換を中止しました: 相互参照ラベルが重複しています: {0}。ラベル（fig:, tbl:, lst:, eq:, sec:）を一意にしてください。",
+  notice_duplicate_labels:
+    "変換を中止しました: 相互参照ラベルが重複しています: {0}。ラベル（fig:, tbl:, lst:, eq:, sec:）を一意にしてください。",
   notice_pandoc_launch_error: "Pandoc の起動に失敗: {0}",
   notice_defaults_file_required:
     "文書テンプレート方式が「defaults file」ですが、defaults file のパスが未設定です。プロファイル設定でパスを指定してください。",
@@ -84,6 +85,9 @@ const ja: Record<TranslationKeys, string> = {
   option_latex: "LaTeX (.tex)",
   setting_pandoc_path_name: "Pandoc のパス",
   setting_pandoc_path_desc: "pandoc 実行ファイルへの絶対パス（例: /usr/local/bin/pandoc）。",
+  setting_pandoc_path_not_found_dropdown: "（pandoc 未検出 — 下にパスを入力）",
+  setting_pandoc_path_custom: "カスタム（パスを入力）",
+  setting_pandoc_path_placeholder: "pandoc、またはフルパス",
   setting_output_dir_name: "出力ディレクトリ",
   setting_output_dir_desc: "生成物を保存するディレクトリ。空なら Vault ルートを使用。",
   setting_resource_dir_name: "リソース検索ディレクトリ",
@@ -135,17 +139,21 @@ const ja: Record<TranslationKeys, string> = {
   setting_template_pack_name: "テンプレートパック",
   setting_template_pack_desc:
     "テンプレートフォルダ内で見つかった defaults.yaml 付きフォルダから選びます。フォルダを追加したら「再スキャン」で反映します。",
-  setting_template_pack_empty: "（テンプレートパックが見つかりません。テンプレートフォルダに defaults.yaml を含むフォルダを置いてください）",
+  setting_template_pack_empty:
+    "（テンプレートパックが見つかりません。テンプレートフォルダに defaults.yaml を含むフォルダを置いてください）",
   setting_template_folder_name: "テンプレートフォルダ",
   setting_template_folder_desc:
     "テンプレートパックを格納する vault 内フォルダ。既定は「MdTex Templates」。このフォルダの直下に各テンプレートパック（defaults.yaml を含むフォルダ）を置きます。Obsidian Sync / Git で同期され、プラグインの更新で消えません。",
   button_rescan_packs: "再スキャン",
   notice_packs_rescanned: "{0} 個のテンプレートパックを見つけました",
-  notice_packs_empty: "テンプレートパックが見つかりませんでした。テンプレートフォルダを確認してください",
+  notice_packs_empty:
+    "テンプレートパックが見つかりませんでした。テンプレートフォルダを確認してください",
   notice_sample_packs_installed: "サンプルテンプレートを展開しました: {0}",
   button_install_samples: "サンプルを再展開",
 
   heading_preamble: "LaTeX プリアンブル",
+  heading_document_frame: "文書の体裁（クラス・フォント・余白）",
+  heading_pdf_engine_advanced: "詳細: PDF エンジンのオプション",
   preamble_desc:
     "LaTeX コードのみ入力してください。YAML の --- と header-includes は自動付与されます。全角入力にも対応します。",
   placeholder_preamble: "\\usepackage{...}",
@@ -172,8 +180,12 @@ const ja: Record<TranslationKeys, string> = {
   setting_use_crossref_desc: "pandoc-crossref フィルタを有効にします。",
   setting_crossref_path_name: "pandoc-crossref のパス",
   setting_crossref_path_desc: "pandoc-crossref 実行ファイルへのパス。",
+  setting_crossref_path_not_found_dropdown: "（pandoc-crossref 未検出 — 下にパスを入力）",
+  setting_crossref_path_custom: "カスタム（パスを入力）",
+  setting_crossref_path_placeholder: "pandoc-crossref、またはフルパス",
   setting_enable_advtex_name: "高度な LaTeX コマンドを有効",
-  setting_enable_advtex_desc: "DOCX 出力の LaTeX コマンド（\\textbf, \\footnote など）を AST ベースで処理します。",
+  setting_enable_advtex_desc:
+    "DOCX 出力の LaTeX コマンド（\\textbf, \\footnote など）を AST ベースで処理します。",
   setting_pandoc_extra_args_name: "Pandoc 追加引数",
   setting_pandoc_extra_args_desc: "pandoc に渡す追加引数。",
   placeholder_pandoc_extra_args: "--toc --number-sections",
@@ -191,6 +203,9 @@ const ja: Record<TranslationKeys, string> = {
   setting_enable_lint_fix_desc: "変換前に 'markdownlint-cli2 --fix' を実行します。",
   setting_markdownlint_path_name: "markdownlint-cli2 のパス",
   setting_markdownlint_path_desc: "markdownlint-cli2 実行ファイルへのパス。",
+  setting_markdownlint_path_not_found_dropdown: "（markdownlint-cli2 未検出 — 下にパスを入力）",
+  setting_markdownlint_path_custom: "カスタム（パスを入力）",
+  setting_markdownlint_path_placeholder: "markdownlint-cli2、またはフルパス",
   setting_suppress_logs_name: "開発ログを非表示",
   setting_suppress_logs_desc: "デベロッパーコンソールの詳細ログを隠します。",
   setting_enable_mermaid_name: "Mermaid 実験機能を有効",

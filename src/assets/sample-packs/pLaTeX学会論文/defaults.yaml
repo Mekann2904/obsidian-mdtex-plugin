@@ -10,11 +10,11 @@
 #   MdTex は defaults 方式でこのフォルダを TEXINPUTS / BIBINPUTS / BSTINPUTS に
 #   自動追加する（ADR-009）ので、同じフォルダに置けば LaTeX/bibtex が発見する。
 #
-# 【必須】MdTex プロファイル設定（defaults 方式時）:
-#     latexEngine:   latexmk
-#     pdfEngineOpts: -latex=platex -pdfdvi
-#   （upLaTeX 専用クラスなら -latex=uplatex。MdTex は --pdf-engine を常時生成し
-#    defaults 本体を上書きするため、プロファイル側にも同じ値を設定すること）
+# 【必須】PDF エンジン設定:
+#   この defaults.yaml の `pdf-engine: latexmk` と `pdf-engine-opts:` が使われる。
+#   MdTex は defaults 方式では `--pdf-engine` / `--pdf-engine-opt` をコマンドラインで
+#   上書きしないため、テンプレートパック側の指定がそのまま有効になる。
+#   upLaTeX 専用クラスなら下の `-latex=platex` を `-latex=uplatex` に変更する。
 
 from: markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes
 to: pdf

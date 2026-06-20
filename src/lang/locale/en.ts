@@ -38,7 +38,8 @@ const en = {
   notice_pandoc_more_logs: "Pandoc: additional logs are available in the console.",
   notice_generated: "Successfully generated: {0}",
   notice_pandoc_exit_code: "Error: Pandoc process exited with code {0}",
-  notice_duplicate_labels: "Conversion aborted: duplicate cross-reference labels detected: {0}. Please make labels unique (fig:, tbl:, lst:, eq:, sec:).",
+  notice_duplicate_labels:
+    "Conversion aborted: duplicate cross-reference labels detected: {0}. Please make labels unique (fig:, tbl:, lst:, eq:, sec:).",
   notice_pandoc_launch_error: "Error launching Pandoc: {0}",
   notice_defaults_file_required:
     "Document template mode is 'Defaults file', but no defaults file path is set. Set the path in the profile settings.",
@@ -82,6 +83,9 @@ const en = {
   option_latex: "LaTeX Source (.tex)",
   setting_pandoc_path_name: "Pandoc Path",
   setting_pandoc_path_desc: "Absolute path to the pandoc executable (e.g. /usr/local/bin/pandoc).",
+  setting_pandoc_path_not_found_dropdown: "(no pandoc found — enter path below)",
+  setting_pandoc_path_custom: "Custom (enter path)",
+  setting_pandoc_path_placeholder: "pandoc, or full path",
   setting_output_dir_name: "Output Directory",
   setting_output_dir_desc:
     "Directory where generated files will be saved. Leave empty for Vault root.",
@@ -96,8 +100,7 @@ const en = {
   setting_latex_engine_desc:
     "Engine used for PDF generation. TeX engines are auto-discovered when you open this settings tab — pick from the dropdown, or type an engine name (lualatex) or a full path manually. Full paths are normalized to the basename and resolved via PATH, so they survive TeX Live upgrades.",
   setting_latex_engine_custom: "Custom (enter path)",
-  setting_latex_engine_not_found_dropdown:
-    "(no TeX engine found — enter path below)",
+  setting_latex_engine_not_found_dropdown: "(no TeX engine found — enter path below)",
   setting_latex_engine_placeholder: "lualatex, latexmk, or full path",
   setting_pdf_engine_opts_name: "PDF Engine Extra Options",
   setting_pdf_engine_opts_desc:
@@ -135,7 +138,8 @@ const en = {
   setting_template_pack_name: "Template Pack",
   setting_template_pack_desc:
     "Choose from folders with defaults.yaml found in the template folder. After adding a folder, click 'Rescan' to refresh.",
-  setting_template_pack_empty: "(No template packs found. Place a folder containing defaults.yaml in the template folder)",
+  setting_template_pack_empty:
+    "(No template packs found. Place a folder containing defaults.yaml in the template folder)",
   setting_template_folder_name: "Template Folder",
   setting_template_folder_desc:
     "Vault folder that stores template packs. Default is 'MdTex Templates'. Place each template pack (a folder with defaults.yaml) directly under it. Synced via Obsidian Sync / Git and preserved across plugin updates.",
@@ -146,6 +150,8 @@ const en = {
   button_install_samples: "Reinstall samples",
 
   heading_preamble: "LaTeX Preamble",
+  heading_document_frame: "Document layout (class, fonts, margins)",
+  heading_pdf_engine_advanced: "Advanced: PDF engine options",
   preamble_desc:
     "Enter pure LaTeX code only. YAML delimiters (---) and 'header-includes:' are injected automatically. This field supports full-width editing.",
   placeholder_preamble: "\\usepackage{...}",
@@ -172,8 +178,12 @@ const en = {
   setting_use_crossref_desc: "Enable pandoc-crossref filter.",
   setting_crossref_path_name: "Pandoc Crossref Path",
   setting_crossref_path_desc: "Path to pandoc-crossref executable.",
+  setting_crossref_path_not_found_dropdown: "(no pandoc-crossref found — enter path below)",
+  setting_crossref_path_custom: "Custom (enter path)",
+  setting_crossref_path_placeholder: "pandoc-crossref, or full path",
   setting_enable_advtex_name: "Enable Advanced LaTeX Commands",
-  setting_enable_advtex_desc: "Convert LaTeX commands (e.g. \\textbf, \\footnote) in DOCX output via AST.",
+  setting_enable_advtex_desc:
+    "Convert LaTeX commands (e.g. \\textbf, \\footnote) in DOCX output via AST.",
   setting_pandoc_extra_args_name: "Pandoc Extra Arguments",
   setting_pandoc_extra_args_desc: "Any other arguments to pass to pandoc.",
   placeholder_pandoc_extra_args: "--toc --number-sections",
@@ -191,6 +201,9 @@ const en = {
   setting_enable_lint_fix_desc: "Run 'markdownlint-cli2 --fix' before conversion.",
   setting_markdownlint_path_name: "Markdownlint-cli2 Path",
   setting_markdownlint_path_desc: "Path to markdownlint-cli2 executable.",
+  setting_markdownlint_path_not_found_dropdown: "(no markdownlint-cli2 found — enter path below)",
+  setting_markdownlint_path_custom: "Custom (enter path)",
+  setting_markdownlint_path_placeholder: "markdownlint-cli2, or full path",
   setting_suppress_logs_name: "Suppress Developer Logs",
   setting_suppress_logs_desc: "Hide detailed logs in the developer console.",
   setting_enable_mermaid_name: "Enable Experimental Mermaid",

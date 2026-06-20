@@ -124,6 +124,14 @@ export interface PandocPluginSettings {
    * true の間は起動時に vault へのサンプル展開を試みない。ユーザーが削除しても再展開しない。
    */
   sampleTemplatesScaffolded: boolean;
+  /**
+   * 設定タブの折りたたみセクションの開閉状態（設定UI改善）。
+   * キーはセクションの安定ID（`preamble`, `latex-palette`, `localization`,
+   * `extensions`, `advanced`）。値が `true` なら「折りたたまれている（閉）」、
+   * `false` なら「展開されている（開）」。未定義のキューはコード側のデフォルト
+   * （`COLLAPSIBLE_SECTIONS_DEFAULT_OPEN`）に従う。開閉するたびに保存される。
+   */
+  collapsedSections: Record<string, boolean>;
 }
 
 /**
@@ -357,4 +365,5 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
   enableLatexPalette: true,
   enableLatexGhost: true,
   sampleTemplatesScaffolded: false,
+  collapsedSections: {},
 };

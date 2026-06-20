@@ -18,7 +18,7 @@ import {
   hasClassProvidedBibstyle,
   stripPlainnatBibstyle,
 } from "../utils/bibstyleResolve";
-import { normalizeLatexEngine } from "../utils/texDiscover";
+import { normalizeLatexEngine } from "../utils/binDiscover";
 import { tokenizePdfEngineOpts } from "./pandocCommandBuilder";
 
 /**
@@ -64,7 +64,9 @@ export function resolveLatexInvocation(profile: ProfileSettings): {
  */
 async function cleanupLatexmkState(texDir: string, texBase: string): Promise<void> {
   const exts = ["aux", "bbl", "blg", "fdb_latexmk", "fls", "log", "out", "pdf", "synctex.gz"];
-  await Promise.all(exts.map(ext => fs.rm(path.join(texDir, `${texBase}.${ext}`), { force: true })));
+  await Promise.all(
+    exts.map(ext => fs.rm(path.join(texDir, `${texBase}.${ext}`), { force: true })),
+  );
 }
 
 /**
@@ -104,7 +106,9 @@ export async function runReactiveLatexPhase(
     auxContent = await fs.readFile(auxPath, "utf8");
   } catch {
     if (!opts.suppressLogs)
-      console.warn(`[MdTex] citation phase: .aux not generated (draft exit ${draftResult.exitCode})`);
+      console.warn(
+        `[MdTex] citation phase: .aux not generated (draft exit ${draftResult.exitCode})`,
+      );
     return false;
   }
 
@@ -126,7 +130,8 @@ export async function runReactiveLatexPhase(
     { cwd: texDir, env, onStdout: opts.onStdout, onStderr: opts.onStderr },
   );
   if (finalResult.exitCode !== 0) {
-    if (!opts.suppressLogs) console.warn(`[MdTex] citation phase (latexmk) exit ${finalResult.exitCode}`);
+    if (!opts.suppressLogs)
+      console.warn(`[MdTex] citation phase (latexmk) exit ${finalResult.exitCode}`);
     return false;
   }
 
@@ -137,7 +142,8 @@ export async function runReactiveLatexPhase(
     try {
       await fs.rename(generatedPdf, pdfOutputPath);
     } catch (err) {
-      if (!opts.suppressLogs) console.warn(`[MdTex] citation: failed to move PDF to ${pdfOutputPath}`, err);
+      if (!opts.suppressLogs)
+        console.warn(`[MdTex] citation: failed to move PDF to ${pdfOutputPath}`, err);
       return false;
     }
   }

@@ -7,10 +7,10 @@
 //          Windows:C:\texlive\*\bin\windows 等）に置かれるが、これはデフォルト PATH に
 //          含まれないことがある。citation パイプラインは latexmk → lualatex と2段階呼び出しする
 //          ため、フルパス1つでは解決できず、TeX bin を PATH に追加する必要がある。
-// Related: src/utils/texDiscover.ts, src/services/citationPipeline.ts, src/services/convertService.ts
+// Related: src/utils/binDiscover.ts, src/services/citationPipeline.ts, src/services/convertService.ts
 
 import * as fs from "fs";
-import { getTexBinCandidates, expandGlob, defaultTexFsLayer } from "./texDiscover";
+import { getTexBinCandidates, expandGlob, defaultBinFsLayer } from "./binDiscover";
 
 /**
  * 現在の PATH に TeX の bin ディレクトリを追加する（存在する・未登録のものだけ）。
@@ -37,7 +37,7 @@ export function augmentPathString(
  * プラットフォームの規定配置から TeX bin を PATH に追加する（クロスプラットフォーム）。
  * 既に PATH に含まれる候補は追加しない。
  *
- * 候補ディレクトリの真理源は `getTexBinCandidates`（texDiscover.ts）の1箇所。glob を含む候補
+ * 候補ディレクトリの真理源は `getTexBinCandidates`（binDiscover.ts）の1箇所。glob を含む候補
  * （例: TeX Live 年度ディレクトリ `/usr/local/texlive/2025/bin/universal-darwin`）は `expandGlob` で実在
  * ディレクトリに展開してから PATH に追加する。実行用（PATH 追加）と UI 用（エンジン列挙:
  * discoverTexEngines）で bin リストが二重化されない。
@@ -46,7 +46,7 @@ export function augmentPathString(
  */
 export function augmentPathForTex(currentPath: string): string {
   const candidates = getTexBinCandidates(process.platform).flatMap(pattern =>
-    expandGlob(pattern, defaultTexFsLayer),
+    expandGlob(pattern, defaultBinFsLayer),
   );
   return augmentPathString(currentPath, candidates);
 }

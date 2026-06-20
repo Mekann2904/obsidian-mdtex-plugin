@@ -45,4 +45,21 @@ describe("profileManager", () => {
     expect(migrated.profiles.Legacy.equationLabel).toBeDefined();
     expect(migrated.enableMarkdownlintFix).toBe(true);
   });
+
+  it("migrateSettings は collapsedSections を空オブジェクトで補完する", () => {
+    const migrated = migrateSettings({
+      profilesArray: [{ name: "Default" }],
+    });
+
+    expect(migrated.collapsedSections).toEqual({});
+  });
+
+  it("migrateSettings は既存の collapsedSections を保持する", () => {
+    const migrated = migrateSettings({
+      profilesArray: [{ name: "Default" }],
+      collapsedSections: { preamble: true, advanced: false },
+    });
+
+    expect(migrated.collapsedSections).toEqual({ preamble: true, advanced: false });
+  });
 });

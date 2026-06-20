@@ -239,6 +239,27 @@ describe("文書テンプレート方式（ADR-007）", () => {
     expect(result.args.some(a => a.startsWith("classoption="))).toBe(false);
   });
 
+  it("defaults 方式は pdf-engine / pdf-engine-opts を CLI で上書きしない", () => {
+    // defaults.yaml の `pdf-engine` / `pdf-engine-opts` に委譲する。
+    // コマンドライン `--pdf-engine` は defaults file より優先されるため、ここで出すと
+    // テンプレートパック（例: pLaTeX 学会論文の latexmk + -latex=platex + -pdfdvi）を壊す。
+    const profile = createDefaultProfile();
+    profile.documentTemplateMode = "defaults";
+    profile.defaultsFilePath = "/vault/defaults.yaml";
+    profile.latexEngine = "lualatex";
+    profile.pdfEngineOpts = "-interaction=nonstopmode";
+
+    const result = buildPandocCommand({
+      profile,
+      format: "pdf",
+      outputPath: "/tmp/out.pdf",
+      workingDir: "/tmp",
+    });
+
+    expect(result.args.some(a => a.startsWith("--pdf-engine="))).toBe(false);
+    expect(result.args.some(a => a.startsWith("--pdf-engine-opt="))).toBe(false);
+  });
+
   it("defaults 方式は useStandalone=true でも --standalone を付与しない", () => {
     // standalone 制御も defaults file の standalone: に委譲する（本文フラグメント出力のため）。
     const profile = createDefaultProfile();
