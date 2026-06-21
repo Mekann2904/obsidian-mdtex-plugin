@@ -157,13 +157,17 @@ export const MARKDOWNLINT_NAMES = ["markdownlint-cli2"] as const;
  *
  * markdownlint-cli2 は npm グローバルインストールが主。npm はグローバル bin ディレクトリにシムを
  * 置く。macOS/Linux では /usr/local/bin や nvm の ~/.nvm/versions/node/X.X.X/bin に置かれるが、これらは
- * 通常 PATH に含まれるため、ここでは PATH 走査に委ねる。Windows の公式配置
- * （%APPDATA%\npm）は env var placeholder 展開を expandGlob が持たないため、候補に含めず
- * PATH 走査でフォローする。
+ * 通常 PATH に含まれるため、ここでは PATH 走査に委ねる。macOS の Homebrew node は固定の opt
+ * パス（/opt/homebrew/opt/node/bin 等）に npm グローバル bin を置くため候補に明示する（GUI
+ * Obsidian の貧弱な PATH で markdownlint-cli2 が見つからない障害の対策。従来 lintService が
+ * 硬coded で持っていた知識をここへ集約）。Windows の公式配置（%APPDATA%\npm）は env var
+ * placeholder 展開を expandGlob が持たないため、候補に含めず PATH 走査でフォローする。
  */
 export function getMarkdownlintCandidates(platform: NodeJS.Platform): string[] {
   switch (platform) {
     case "darwin":
+      // Homebrew node の npm グローバル bin を含む（Apple Silicon と Intel 両方）。
+      return ["/opt/homebrew/opt/node/bin", "/usr/local/opt/node/bin", "/opt/homebrew/bin", "/usr/local/bin"];
     case "linux":
       // npm グローバル bin は PATH に含まれることが多い。共通配置として明示的に出しておく。
       return ["/usr/local/bin", "/usr/bin"];

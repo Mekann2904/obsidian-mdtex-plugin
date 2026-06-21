@@ -112,18 +112,10 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   // builtin 方式のみ: documentclass / geometry / fontsize 等の `-V` を GUI 設定値から生成する。
   // defaults 方式は defaults file 側で `variables:` を管理するため、これらの `-V` 生成をスキップ
   // する（Pandoc の precedence でコマンドライン `-V` が defaults file を上書きする衝突を回避）。
+  // このブロックは「builtin → GUI が所有する -V 群」という ADR-007 の同一事実を表す（候補 C3）。
+  // mode 相対の -V 所有権を 1 つのヘッパーへ集約し、`!isDefaults` の重複を縮める。
   if (!isDefaults) {
-    if (profile.useMarginSize) args.push("-V", `geometry:margin=${profile.marginSize}`);
-    if (!profile.usePageNumber) args.push("-V", "pagestyle=empty");
-
-    if (profile.imageScale?.trim()) {
-      args.push("-V", `graphics=${profile.imageScale}`);
-    }
-
-    args.push("-V", `fontsize=${profile.fontSize}`);
-    args.push("-V", `documentclass=${profile.documentClass}`);
-    if (profile.documentClassOptions?.trim())
-      args.push("-V", `classoption=${profile.documentClassOptions}`);
+    appendBuiltinOwnedVariables(args, profile);
   }
 
   args.push("--highlight-style=tango");
@@ -151,6 +143,28 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   // 手入力した特定バージョン）を入れたらそのまま尊重する。空なら PATH の `pandoc`。
   const pandocPath = profile.pandocPath.trim() || "pandoc";
   return { command: pandocPath, args };
+}
+
+/**
+ * builtin 方式でのみ GUI が所有する `-V` 変数群を生成する（ADR-007 / 候補 C3）。
+ *
+ * documentclass / classoption / fontsize / geometry(margin) / pagestyle / graphics は、builtin 方式
+ * では MdTex の GUI 設定値から生成され、defaults 方式では defaults file 側の `variables:` が所有する。
+ * 「builtin → GUI が所有する -V」という同一事実を 1 つのヘッパーに集約し、呼び出し側の
+ * `!isDefaults` 分岐とインライン -V 生成の重複を縮めた。defaults 方式では呼び出し側で skip する。
+ */
+function appendBuiltinOwnedVariables(args: string[], profile: ProfileSettings): void {
+  if (profile.useMarginSize) args.push("-V", `geometry:margin=${profile.marginSize}`);
+  if (!profile.usePageNumber) args.push("-V", "pagestyle=empty");
+
+  if (profile.imageScale?.trim()) {
+    args.push("-V", `graphics=${profile.imageScale}`);
+  }
+
+  args.push("-V", `fontsize=${profile.fontSize}`);
+  args.push("-V", `documentclass=${profile.documentClass}`);
+  if (profile.documentClassOptions?.trim())
+    args.push("-V", `classoption=${profile.documentClassOptions}`);
 }
 
 /**
