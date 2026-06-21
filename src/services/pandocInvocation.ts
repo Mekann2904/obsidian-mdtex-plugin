@@ -43,8 +43,10 @@ export interface PandocInvocationRequest {
   inputContent: string;
   /** 出力ファイルの絶対パス。 */
   outputFile: string;
-  /** --include-in-header に渡すヘッダファイルの絶対パス（convertService が buildHeader で生成済み）。 */
-  headerFilePath: string;
+  /** --include-in-header に渡す header の LaTeX 内容（buildHeader の結果）。
+ *  本 module が一時ファイルへ書き出し、他の Lua/YAML フィルタと同じ cleanup seam で片付ける
+ *  （architecture review 候補 B）。呼び出し側は header ファイルのパス・生成・cleanup を知らない。 */
+  headerContent: string;
   /** Pandoc 実行時の作業ディレクトリ（通常は元ノートのディレクトリ）。 */
   workingDir: string;
   /** --resource-path。未指定時は profile.searchDirectory / workingDir にフォールバック。 */
@@ -68,7 +70,7 @@ export async function invokePandoc(req: PandocInvocationRequest): Promise<boolea
     plan = await buildPandocExecutionPlan({
       profile: req.profile,
       format: req.format,
-      headerFilePath: req.headerFilePath,
+      headerContent: req.headerContent,
       outputFile: req.outputFile,
       workingDir: req.workingDir,
       pandocExtraArgs: req.pandocExtraArgs,
@@ -133,7 +135,7 @@ async function createTempMetadataFile(profile: ProfileSettings): Promise<TempFil
 async function buildPandocExecutionPlan(params: {
   profile: ProfileSettings;
   format: OutputFormat;
-  headerFilePath: string;
+  headerContent: string;
   outputFile: string;
   workingDir: string;
   pandocExtraArgs: string[];
@@ -144,6 +146,14 @@ async function buildPandocExecutionPlan(params: {
 }): Promise<PandocExecutionPlan> {
   const tempFiles: string[] = [];
   const luaFilters: string[] = [];
+
+  // header（--include-in-header の中身）を他の一時フィルタと同じ lifecycle で扱う
+  // （architecture review 候補 B）。convertService は header の LaTeX 内容（buildHeader の結果）
+  // を渡すだけで、ファイル化・cleanup は本 module が持つ。mdtex-header- prefix により
+  // cleanupTemporaryFiles の安全検査（OS 一時領域 + prefix）が効く。
+  const headerArtifact = await createTempFile(params.headerContent, "mdtex-header-", "tex");
+  const headerPath = headerArtifact.filePath;
+  tempFiles.push(headerArtifact.filePath, headerArtifact.tempDir);
 
   if (params.format === "pdf" || params.format === "latex") {
     const created = await createTempLuaFilter();
@@ -198,7 +208,7 @@ async function buildPandocExecutionPlan(params: {
       profile: params.profile,
       format: buildCmdFormat,
       outputPath: citationActive ? texOutputPath : params.outputFile,
-      headerPath: params.headerFilePath,
+      headerPath,
       metadataFile,
       workingDir: params.workingDir,
       extraArgs: params.pandocExtraArgs,

@@ -32,6 +32,7 @@ export const TEMP_PREFIXES = [
   "mdtex-mermaid-",
   "mdtex-docx-",
   "mdtex-metadata-",
+  "mdtex-header-",
   // 汎用フォールバック: 上記以外の "mdtex-" 前一時領域（後方互換の残存ファイル等）も安全対象に含める。
   "mdtex-",
 ];

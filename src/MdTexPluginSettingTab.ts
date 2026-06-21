@@ -194,6 +194,22 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     return details.createDiv({ cls: "mdtex-nested-settings-body" });
   }
 
+  /**
+   * プロファイル/設定フィールドへの代入 + saveSettings のみを行う onChange ハンドラを返す
+   * （architecture review 候補 D）。これまで `onChange(async value => { target.X = value;
+   * await this.plugin.saveSettings(); })` という closure が render() 内に ~20 箇所重複していた。
+   * 副作用（連動表示の toggle / this.display() の再描画）を持つ closure は引き続き明示的に書く。
+   *
+   * text/dropdown の onChange は `string`、toggle は `boolean` を渡すため、T[K] で呼び出し側の
+   * フィールド型に追従する（leverage: 1 つの binder で string/boolean 両対応）。
+   */
+  private bindField<T extends object, K extends keyof T>(target: T, key: K) {
+    return async (value: T[K]) => {
+      target[key] = value;
+      await this.plugin.saveSettings();
+    };
+  }
+
   private async render(): Promise<void> {
     const { containerEl } = this;
     containerEl.empty();
@@ -323,10 +339,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         dropdown.addOption("pdf", t("option_pdf"));
         dropdown.addOption("docx", t("option_docx"));
         dropdown.addOption("latex", t("option_latex"));
-        dropdown.setValue(currentProfile.outputFormat).onChange(async value => {
-          currentProfile.outputFormat = value;
-          await this.plugin.saveSettings();
-        });
+        dropdown.setValue(currentProfile.outputFormat).onChange(this.bindField(currentProfile, "outputFormat"));
       });
 
     // ADR-009: pandoc のパスも TeX エンジンと同じ「自動検出＋ドロップダウン選択」。
@@ -352,30 +365,21 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       .setName(t("setting_output_dir_name"))
       .setDesc(t("setting_output_dir_desc"))
       .addText(text =>
-        text.setValue(currentProfile.outputDirectory).onChange(async value => {
-          currentProfile.outputDirectory = value;
-          await this.plugin.saveSettings();
-        }),
+        text.setValue(currentProfile.outputDirectory).onChange(this.bindField(currentProfile, "outputDirectory")),
       );
 
     new Setting(containerEl)
       .setName(t("setting_resource_dir_name"))
       .setDesc(t("setting_resource_dir_desc"))
       .addText(text =>
-        text.setValue(currentProfile.searchDirectory).onChange(async value => {
-          currentProfile.searchDirectory = value;
-          await this.plugin.saveSettings();
-        }),
+        text.setValue(currentProfile.searchDirectory).onChange(this.bindField(currentProfile, "searchDirectory")),
       );
 
     new Setting(containerEl)
       .setName(t("setting_delete_intermediate_name"))
       .setDesc(t("setting_delete_intermediate_desc"))
       .addToggle(toggle =>
-        toggle.setValue(currentProfile.deleteIntermediateFiles).onChange(async value => {
-          currentProfile.deleteIntermediateFiles = value;
-          await this.plugin.saveSettings();
-        }),
+        toggle.setValue(currentProfile.deleteIntermediateFiles).onChange(this.bindField(currentProfile, "deleteIntermediateFiles")),
       );
 
     // =================================================================
@@ -442,10 +446,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           text
             .setValue(currentProfile.pdfEngineOpts ?? "")
             .setPlaceholder("-lualatex")
-            .onChange(async value => {
-              currentProfile.pdfEngineOpts = value;
-              await this.plugin.saveSettings();
-            }),
+            .onChange(this.bindField(currentProfile, "pdfEngineOpts")),
         );
 
       // 委譲対象の GUI 項目（ドキュメントクラス・フォントサイズ・マージン・ページ番号・画像スケール）は
@@ -459,30 +460,21 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         .setName(t("setting_document_class_name"))
         .setDesc(t("setting_document_class_desc"))
         .addText(text =>
-          text.setValue(currentProfile.documentClass).onChange(async value => {
-            currentProfile.documentClass = value;
-            await this.plugin.saveSettings();
-          }),
+          text.setValue(currentProfile.documentClass).onChange(this.bindField(currentProfile, "documentClass")),
         );
 
       new Setting(frameBody)
         .setName(t("setting_document_class_opts_name"))
         .setDesc(t("setting_document_class_opts_desc"))
         .addText(text =>
-          text.setValue(currentProfile.documentClassOptions).onChange(async value => {
-            currentProfile.documentClassOptions = value;
-            await this.plugin.saveSettings();
-          }),
+          text.setValue(currentProfile.documentClassOptions).onChange(this.bindField(currentProfile, "documentClassOptions")),
         );
 
       new Setting(frameBody)
         .setName(t("setting_font_size_name"))
         .setDesc(t("setting_font_size_desc"))
         .addText(text =>
-          text.setValue(currentProfile.fontSize).onChange(async value => {
-            currentProfile.fontSize = value;
-            await this.plugin.saveSettings();
-          }),
+          text.setValue(currentProfile.fontSize).onChange(this.bindField(currentProfile, "fontSize")),
         );
 
       // マージン指定トグル → マージン幅入力を局所的に表示/非表示（全再描画しない）。
@@ -501,10 +493,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         .setName(t("setting_margin_size_name"))
         .setDesc(t("setting_margin_size_desc"))
         .addText(text =>
-          text.setValue(currentProfile.marginSize).onChange(async value => {
-            currentProfile.marginSize = value;
-            await this.plugin.saveSettings();
-          }),
+          text.setValue(currentProfile.marginSize).onChange(this.bindField(currentProfile, "marginSize")),
         );
       marginSizeSetting.settingEl.toggle(currentProfile.useMarginSize);
 
@@ -512,20 +501,14 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         .setName(t("setting_page_numbers_name"))
         .setDesc(t("setting_page_numbers_desc"))
         .addToggle(toggle =>
-          toggle.setValue(currentProfile.usePageNumber).onChange(async value => {
-            currentProfile.usePageNumber = value;
-            await this.plugin.saveSettings();
-          }),
+          toggle.setValue(currentProfile.usePageNumber).onChange(this.bindField(currentProfile, "usePageNumber")),
         );
 
       new Setting(frameBody)
         .setName(t("setting_image_scale_name"))
         .setDesc(t("setting_image_scale_desc"))
         .addText(text =>
-          text.setValue(currentProfile.imageScale).onChange(async value => {
-            currentProfile.imageScale = value;
-            await this.plugin.saveSettings();
-          }),
+          text.setValue(currentProfile.imageScale).onChange(this.bindField(currentProfile, "imageScale")),
         );
     }
 
@@ -600,20 +583,14 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       .setName(t("setting_enable_latex_palette_name"))
       .setDesc(t("setting_enable_latex_palette_desc"))
       .addToggle(toggle =>
-        toggle.setValue(settings.enableLatexPalette).onChange(async value => {
-          settings.enableLatexPalette = value;
-          await this.plugin.saveSettings();
-        }),
+        toggle.setValue(settings.enableLatexPalette).onChange(this.bindField(settings, "enableLatexPalette")),
       );
 
     new Setting(paletteBody)
       .setName(t("setting_enable_latex_ghost_name"))
       .setDesc(t("setting_enable_latex_ghost_desc"))
       .addToggle(toggle =>
-        toggle.setValue(settings.enableLatexGhost).onChange(async value => {
-          settings.enableLatexGhost = value;
-          await this.plugin.saveSettings();
-        }),
+        toggle.setValue(settings.enableLatexGhost).onChange(this.bindField(settings, "enableLatexGhost")),
       );
 
     const yamlArea = paletteBody.createEl("textarea", {
@@ -670,18 +647,12 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           .addText(text => {
             text.setPlaceholder(t("placeholder_label")).setValue(currentProfile[labelKey]);
             text.inputEl.style.width = "120px";
-            text.onChange(async value => {
-              currentProfile[labelKey] = value;
-              await this.plugin.saveSettings();
-            });
+            text.onChange(this.bindField(currentProfile, labelKey));
           })
           .addText(text => {
             text.setPlaceholder(t("placeholder_prefix")).setValue(currentProfile[prefixKey]);
             text.inputEl.style.width = "120px";
-            text.onChange(async value => {
-              currentProfile[prefixKey] = value;
-              await this.plugin.saveSettings();
-            });
+            text.onChange(this.bindField(currentProfile, prefixKey));
           });
       };
 
@@ -728,10 +699,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       .setName(t("setting_enable_advtex_name"))
       .setDesc(t("setting_enable_advtex_desc"))
       .addToggle(toggle =>
-        toggle.setValue(currentProfile.enableAdvancedTexCommands).onChange(async value => {
-          currentProfile.enableAdvancedTexCommands = value;
-          await this.plugin.saveSettings();
-        }),
+        toggle.setValue(currentProfile.enableAdvancedTexCommands).onChange(this.bindField(currentProfile, "enableAdvancedTexCommands")),
       );
 
     new Setting(extBody)
@@ -741,10 +709,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         text
           .setValue(currentProfile.pandocExtraArgs)
           .setPlaceholder(t("placeholder_pandoc_extra_args"))
-          .onChange(async value => {
-            currentProfile.pandocExtraArgs = value;
-            await this.plugin.saveSettings();
-          }),
+          .onChange(this.bindField(currentProfile, "pandocExtraArgs")),
       );
 
     // --standalone 制御は defaults 方式では defaults file の standalone: で管理するため非表示。
@@ -754,10 +719,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         .setName(t("setting_use_standalone_name"))
         .setDesc(t("setting_use_standalone_desc"))
         .addToggle(toggle =>
-          toggle.setValue(currentProfile.useStandalone).onChange(async value => {
-            currentProfile.useStandalone = value;
-            await this.plugin.saveSettings();
-          }),
+          toggle.setValue(currentProfile.useStandalone).onChange(this.bindField(currentProfile, "useStandalone")),
         );
     }
 
@@ -797,20 +759,14 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       .setName(t("setting_suppress_logs_name"))
       .setDesc(t("setting_suppress_logs_desc"))
       .addToggle(toggle =>
-        toggle.setValue(settings.suppressDeveloperLogs).onChange(async value => {
-          settings.suppressDeveloperLogs = value;
-          await this.plugin.saveSettings();
-        }),
+        toggle.setValue(settings.suppressDeveloperLogs).onChange(this.bindField(settings, "suppressDeveloperLogs")),
       );
 
     new Setting(advBody)
       .setName(t("setting_enable_mermaid_name"))
       .setDesc(t("setting_enable_mermaid_desc"))
       .addToggle(toggle =>
-        toggle.setValue(settings.enableExperimentalMermaid).onChange(async value => {
-          settings.enableExperimentalMermaid = value;
-          await this.plugin.saveSettings();
-        }),
+        toggle.setValue(settings.enableExperimentalMermaid).onChange(this.bindField(settings, "enableExperimentalMermaid")),
       );
   }
 
@@ -829,10 +785,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       .setName(t("setting_template_folder_name"))
       .setDesc(t("setting_template_folder_desc"))
       .addText(text =>
-        text.setValue(currentProfile.templateFolder ?? "").onChange(async value => {
-          currentProfile.templateFolder = value;
-          await this.plugin.saveSettings();
-        }),
+        text.setValue(currentProfile.templateFolder ?? "").onChange(this.bindField(currentProfile, "templateFolder")),
       );
 
     // ADR-009: 引用モード（@key / [@key] を LaTeX の引用コマンドに変換）。defaults 方式限定。
@@ -876,10 +829,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           text
             .setValue(currentProfile.defaultsFilePath ?? "")
             .setPlaceholder(t("placeholder_defaults_file_path"))
-            .onChange(async value => {
-              currentProfile.defaultsFilePath = value;
-              await this.plugin.saveSettings();
-            }),
+          .onChange(this.bindField(currentProfile, "defaultsFilePath")),
         );
       return;
     }
@@ -908,10 +858,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
           }
         }
         dropdown.setValue(currentProfile.selectedTemplatePack ?? "");
-        dropdown.onChange(async value => {
-          currentProfile.selectedTemplatePack = value;
-          await this.plugin.saveSettings();
-        });
+        dropdown.onChange(this.bindField(currentProfile, "selectedTemplatePack"));
       });
 
     packSetting.addButton(button =>

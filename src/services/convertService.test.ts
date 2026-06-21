@@ -24,6 +24,25 @@ const mockedRunCommand = runCommand as unknown as ReturnType<typeof vi.fn>;
 
 const noopLintFix = vi.fn(async () => {});
 
+/**
+ * runCommand の mock 実装で、--include-in-header に渡された header ファイルを読み込んで
+ * captured.content に退避する（候補 B）。header は invokePandoc 内で一時ファイル化され、
+ * cleanup されるため、変換後にパスから読めない。呼び出し時点でキャプチャする。
+ */
+function headerCapturingMock(captured: { content: string }) {
+  return async (_cmd: string, args: string[], _opts?: unknown) => {
+    const idx = args.indexOf("--include-in-header");
+    if (idx >= 0) {
+      try {
+        captured.content = await fs.readFile(args[idx + 1], "utf8");
+      } catch {
+        /* ignore */
+      }
+    }
+    return { exitCode: 0, stdout: "", stderr: "" };
+  };
+}
+
 describe("convertCurrentPage", () => {
   beforeEach(() => {
     (global as unknown as { window?: { moment: { locale: () => string } } }).window = {
@@ -149,14 +168,15 @@ describe("convertCurrentPage", () => {
     const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
     const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
 
-    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    const header = { content: "" };
+    mockedRunCommand.mockImplementation(headerCapturingMock(header));
 
     await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
 
     const [, args] = mockedRunCommand.mock.calls[0];
     expect(args).toContain("--metadata-file");
 
-    const preamble = await fs.readFile(path.join(tmpDir, "note.preamble.tex"), "utf8");
+    const preamble = header.content;
     expect(preamble).not.toContain("\\renewcommand{\\figurename}");
     expect(preamble).not.toContain("\\renewcommand{\\tablename}");
 
@@ -184,7 +204,8 @@ describe("convertCurrentPage", () => {
     const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
     const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
 
-    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    const headerOff = { content: "" };
+    mockedRunCommand.mockImplementation(headerCapturingMock(headerOff));
 
     await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
 
@@ -193,7 +214,7 @@ describe("convertCurrentPage", () => {
     const [, offArgs] = mockedRunCommand.mock.calls[0];
     expect(offArgs).not.toContain("--metadata-file");
 
-    const preamble = await fs.readFile(path.join(tmpDir, "note.preamble.tex"), "utf8");
+    const preamble = headerOff.content;
     expect(preamble).toContain("\\renewcommand{\\figurename}{図}");
 
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -391,7 +412,8 @@ describe("convertCurrentPage", () => {
     const settings = { ...DEFAULT_SETTINGS, profiles: { Default: profile }, activeProfile: "Default" };
     const ctx: PluginContext = { app, settings, getActiveProfileSettings: () => profile };
 
-    mockedRunCommand.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
+    const header = { content: "" };
+    mockedRunCommand.mockImplementation(headerCapturingMock(header));
 
     await convertCurrentPage(ctx, { runMarkdownlintFix: noopLintFix }, "pdf");
 
@@ -408,7 +430,7 @@ describe("convertCurrentPage", () => {
     expect(args).not.toContain("--metadata-file");
 
     // プリアンブル構成: CALLOUT と codelisting は含む、baseHeader / \renewcommand / ページ番号スニペットは含まない
-    const preamble = await fs.readFile(path.join(tmpDir, "note.preamble.tex"), "utf8");
+    const preamble = header.content;
     expect(preamble).toContain("obsidiancallout");
     expect(preamble).toContain("codelisting");
     expect(preamble).not.toContain("luatexja-fontspec"); // DEFAULT_LATEX_PREAMBLE（baseHeader）は含まない

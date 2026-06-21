@@ -1,23 +1,17 @@
 // File: src/services/convertService.ts
 // Purpose: Markdown→各フォーマット変換の中核ロジックを担当するサービス。
 // Reason: プラグイン本体から変換処理を切り離し、責務を明確化するため。
-// Related: src/MdTexPlugin.ts, src/services/lintService.ts, src/utils/markdownTransforms.ts
+// Related: src/MdTexPlugin.ts, src/services/lintService.ts, src/services/normalizeMarkdown.ts,
+//          src/services/conversionPaths.ts, src/utils/markdownTransforms.ts
 
 import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
 import * as path from "path";
 import * as fs from "fs/promises";
 import { isDefaultsTemplateMode, ProfileSettings } from "../MdTexPluginSettings";
-import {
-  replaceWikiLinksAndCodeAsync,
-  unwrapValidWikiLinks,
-  stripObsidianComments,
-} from "../utils/markdownTransforms";
-import { resolveDraftRequest } from "../utils/frontmatter";
 import { buildHeader } from "../utils/headerBuilder";
-import { expandTransclusions } from "../utils/transclusion";
-import { detectDuplicateLabels } from "../utils/crossrefLabels";
 import type { PluginContext } from "./pluginContext";
-import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
+import { normalizeMarkdown } from "./normalizeMarkdown";
+import { buildConversionPaths } from "./conversionPaths";
 import { t } from "../lang/helpers";
 import { OutputFormat } from "./pandocCommandBuilder";
 import { invokePandoc } from "./pandocInvocation";
@@ -104,8 +98,6 @@ export async function convertCurrentPage(
   const activeProfile = { ...originalProfile, defaultsFilePath: effectiveDefaultsPath };
 
   const inputFilePath = fileAdapter.getFullPath(activeFile.path);
-  const baseName = path.basename(inputFilePath, ".md");
-  const sourceDir = path.dirname(inputFilePath);
 
   const outputDir = activeProfile.outputDirectory || vaultBasePath;
   try {
@@ -117,65 +109,55 @@ export async function convertCurrentPage(
 
   const resourcePath = resolveResourcePath(activeProfile, vaultBasePath);
 
-  const tempFileName = `${baseName.replace(/\s/g, "_")}.temp.md`;
-  // lint 実行時の workingDir を元ノートと揃えるため、中間ファイルをソース側に置く
-  const intermediateFilename = joinFsPath(sourceDir, tempFileName);
-  const headerFileName = `${baseName.replace(/\s/g, "_")}.preamble.tex`;
-  const headerFilePath = joinFsPath(outputDir, headerFileName);
+  const lintEnabled = ctx.settings.enableMarkdownlintFix;
+  // 作業パス群（入力・出力・lint 中間体・header）の命名知識を buildConversionPaths に集約する
+  // （architecture review 候補 C）。app 非依存の純粋関数で構築する。
+  const paths = buildConversionPaths({
+    inputFilePath,
+    outputDir,
+    resourcePath,
+    format,
+    lintEnabled,
+  });
   const mermaidTempDirs: string[] = [];
 
-  const ext = format === "latex" ? ".tex" : `.${format}`;
-  const outputFilename = joinFsPath(outputDir, `${baseName.replace(/\s/g, "_")}${ext}`);
-
-  const cache = new Map<string, string>();
-
   try {
-    let content = await fs.readFile(inputFilePath, "utf8");
+    const rawContent = await fs.readFile(inputFilePath, "utf8");
 
-    // Obsidianコメント (%% ... %%) をPDF等に出さないよう事前に除去
-    content = stripObsidianComments(content);
+    // 本文正規化パイプライン（8 step の順序・transclusion キャッシュ・lint 中間ファイル
+    // lifecycle）を深い module（normalizeMarkdown）に委譲する（architecture review 候補 A）。
+    // 呼び出し側は生本文を渡し、最終本文・draft フラグ・重複ラベル・cleanup 対象を受け取る。
+    const normalized = await normalizeMarkdown({
+      content: rawContent,
+      app: ctx.app,
+      sourcePath: activeFile.path,
+      profile: activeProfile,
+      enableExperimentalMermaid: ctx.settings.enableExperimentalMermaid,
+      suppressDeveloperLogs: ctx.settings.suppressDeveloperLogs,
+      lintFix: lintEnabled
+        ? target => deps.runMarkdownlintFix(ctx, target)
+        : undefined,
+      paths,
+      keepLintIntermediate: !activeProfile.deleteIntermediateFiles,
+    });
+    mermaidTempDirs.push(...normalized.cleanupDirs);
 
-    // Mermaid コードブロックの言語削除は TS 正規表現（stripMermaidLanguage）から
-    // Lua フィルタ（MERMAID_STRIP_LUA_FILTER）へ移行した（ADR-005）。
-    // 適用判定は pandocInvocation.buildPandocExecutionPlan の stripMermaid フラグで行うため、
-    // ここでの前処理は不要。
-
-    // draft 要求（--draft 引数 + frontmatter の mdtex.draft）を1箇所で解決する（候補 3）。
-    // draft は LaTeX（graphicx）にだけ伝えるもので Pandoc 引数ではないため、ここで抜いて
-    // ヘッダの draftSnippet に反映させる。
-    const { pandocExtraArgs, draftRequested } = resolveDraftRequest(
-      activeProfile.pandocExtraArgs,
-      content,
-    );
-
-    // トランスクルージョン (![[...]]) を先に展開（キャッシュ共有）
-    content = await expandTransclusions(content, ctx.app, activeFile.path, cache);
-
-    // Mermaidコードブロックを一時PNG化し、PDFでも確実に図が描かれるようにする
-    if (ctx.settings.enableExperimentalMermaid) {
-      const mermaidResult = await rasterizeMermaidBlocks(content, {
-        app: ctx.app,
-        sourcePath: activeFile.path,
-        imageScale: activeProfile.imageScale,
-        suppressLogs: ctx.settings.suppressDeveloperLogs,
-      });
-      content = mermaidResult.content;
-      mermaidTempDirs.push(...mermaidResult.cleanupDirs);
-    }
-
-    // markdownlint --fix は Markdown フェンス構造を保ったまま走らせたいので、
-    // LaTeX 置換より先に実行する。
-    const lintEnabled = ctx.settings.enableMarkdownlintFix;
-    if (lintEnabled) {
-      await fs.writeFile(intermediateFilename, content, "utf8");
-      try {
-        await deps.runMarkdownlintFix(ctx, intermediateFilename);
-        content = await fs.readFile(intermediateFilename, "utf8");
-      } catch (e: unknown) {
-        console.error(e);
-        new Notice(t("notice_markdownlint_failed_continue"));
-        // lint 失敗時は元の content をそのまま使う
+    // 方式W: crossref ラベルの重複検出。メイン文書内のユーザーミス、および
+    // 同一ファイル複数回埋め込みによる crossref 制約衝突を、Pandoc 実行前に検出して
+    // 分かりやすく通知する（ADR-005 関連）。GHC の CallStack ではなく日本語で原因を示す。
+    // 検出は normalizeMarkdown が行い、通知/中断の判断はここ（オーケストレーション層）で行う。
+    if (normalized.duplicateLabels.length > 0) {
+      const summary = normalized.duplicateLabels
+        .map(d => `${d.label} (${d.count}回)`)
+        .join(", ");
+      new Notice(t("notice_duplicate_labels", [summary]));
+      if (!ctx.settings.suppressDeveloperLogs) {
+        console.warn(
+          `[MdTex] Duplicate cross-reference labels: ${normalized.duplicateLabels.map(d => `${d.label}(${d.count})`).join(", ")}`,
+          normalized.duplicateLabels,
+        );
       }
+      return;
     }
 
     // ヘッダ（--include-in-header の中身）の組み立ては純粋関数 buildHeader に切り出している。
@@ -186,37 +168,7 @@ export async function convertCurrentPage(
     // file 側で管理する一方、CALLOUT_PREAMBLE / codelisting / draftSnippet は MdTex 固有
     // レイヤとして方式に関わらず buildHeader 内で維持する。
     const mode = isDefaultsTemplateMode(activeProfile) ? "defaults" : "builtin";
-    const headerContent = buildHeader(activeProfile, { mode, draft: draftRequested });
-    // LaTeX生ファイルとして include-in-header で渡す（Markdown経由のエスケープを防ぐ）
-    await fs.writeFile(headerFilePath, `${headerContent}\n`, "utf8");
-
-    // 有効な WikiLink のみ [[ ]] を外してテキストにする
-    content = unwrapValidWikiLinks(content, ctx.app, activeFile.path);
-
-    content = await replaceWikiLinksAndCodeAsync(
-      content,
-      ctx.app,
-      activeProfile,
-      activeFile.path,
-    );
-
-    // 方式W: crossref ラベルの重複検出。メイン文書内のユーザーミス、および
-    // 同一ファイル複数回埋め込みによる crossref 制約衝突を、Pandoc 実行前に検出して
-    // 分かりやすく通知する（ADR-005 関連）。GHC の CallStack ではなく日本語で原因を示す。
-    const duplicates = detectDuplicateLabels(content);
-    if (duplicates.length > 0) {
-      const summary = duplicates
-        .map(d => `${d.label} (${d.count}回)`)
-        .join(", ");
-      new Notice(t("notice_duplicate_labels", [summary]));
-      if (!ctx.settings.suppressDeveloperLogs) {
-        console.warn(
-          `[MdTex] Duplicate cross-reference labels: ${duplicates.map(d => `${d.label}(${d.count})`).join(", ")}`,
-          duplicates,
-        );
-      }
-      return;
-    }
+    const headerContent = buildHeader(activeProfile, { mode, draft: normalized.draftRequested });
 
     // NOTE: docx 出力時の LaTeX コマンド処理は文字列の正規表現逆変換では行わない。
     // `[^}]+` 系パターンは波括弧のネスト・`\{` エスケープ・複数行・オプション引数に対応できず、
@@ -226,29 +178,26 @@ export async function convertCurrentPage(
 
     // Pandoc 起動は入力方式（stdin/file）の分岐を隠した深い module（invokePandoc）に委譲する
     // （architecture review 候補 2 + 4）。本文は常に stdin で渡し、lint の有無で Pandoc への
-    // 入力経路が変わることはない。lint は純粋に上記の content への前処理ステップとなった。
-    const success = await invokePandoc({
+    // 入力経路が変わることはない。lint は normalizeMarkdown 内の前処理ステップとなった。
+    // header ファイルの生成・cleanup も invokePandoc 配下に統一した（候補 B）。呼び出し側は
+    // buildHeader の結果（headerContent）を渡すだけで、header ファイルのパスを知らない。
+    await invokePandoc({
       ctx,
       profile: activeProfile,
       format,
-      inputContent: content,
-      outputFile: outputFilename,
-      headerFilePath,
-      workingDir: path.dirname(inputFilePath),
-      resourcePath,
-      pandocExtraArgs,
+      inputContent: normalized.content,
+      outputFile: paths.output,
+      headerContent,
+      workingDir: paths.sourceDir,
+      resourcePath: paths.resourcePath,
+      pandocExtraArgs: normalized.pandocExtraArgs,
       stripMermaid: !ctx.settings.enableExperimentalMermaid,
     });
 
-    if (success && activeProfile.deleteIntermediateFiles) {
-      try {
-        // intermediateFilename は lint 有効時にのみ作られるため、そのときだけ削除する
-        if (lintEnabled) await fs.unlink(intermediateFilename);
-        await fs.unlink(headerFilePath);
-      } catch (err) {
-        console.warn(`Failed to delete intermediate files`, err);
-      }
-    }
+    // NOTE: lint 中間ファイル（.temp.md）の cleanup は normalizeMarkdown が所有する
+    // （keepLintIntermediate = !deleteIntermediateFiles で残すか制御）。header の cleanup も
+    // invokePandoc 配下に統一され（候補 B）、常に消される。両中間ファイルの lifecycle が
+    // それぞれの深い module に局所化された。
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     new Notice(t("notice_error_generating", [errorMessage]));

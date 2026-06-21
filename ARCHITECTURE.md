@@ -106,24 +106,28 @@ MdTexは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、
 MdTexPlugin.runConversion()
     │
     ▼
-ConvertCurrentPage()
+convertCurrentPage()
+    ├───► conversionPaths.buildConversionPaths()
+    │       └──► 入力/出力/中間体のパス構築（純粋関数）
     │
-    ├───► markdownTransforms
-    │       ├──► expandTransclusions()
-    │       ├──► replaceWikiLinks()
-    │       └──► stripObsidianComments()
+    ├───► normalizeMarkdown()
+    │       ├──► stripObsidianComments
+    │       ├──► resolveDraftRequest（--draft / frontmatter）
+    │       ├──► expandTransclusions
+    │       ├──► rasterizeMermaidBlocks（有効時）
+    │       ├──► markdownlint --fix（lint 中間ファイル lifecycle 内蔵）
+    │       ├──► unwrapValidWikiLinks
+    │       ├──► replaceWikiLinksAndCodeAsync
+    │       └──► detectDuplicateLabels
     │
-    ├───► mermaidRasterizer (有効な場合)
-    │       └──► DOM → PNG変換
+    ├───► headerBuilder.buildHeader()
+    │       └──► --include-in-header の LaTeX ヘッダ構築（純粋関数）
     │
-    ├───► lintService.runMarkdownlintFix()
-    │       └──► markdownlint-cli2 --fix
-    │
-    ├───► pandocCommandBuilder.buildPandocCommand()
-    │       └──► 引数配列の構築
-    │
-    └───► processRunner.runCommand()
-            └──► pandoc → lualatexの実行
+    └───► pandocInvocation.invokePandoc()
+            ├──► buildPandocCommand（引数構築・純粋関数）
+            ├──► header / Lua / YAML フィルタの一時ファイル化（tempFiles 経由）
+            ├──► processRunner.runCommand() → pandoc → lualatex
+            └──► cleanupTemporaryFiles（一時ファイルを全て片付け）
 ```
 
 ### Lintフロー
@@ -154,11 +158,9 @@ LintCurrentNote()
 
 **責任**:
 
-- 変換ワークフローの調整
-- Markdownコンテンツの変換（トランスクルージョン、WikiLinks）
-- Mermaid図のラスター化処理
-- 変換前のLint実行
-- processRunner経由のPandoc呼び出し
+- 変換ワークフローの調整（オーケストレーション層）
+- defaults file のパス解決（pack / custom）と出力先の検証
+- 本文正規化を `normalizeMarkdown` へ、Pandoc 起動を `invokePandoc` へ委譲
 
 **主要な関数**:
 
@@ -166,7 +168,7 @@ LintCurrentNote()
 export async function convertCurrentPage(
   ctx: PluginContext,
   deps: ConvertDeps,
-  format: OutputFormat
+  format: OutputFormat,
 ): Promise<void>
 ```
 
@@ -174,8 +176,29 @@ export async function convertCurrentPage(
 
 - `PluginContext` - アプリ状態と設定
 - `ConvertDeps` - 注入された依存関係（Lintサービス）
-- `pandocCommandBuilder` - コマンド構築
-- `processRunner` - 外部プロセス実行
+- `normalizeMarkdown` - Obsidian 記法の本文正規化（8 step の順序と lint 中間ファイル lifecycle を内蔵）
+- `conversionPaths` - 変換実行の作業パス群（入力・出力・中間体）
+- `invokePandoc` - Pandoc 起動と一時フィルタ・header の lifecycle
+- `headerBuilder` - `--include-in-header` の LaTeX ヘッダ構築（純粋関数）
+
+### NormalizeMarkdown
+
+**場所**: `src/services/normalizeMarkdown.ts`
+
+**責任**:
+
+- Obsidian 記法 → Pandoc 受理可能 Markdown への本文正規化パイプライン
+- 8 step の順序不変条件（コメント除去 → draft 解決 → トランスクルージョン → Mermaid → lint → WikiLink 除去 → WikiLink/画像置換 → 重複ラベル検出）を内蔵
+- lint 中間ファイル（`.temp.md`）の生成・読み戻し・片付けを所有
+
+### ConversionPaths
+
+**場所**: `src/services/conversionPaths.ts`
+
+**責任**:
+
+- 1 回の変換実行で使う作業パス群（入力・出力・lint 中間体・リソースパス）を純粋関数で構築
+- 命名規則（空白→_ 置換・latex 拡張子・中間体の置き場）を 1 箇所に集約（app 非依存・テスト容易）
 
 ### LintService
 

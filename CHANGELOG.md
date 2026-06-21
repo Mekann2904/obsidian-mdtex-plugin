@@ -31,6 +31,8 @@ MdTex Obsidianプラグインのすべての重要な変更をこのファイル
 - LaTeXプリアンブル処理の強化
 - デフォルトのNotoフォント設定の更新
 - 一時ファイル生成（Luaフィルタ／メタデータ）とcleanupを `tempFiles.ts` に統一し、重複パターンを解消（内部リファクタ、挙動変更なし）
+- 変換パイプラインの内部構造を整理（architecture review）：本文正規化（Obsidian 記法→Pandoc 受理 Markdown の 8 step）を `normalizeMarkdown` へ、作業パスの命名規則を `conversionPaths` へ、設定 UI の重複 closure を `bindField` へ集約
+- ヘッダファイル（`<base>.preamble.tex`）の出力先を出力ディレクトリから OS 一時領域へ移動し、`invokePandoc` の他の一時フィルタと同じ cleanup seam で片付けるようにした（`.preamble.tex` が vault 内に残留しなくなる）
 
 ### 修正
 - 特定の環境での日本語フォント描画の問題
