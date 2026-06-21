@@ -20,7 +20,6 @@ describe("buildPandocCommand", () => {
     const result = buildPandocCommand({
       profile,
       format: "pdf",
-      inputPath: "/tmp/input.md",
       outputPath: "/tmp/output.pdf",
       headerPath: "/tmp/header.tex",
       workingDir: "/tmp",
@@ -29,7 +28,6 @@ describe("buildPandocCommand", () => {
 
     expect(result.command).toBe("/usr/local/bin/custom-pandoc");
     expect(result.args).toContain("--pdf-engine=xelatex");
-    expect(result.args).toContain("/tmp/input.md");
     expect(result.args).toContain("/tmp/output.pdf");
   });
 
@@ -40,7 +38,6 @@ describe("buildPandocCommand", () => {
     const result = buildPandocCommand({
       profile,
       format: "latex",
-      inputPath: "/tmp/note.md",
       outputPath: "/tmp/note.tex",
       headerPath: "/tmp/header.tex",
       workingDir: "/tmp",

@@ -16,7 +16,8 @@ import { MyLabelEditorSuggest } from "./suggest/LabelEditorSuggest";
 import { MyLabelSuggest } from "./suggest/LabelReferenceSuggest";
 import { LatexEditorSuggest } from "./suggest/LatexEditorSuggest";
 import { convertCurrentPage } from "./services/convertService";
-import { lintCurrentNote, runMarkdownlintFix, PluginContext } from "./services/lintService";
+import { lintCurrentNote, runMarkdownlintFix } from "./services/lintService";
+import { PluginContext } from "./services/pluginContext";
 import {
   loadSettings as loadSettingsService,
   saveSettings as saveSettingsService,

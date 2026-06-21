@@ -15,7 +15,6 @@ export interface PandocCommandOptions {
   format: OutputFormat;
   outputPath: string;
   workingDir: string;
-  inputPath?: string;
   headerPath?: string;
   // プロファイル既定値のラベル／接頭辞を Pandoc メタデータとして渡す一時 YAML のパス。
   // `-M` ではなく `--metadata-file` 経由にすることで、文書の frontmatter が
@@ -24,7 +23,6 @@ export interface PandocCommandOptions {
   extraArgs?: string[];
   luaFilters?: string[];
   resourcePath?: string;
-  useStdin?: boolean;
 }
 
 export interface PandocCommandResult {
@@ -35,10 +33,6 @@ export interface PandocCommandResult {
 export function buildPandocCommand(options: PandocCommandOptions): PandocCommandResult {
   const profile = options.profile;
   const args: string[] = [];
-
-  if (!options.useStdin && options.inputPath) {
-    args.push(normalizeFsPath(options.inputPath));
-  }
 
   args.push(...INPUT_FORMAT_ARGS);
 
@@ -113,7 +107,7 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   // 図・表・コード・数式のキャプション語／参照接頭辞は `--metadata-file` 経由で
   // プロファイル既定値を渡す。コマンドライン `-M` で渡すと frontmatter より優先
   // されてしまい文書ごとの上書きが効かなくなるため、metadata-file に一本化する。
-  // YAML の生成は buildLabelMetadataYaml、ファイル化は buildPandocExecutionPlan が担う。
+  // YAML の生成は buildLabelMetadataYaml、ファイル化は pandocInvocation.buildPandocExecutionPlan が担う。
 
   // builtin 方式のみ: documentclass / geometry / fontsize 等の `-V` を GUI 設定値から生成する。
   // defaults 方式は defaults file 側で `variables:` を管理するため、これらの `-V` 生成をスキップ

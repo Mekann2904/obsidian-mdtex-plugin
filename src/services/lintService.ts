@@ -3,19 +3,15 @@
 // Reason: プラグイン本体の責務を分離し、Lint 周辺処理を集約するため。
 // Related: src/MdTexPlugin.ts, src/services/convertService.ts, src/MdTexPluginSettings.ts
 
-import { Notice, MarkdownView, FileSystemAdapter, App } from "obsidian";
+import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
 import { spawn } from "child_process";
 import * as path from "path";
 import * as fs from "fs/promises";
 import * as fsSync from "fs";
-import { PandocPluginSettings, ProfileSettings } from "../MdTexPluginSettings";
+import { PandocPluginSettings } from "../MdTexPluginSettings";
 import { t } from "../lang/helpers";
-
-export interface PluginContext {
-  app: App;
-  settings: PandocPluginSettings;
-  getActiveProfileSettings(): ProfileSettings;
-}
+import { PluginContext } from "./pluginContext";
+import { splitFrontmatter } from "../utils/frontmatter";
 
 export async function lintCurrentNote(ctx: PluginContext) {
   const activeFile = ctx.app.workspace.getActiveFile();
@@ -95,12 +91,7 @@ export async function runMarkdownlintFix(ctx: PluginContext, targetPath: string)
   }
 
   const original = await fs.readFile(fullPath, "utf8");
-  const yamlMatch = original.match(/^(---[\t\x20]*\n[\s\S]*?\n---[\t\x20]*\n?)/);
-  const tomlMatch = !yamlMatch
-    ? original.match(/^(\+\+\+[\t\x20]*\n[\s\S]*?\n(\+\+\+|\.\.\.)[\t\x20]*\n?)/)
-    : null;
-  const frontMatter = yamlMatch?.[1] || tomlMatch?.[1] || "";
-  const body = original.slice(frontMatter.length);
+  const { raw: frontMatter, body } = splitFrontmatter(original);
 
   if (frontMatter) {
     const tempBody = `${fullPath}.lintbody.md`;

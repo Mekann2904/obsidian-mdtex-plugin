@@ -2,7 +2,7 @@
 // Purpose: citation モード（natbib/citeproc）有効時の反応型 LaTeX フェーズ（ADR-009）。
 //          Pandoc 生成の standalone .tex を受け取り、draft→.aux 読み取り→plainnat 除去→
 //          latexmk→PDF を実行する。Pandoc→.tex 生成と env（TeX PATH + TEXINPUTS 等）の構築は
-//          呼び出し元（convertService.executePandocCommand）が担い、本モジュールは純粋に
+//          呼び出し元（pandocInvocation.executePandocCommand）が担い、本モジュールは純粋に
 //          「与えられた env・latexmk 引数で LaTeX を回す」だけに専念する。
 // Reason: 学会公式クラス（ACL 等）の内蔵 bibliographystyle と Pandoc --natbib の plainnat の衝突を、
 //          クラスを知らなくても解決するため（.aux フィードバック）。
@@ -136,7 +136,7 @@ export async function runReactiveLatexPhase(
   }
 
   const generatedPdf = path.join(texDir, `${texBase}.pdf`);
-  // 呼び出し元（buildPandocExecutionPlan）は texOutputPath を PDF 出力パスと同名・拡張子 .tex に
+  // 呼び出し元（pandocInvocation.buildPandocExecutionPlan）は texOutputPath を PDF 出力パスと同名・拡張子 .tex に
   // 設るため、通常 generatedPdf === pdfOutputPath。上流の不変条件が壊れたときの安全網として残す。
   if (generatedPdf !== pdfOutputPath) {
     try {

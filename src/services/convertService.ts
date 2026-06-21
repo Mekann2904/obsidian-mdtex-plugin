@@ -5,7 +5,6 @@
 
 import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
 import * as path from "path";
-import * as os from "os";
 import * as fs from "fs/promises";
 import { isDefaultsTemplateMode, ProfileSettings } from "../MdTexPluginSettings";
 import {
@@ -13,109 +12,22 @@ import {
   unwrapValidWikiLinks,
   stripObsidianComments,
 } from "../utils/markdownTransforms";
+import { resolveDraftRequest } from "../utils/frontmatter";
 import { buildHeader } from "../utils/headerBuilder";
-import { CALLOUT_LUA_FILTER } from "../assets/callout-filter";
-import { DOCX_TEX_LUA_FILTER } from "../assets/docxTexFilter";
-import { MERMAID_STRIP_LUA_FILTER } from "../assets/mermaid-filter";
 import { expandTransclusions } from "../utils/transclusion";
 import { detectDuplicateLabels } from "../utils/crossrefLabels";
-import type { PluginContext } from "./lintService";
+import type { PluginContext } from "./pluginContext";
 import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
 import { t } from "../lang/helpers";
-import {
-  buildPandocCommand,
-  buildLabelMetadataYaml,
-  buildLatexSearchEnv,
-  OutputFormat,
-  PandocCommandResult,
-} from "./pandocCommandBuilder";
-import { runReactiveLatexPhase, resolveLatexInvocation } from "./citationPipeline";
-import { buildTexAwareEnv } from "../utils/texPath";
-import { runCommand } from "../utils/processRunner";
+import { OutputFormat } from "./pandocCommandBuilder";
+import { invokePandoc } from "./pandocInvocation";
 import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
-
-import {
-  resolveDefaultsFilePath,
-} from "./templatePackService";
-import {
-  createTempFile,
-  cleanupTemporaryFiles,
-  isInsideBaseDir,
-  TempFileArtifact,
-} from "./tempFiles";
+import { resolveDefaultsFilePath } from "./templatePackService";
+import { cleanupTemporaryFiles } from "./tempFiles";
 
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
-}
-
-function parseDraftFlag(extraArgs: string): { extras: string[]; isDraft: boolean } {
-  if (!extraArgs || !extraArgs.trim()) return { extras: [], isDraft: false };
-
-  let isDraft = false;
-  const extras = extraArgs.split(/\s+/).filter(arg => {
-    if (arg === "--draft") {
-      isDraft = true;
-      return false;
-    }
-    if (arg.startsWith("--draft=")) {
-      const value = arg.split("=")[1]?.toLowerCase();
-      isDraft = value !== "0" && value !== "false";
-      return false;
-    }
-    return !!arg;
-  });
-
-  return { extras, isDraft };
-}
-
-function detectDraftInFrontmatter(markdown: string): boolean {
-  const fmMatch = markdown.match(/^---\s*\n([\s\S]*?)\n---/);
-  if (!fmMatch) return false;
-
-  const yaml = fmMatch[1];
-  const lines = yaml.split(/\r?\n/);
-
-  let inMdtexBlock = false;
-
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (!line) continue;
-
-    // mdtex: draft: true  もしくは mdtex: draft (boolean省略)
-    if (/^mdtex\.draft\s*:/i.test(line)) {
-      const val = line.split(":")[1]?.trim() || "true";
-      return val.toLowerCase() !== "false" && val !== "0";
-    }
-
-    // mdtex:
-    if (/^mdtex\s*:/i.test(line)) {
-      inMdtexBlock = true;
-      const val = line.split(":")[1]?.trim();
-      if (val) {
-        // 単行で mdtex: draft と書かれた場合を true とみなす
-        return val.toLowerCase() !== "false" && val !== "0";
-      }
-      continue;
-    }
-
-    // インデントされた mdtex ブロック内の draft: true
-    if (inMdtexBlock && /^draft\s*:/i.test(line)) {
-      const val = line.split(":")[1]?.trim() || "true";
-      return val.toLowerCase() !== "false" && val !== "0";
-    }
-
-    if (inMdtexBlock && /^-\s*(draft|true|1|yes)$/i.test(line)) {
-      return true;
-    }
-
-    // 別ブロックに移行したらリセット
-    if (!raw.startsWith(" ") && !raw.startsWith("\t")) {
-      inMdtexBlock = false;
-    }
-  }
-
-  return false;
 }
 
 function resolveResourcePath(profile: ProfileSettings, vaultBasePath: string): string {
@@ -225,13 +137,16 @@ export async function convertCurrentPage(
 
     // Mermaid コードブロックの言語削除は TS 正規表現（stripMermaidLanguage）から
     // Lua フィルタ（MERMAID_STRIP_LUA_FILTER）へ移行した（ADR-005）。
-    // 適用判定は buildPandocExecutionPlan の stripMermaid フラグで行うため、
+    // 適用判定は pandocInvocation.buildPandocExecutionPlan の stripMermaid フラグで行うため、
     // ここでの前処理は不要。
 
-    // mdtex固有の --draft フラグをPandoc引数から分離してLaTeXにだけ伝える
-    const { extras: pandocExtraArgs, isDraft } = parseDraftFlag(activeProfile.pandocExtraArgs);
-    const frontmatterDraft = detectDraftInFrontmatter(content);
-    const draftRequested = isDraft || frontmatterDraft;
+    // draft 要求（--draft 引数 + frontmatter の mdtex.draft）を1箇所で解決する（候補 3）。
+    // draft は LaTeX（graphicx）にだけ伝えるもので Pandoc 引数ではないため、ここで抜いて
+    // ヘッダの draftSnippet に反映させる。
+    const { pandocExtraArgs, draftRequested } = resolveDraftRequest(
+      activeProfile.pandocExtraArgs,
+      content,
+    );
 
     // トランスクルージョン (![[...]]) を先に展開（キャッシュ共有）
     content = await expandTransclusions(content, ctx.app, activeFile.path, cache);
@@ -307,411 +222,46 @@ export async function convertCurrentPage(
     // `[^}]+` 系パターンは波括弧のネスト・`\{` エスケープ・複数行・オプション引数に対応できず、
     // ネストした LaTeX（例: \footnote{\textbf{重要}}）を破壊するため。
     // 代わりに Pandoc の AST を直接処理する Lua フィルタ（DOCX_TEX_LUA_FILTER）へ一本化し、
-    // buildPandocExecutionPlan で実行時に一時ファイルとして渡す。
+    // pandocInvocation（buildPandocExecutionPlan）で実行時に一時ファイルとして渡す。
 
-    if (lintEnabled) {
-      // markdownlint 後の内容を Pandoc に渡すため、再度中間ファイルへ書き戻す
-      await fs.writeFile(intermediateFilename, content, "utf8");
+    // Pandoc 起動は入力方式（stdin/file）の分岐を隠した深い module（invokePandoc）に委譲する
+    // （architecture review 候補 2 + 4）。本文は常に stdin で渡し、lint の有無で Pandoc への
+    // 入力経路が変わることはない。lint は純粋に上記の content への前処理ステップとなった。
+    const success = await invokePandoc({
+      ctx,
+      profile: activeProfile,
+      format,
+      inputContent: content,
+      outputFile: outputFilename,
+      headerFilePath,
+      workingDir: path.dirname(inputFilePath),
+      resourcePath,
+      pandocExtraArgs,
+      stripMermaid: !ctx.settings.enableExperimentalMermaid,
+    });
 
-      const success = await runPandoc(
-        ctx,
-        activeProfile,
-        intermediateFilename,
-        outputFilename,
-        format,
-        headerFilePath,
-        pandocExtraArgs,
-        sourceDir,
-        resourcePath,
-      );
-
-      if (success && activeProfile.deleteIntermediateFiles) {
-        try {
-          await fs.unlink(intermediateFilename);
-          await fs.unlink(headerFilePath);
-        } catch (err) {
-          console.warn(`Failed to delete intermediate file: ${intermediateFilename}`, err);
-        }
-      }
-    } else {
-      const success = await runPandocWithStdin(
-        ctx,
-        activeProfile,
-        content,
-        outputFilename,
-        format,
-        path.dirname(inputFilePath),
-        headerFilePath,
-        pandocExtraArgs,
-        resourcePath,
-      );
-
-      if (success && activeProfile.deleteIntermediateFiles) {
-        try {
-          await fs.unlink(headerFilePath);
-        } catch (err) {
-          console.warn(`Failed to delete header file: ${headerFilePath}`, err);
-        }
-      }
-
-      if (!success) {
-        new Notice(t("notice_pandoc_stdin_failed"));
+    if (success && activeProfile.deleteIntermediateFiles) {
+      try {
+        // intermediateFilename は lint 有効時にのみ作られるため、そのときだけ削除する
+        if (lintEnabled) await fs.unlink(intermediateFilename);
+        await fs.unlink(headerFilePath);
+      } catch (err) {
+        console.warn(`Failed to delete intermediate files`, err);
       }
     }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     new Notice(t("notice_error_generating", [errorMessage]));
   } finally {
-    const tempRoot = path.resolve(os.tmpdir());
-    const tempRootReal = await fs.realpath(tempRoot).catch(() => tempRoot);
-
-    for (const dir of mermaidTempDirs) {
-      try {
-        const resolved = path.resolve(dir);
-        const insideTemp = await isInsideBaseDir(resolved, tempRootReal);
-        if (!insideTemp) {
-          console.warn(`Skip removing non-temp directory: ${dir}`);
-          continue;
-        }
-        const base = path.basename(resolved);
-        if (!base.startsWith("mdtex-mermaid-") || resolved === tempRootReal) {
-          console.warn(`Skip removing suspicious temp dir: ${dir}`);
-          continue;
-        }
-        const stat = await fs.lstat(resolved).catch(() => null);
-        if (!stat || !stat.isDirectory() || stat.isSymbolicLink()) {
-          console.warn(`Skip removing non-directory or symlink: ${dir}`);
-          continue;
-        }
-        // OSの一時領域に限定して安全に削除する
-        await fs.rm(resolved, { recursive: true, force: false, maxRetries: 3, retryDelay: 100 });
-      } catch (err) {
-        console.warn(`Failed to remove temporary Mermaid dir: ${dir}`, err);
-      }
-    }
+    // mermaid の一時ディレクトリも Lua/YAML フィルタと同じ安全な cleanup seam を通す
+    // （architecture review 候補 1）。mermaidRasterizer は "mdtex-mermaid-" prefix で生成し、
+    // この prefix は tempFiles.TEMP_PREFIXES に既に登録済みのため、OS 一時領域 + prefix の
+    // 二重検査が cleanupTemporaryFiles 内で効く。手書きの realpath/lstat/rm は不要になった。
+    await cleanupTemporaryFiles(mermaidTempDirs);
 
     const elapsed = Date.now() - startedAt;
     if (!ctx.settings.suppressDeveloperLogs) {
       console.log(`[MdTex] convert ${format.toUpperCase()} completed in ${elapsed} ms`);
     }
-  }
-}
-
-async function runPandoc(
-  ctx: PluginContext,
-  activeProfile: ProfileSettings,
-  inputFile: string,
-  outputFile: string,
-  format: OutputFormat,
-  headerFilePath: string,
-  pandocExtraArgs: string[],
-  workingDirOverride?: string,
-  resourcePathOverride?: string,
-): Promise<boolean> {
-  let plan: PandocExecutionPlan | null = null;
-
-  try {
-    plan = await buildPandocExecutionPlan({
-      profile: activeProfile,
-      format,
-      headerFilePath,
-      outputFile,
-      workingDir: workingDirOverride ?? path.dirname(inputFile),
-      inputPath: inputFile,
-      pandocExtraArgs,
-      resourcePath: resourcePathOverride,
-      stripMermaid: !ctx.settings.enableExperimentalMermaid,
-    });
-
-    return await executePandocCommand(plan, ctx, outputFile);
-  } finally {
-    await cleanupTemporaryFiles(plan?.tempFiles ?? []);
-  }
-}
-
-async function runPandocWithStdin(
-  ctx: PluginContext,
-  activeProfile: ProfileSettings,
-  inputContent: string,
-  outputFile: string,
-  format: OutputFormat,
-  workingDir: string,
-  headerFilePath: string,
-  pandocExtraArgs: string[],
-  resourcePathOverride?: string,
-): Promise<boolean> {
-  let plan: PandocExecutionPlan | null = null;
-
-  try {
-    plan = await buildPandocExecutionPlan({
-      profile: activeProfile,
-      format,
-      headerFilePath,
-      outputFile,
-      workingDir,
-      pandocExtraArgs,
-      useStdin: true,
-      resourcePath: resourcePathOverride,
-      stripMermaid: !ctx.settings.enableExperimentalMermaid,
-    });
-
-    return await executePandocCommand(plan, ctx, outputFile, inputContent);
-  } finally {
-    await cleanupTemporaryFiles(plan?.tempFiles ?? []);
-  }
-}
-
-interface PandocExecutionPlan {
-  command: PandocCommandResult;
-  tempFiles: string[];
-  workingDir: string;
-  // ADR-009: 反応型 LaTeX フェーズでエンジン解決（resolveLatexInvocation）と検索パス再構築に使う。
-  // executePandocCommand で一度だけ env を構築し、runReactiveLatexPhase にそのまま渡すため、
-  // 本モジュール側で env 再構築は行わない。
-  envExtra: NodeJS.ProcessEnv;
-  // ADR-009: citation モード（natbib/citeproc）有効時の2フェーズ実行情報。設定時、command は
-  // PDF ではなく standalone .tex を生成するよう構築され、executePandocCommand は反応型 LaTeX
-  // フェーズ（draft→.aux→plainnat 除去→latexmk）に引き継ぐ。latexmkArgs/draftEngine は
-  // buildPandocExecutionPlan 時に1回だけ resolveLatexInvocation で解決済み。
-  citation?: {
-    texPath: string;
-    pdfPath: string;
-    latexmkArgs: string[];
-    draftEngine: string;
-  };
-}
-
-// 変換パイプラインで使う一時 Lua/YAML ファイルは、生成プリミティブ（createTempFile）の
-// 薄いラッパとして統一する。mkdtemp + writeFile + cleanup-on-error は tempFiles.ts に集約済み。
-// 各フィルタは配布物（main.js）に埋め込んだ文字列定数を実行時に一時ファイルへ書き出し、
-// 全環境で正しく適用されるようにする（loose ファイル依存は廃止）。
-
-// Obsidian コールアウト変換用 Lua フィルタ（pdf/latex 常時適用）。
-async function createTempLuaFilter(): Promise<TempFileArtifact> {
-  return createTempFile(CALLOUT_LUA_FILTER, "mdtex-lua-", "lua");
-}
-
-// DOCX 出力用の AST ベース Lua フィルタ（DOCX_TEX_LUA_FILTER）。
-async function createTempDocxFilter(): Promise<TempFileArtifact> {
-  return createTempFile(DOCX_TEX_LUA_FILTER, "mdtex-docx-", "lua");
-}
-
-// Mermaid 言語削除フィルタ（pdf/latex 用）。適用条件（enableExperimentalMermaid が無効）は
-// buildPandocExecutionPlan 側で判定する（ADR-005）。
-async function createTempMermaidFilter(): Promise<TempFileArtifact> {
-  return createTempFile(MERMAID_STRIP_LUA_FILTER, "mdtex-mermaid-", "lua");
-}
-
-// プロファイル既定値のラベル／接頭辞を Pandoc メタデータ YAML として一時生成する。
-// 値が全て空なら null を返し、呼び出し側は --metadata-file を省略する。
-async function createTempMetadataFile(profile: ProfileSettings): Promise<TempFileArtifact | null> {
-  const body = buildLabelMetadataYaml(profile);
-  if (!body) return null;
-  return createTempFile(body, "mdtex-metadata-", "yaml");
-}
-
-async function buildPandocExecutionPlan(params: {
-  profile: ProfileSettings;
-  format: OutputFormat;
-  headerFilePath: string;
-  outputFile: string;
-  workingDir: string;
-  pandocExtraArgs: string[];
-  inputPath?: string;
-  useStdin?: boolean;
-  resourcePath?: string;
-  // Mermaid 言語削除フィルタを適用するか（enableExperimentalMermaid が無効な場合 true）。
-  // pdf/latex 出力でのみ意味を持ち、--listings の unknown language 警告を防ぐ（ADR-005）。
-  stripMermaid?: boolean;
-}): Promise<PandocExecutionPlan> {
-  const tempFiles: string[] = [];
-  const luaFilters: string[] = [];
-
-  if (params.format === "pdf" || params.format === "latex") {
-    const created = await createTempLuaFilter();
-    luaFilters.push(created.filePath);
-    tempFiles.push(created.filePath, created.tempDir);
-
-    // 実験的 Mermaid 無効時: Mermaid コードブロックの言語を削除し、--listings の
-    // unknown language 警告を防ぐ。従来の stripMermaidLanguage（TS 正規表現）に代わる
-    // AST ベース処理（ADR-005）。
-    if (params.stripMermaid) {
-      const mermaid = await createTempMermaidFilter();
-      luaFilters.push(mermaid.filePath);
-      tempFiles.push(mermaid.filePath, mermaid.tempDir);
-    }
-  }
-
-  if (params.format === "docx" && params.profile.enableAdvancedTexCommands) {
-    const docxFilter = await createTempDocxFilter();
-    luaFilters.push(docxFilter.filePath);
-    tempFiles.push(docxFilter.filePath, docxFilter.tempDir);
-  }
-
-  // プロファイル既定値をメタデータとして渡し、文書 frontmatter で上書き可能にする。
-  // ただし figureTitle / figPrefix 等は pandoc-crossref 専用メタデータなので、
-  // crossref-OFF では消費先がなく無意味。その場合は LaTeX ネイティブの
-  // \renewcommand フォールバック（convertCurrentPage 側）に任せ、不要な
-  // 一時ファイル生成を避ける。
-  // defaults 方式ではキャプション語／参照接頭辞も defaults file 側の `metadata:` で管理する。
-  // コマンドライン `--metadata-file` は defaults file より優先されてしまうため、defaults 方式
-  // では生成をスキップし、precedence 衝突を回避する（builtin 方式は従来どおり crossref-ON のみ生成）。
-  const metadata =
-    params.profile.usePandocCrossref && !isDefaultsTemplateMode(params.profile)
-      ? await createTempMetadataFile(params.profile)
-      : null;
-  let metadataFile: string | undefined;
-  if (metadata) {
-    metadataFile = metadata.filePath;
-    tempFiles.push(metadata.filePath, metadata.tempDir);
-  }
-
-  try {
-    // ADR-009: citation モード（natbib/citeproc）有効かつ PDF 出力のとき、2フェーズ化する。
-    // Pandoc には standalone .tex を生成させ（format=latex）、executePandocCommand で反応型
-    // LaTeX フェーズに引き継ぐ。.tex パスは PDF 出力パスと同名・拡張子 .tex。
-    const citationActive =
-      params.format === "pdf" &&
-      (params.profile.citationMode === "natbib" || params.profile.citationMode === "citeproc");
-    const buildCmdFormat: OutputFormat = citationActive ? "latex" : params.format;
-    const texOutputPath = params.outputFile.replace(/\.pdf$/, ".tex");
-
-    const command = buildPandocCommand({
-      profile: params.profile,
-      format: buildCmdFormat,
-      inputPath: params.useStdin ? undefined : params.inputPath,
-      outputPath: citationActive ? texOutputPath : params.outputFile,
-      headerPath: params.headerFilePath,
-      metadataFile,
-      workingDir: params.workingDir,
-      extraArgs: params.pandocExtraArgs,
-      luaFilters,
-      resourcePath:
-        (params.resourcePath ?? params.profile.searchDirectory.trim()) || params.workingDir,
-      useStdin: params.useStdin,
-    });
-
-    // ADR-009: 反応型修正は latexmk が .tex を処理する2フェーズでのみ意味がある。citation モード時は
-    // buildLatexSearchEnv でパックフォルダを検索パスに注入する。latexmk 引数/draft エンジンは
-    // ここで1回だけ解決して plan.citation に載せ、executePandocCommand → runReactiveLatexPhase へ
-    // そのまま引き継ぐ（env 再構築と resolveLatexInvocation の重複呼び出しを廃止）。
-    const envExtra = buildLatexSearchEnv(params.profile, process.platform);
-    const citation = citationActive
-      ? {
-          texPath: texOutputPath,
-          pdfPath: params.outputFile,
-          ...resolveLatexInvocation(params.profile),
-        }
-      : undefined;
-    return {
-      command,
-      tempFiles,
-      workingDir: params.workingDir,
-      envExtra,
-      citation,
-    };
-  } catch (error) {
-    await cleanupTemporaryFiles(tempFiles);
-    throw error;
-  }
-}
-
-function createPandocNoticeHandlers(ctx: PluginContext) {
-  const NOTICE_LIMIT = 1;
-  let noticeCount = 0;
-  let overflowNotified = false;
-
-  return {
-    onStdout: (data: string) => {
-      if (!ctx.settings.suppressDeveloperLogs) {
-        console.log(`Pandoc Output: ${data.trim()}`);
-      }
-    },
-    onStderr: (data: string) => {
-      const msg = data.toString().trim();
-      if (!msg) return;
-      if (!ctx.settings.suppressDeveloperLogs) {
-        console.warn(`Pandoc stderr: ${msg}`);
-      }
-      if (noticeCount < NOTICE_LIMIT) {
-        new Notice(t("notice_pandoc_stderr", [msg.substring(0, 100)]));
-        noticeCount += 1;
-      } else if (!overflowNotified) {
-        new Notice(t("notice_pandoc_more_logs"));
-        overflowNotified = true;
-      }
-    },
-  };
-}
-
-async function executePandocCommand(
-  plan: PandocExecutionPlan,
-  ctx: PluginContext,
-  outputFile: string,
-  inputContent?: string,
-): Promise<boolean> {
-  const handlers = createPandocNoticeHandlers(ctx);
-
-  try {
-    // ADR-009 関連: Obsidian（GUI）の process.env.PATH は TeX bin を含まないことが多く、PDF
-    // エンジン（latexmk/lualatex）が command not found になる。/Library/TeX/texbin 等を PATH に
-    // 自動追加する（texPath.ts）。envExtra（TEXINPUTS/BIBINPUTS/BSTINPUTS 等）は末尾でマージし、
-    // defaults 方式のテンプレートパックフォルダを LaTeX 検索パスに加える。空オブジェクトなら影響しない。
-    const env = { ...buildTexAwareEnv(process.env), ...plan.envExtra };
-
-    if (plan.citation) {
-      const texResult = await runCommand(plan.command.command, plan.command.args, {
-        cwd: plan.workingDir,
-        env,
-        input: inputContent,
-        onStdout: handlers.onStdout,
-        onStderr: handlers.onStderr,
-      });
-      if (texResult.exitCode !== 0) {
-        new Notice(t("notice_pandoc_exit_code", [texResult.exitCode]));
-        return false;
-      }
-      const ok = await runReactiveLatexPhase(
-        plan.citation.texPath,
-        plan.citation.pdfPath,
-        env,
-        plan.citation.latexmkArgs,
-        plan.citation.draftEngine,
-        {
-          onStdout: handlers.onStdout,
-          onStderr: handlers.onStderr,
-          suppressLogs: ctx.settings.suppressDeveloperLogs,
-        },
-      );
-      if (ok) {
-        new Notice(t("notice_generated", [path.basename(outputFile)]));
-        return true;
-      }
-      new Notice(t("notice_pandoc_stdin_failed"));
-      return false;
-    }
-
-    const result = await runCommand(plan.command.command, plan.command.args, {
-      cwd: plan.workingDir,
-      // ADR-009: envExtra（TEXINPUTS/BIBINPUTS/BSTINPUTS 等）を末尾でマージし、defaults 方式の
-      // テンプレートパックフォルダを LaTeX 検索パスに加える。process.env を先に置いて既存環境を
-      // 保ち、envExtra で上書きする。空オブジェクトなら影響しない。
-      env,
-      input: inputContent,
-      onStdout: handlers.onStdout,
-      onStderr: handlers.onStderr,
-    });
-
-    if (result.exitCode === 0) {
-      new Notice(t("notice_generated", [path.basename(outputFile)]));
-      return true;
-    }
-
-    new Notice(t("notice_pandoc_exit_code", [result.exitCode]));
-    return false;
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    new Notice(t("notice_pandoc_launch_error", [errorMessage]));
-    return false;
   }
 }
