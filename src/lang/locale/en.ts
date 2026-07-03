@@ -149,6 +149,16 @@ const en = {
   notice_sample_packs_installed: "Installed sample templates: {0}",
   button_install_samples: "Reinstall samples",
 
+  setting_pack_info_engine: "Expected engine: {0}",
+  pack_requires_missing:
+    "This pack requires the following files in its folder: {0}",
+  pack_requires_hint: "See SKILL.md for placement instructions.",
+  button_open_skill_doc: "Open SKILL.md",
+  notice_skill_not_found: "SKILL.md not found in the template folder.",
+  button_apply_recommended: "Apply recommended settings",
+  notice_recommended_applied: "Applied recommended settings.",
+  notice_recommended_uptodate: "Recommended settings already match this profile.",
+
   heading_preamble: "LaTeX Preamble",
   heading_document_frame: "Document layout (class, fonts, margins)",
   heading_pdf_engine_advanced: "Advanced: PDF engine options",

@@ -20,8 +20,10 @@ MdTex Templates/                    ← このフォルダ
 ├── 縦書き二段組/                    ← パック例
 │   ├── defaults.yaml               ← ★必須: Pandoc defaults file（パックの入口）
 │   ├── tate-twocolumn.tex          ←    任意: カスタム Pandoc テンプレート
-│   ├── preamble.tex                ←    任意: プリアンブル
-│   └── aozora-ruby.lua             ←    任意: Lua フィルタ
+│   ├── preamble.tex                ←    任意: プリアンブル（章扉・表題ページ付き）
+│   ├── aozora-ruby.lua             ←    任意: Lua フィルタ（ルビ・章扉記法）
+│   ├── chapter-bg.lua             ←    任意: Lua フィルタ（章扉背景画像の絶対パス解決）
+│   └── sample.md                   ←    任意: すぐPDF出せる本文サンプル
 └── <あなたのパック>/                ← 自作パック
     └── defaults.yaml               ← 最低これだけあれば認識される
 ```
@@ -107,6 +109,43 @@ pandoc <本文>.md \
 
 ---
 
+## パックメタ（自己記述化）
+
+defaults.yaml に `_mdtex:` セクションを書くと、パックが**自分自身の説明・前提・推奨設定**を宣言できます。設定画面でパックを選んだとき、MdTex がこのメタを読んで:
+
+- **title / description** を表示（フォルダ名だけだと分からない用途を明示）
+- **requires** のファイルがパックフォルダに無ければ**警告**（ipsj.cls 未配置等を実行前検知）
+- **recommendedProfile** が現在のプロファイルとズレていれば**「推奨設定を適用」**ボタンを提示
+
+Pandoc は未知キーを無視するため、`_mdtex:` を書いても Pandoc の動作に影響しません。書かなくてもパックは動きます（フォルダ名だけで選択できる従来動作を維持）。
+
+### フィールド
+
+```yaml
+_mdtex:
+  title: "情報系論文風（LuaLaTeX）"        # 表示名。未指定ならフォルダ名を使う
+  description: "AI学会風の二段組。"         # 一行説明
+  engine: lualatex                          # 想定 PDF エンジン（表示専用）
+  requires:                                 # ユーザー配置が必要な外部ファイル
+    - ipsj.cls
+  recommendedProfile:                       # パックが推奨するプロファイル設定
+    citationMode: natbib                    # none / natbib / citeproc
+    latexEngine: latexmk
+    pdfEngineOpts: "-latex=platex -pdfdvi"  # スペースを含む場合はクォート
+```
+
+- 全フィールド省略可能。`_mdtex:` だけ書いても、中身が空なら表示しない。
+- `requires` はパックフォルダ（defaults.yaml と同じフォルダ）内のファイル名。MdTex が存在確認し、不足を警告する。
+- `recommendedProfile` の「適用」は、ズレている項目だけを現在のプロファイルに上書きする。
+
+### いつ書くべきか
+
+- **公式クラスを使うパック**（ipsj / acmart 等）→ `requires` と `recommendedProfile` を必ず書く。実行前の前提チェックと設定の自動適用が効く。
+- **配布想定のパック** → `title` / `description` を書くと、受け取った人がドロップダウンで用途を即座に理解できる。
+- **個人用** → 省略して構わない。
+
+---
+
 ## 落とし穴（defaults 方式固有）
 
 `DEFAULT_LATEX_PREAMBLE` が入らないため、以下は preamble 側で自前で用意する。
@@ -126,6 +165,7 @@ pandoc <本文>.md \
 | `Cannot determine size of graphic ... (no BoundingBox)` | pLaTeX+dvi 経路で extractbb がスペース入り画像名をトークン分割 | `sanitize-images.lua` で画像名を sanitize（`pLaTeX学会論文` パック参照） |
 | `Undefined control sequence. ... \phantomsection` | 数式ラベル用アンカー。hyperref 由来だが partial で未ロード | `\usepackage[dvipdfmx]{hyperref}` を preamble 末尾に |
 | コードキャプションが2重表示 / 縦1文字折れ | Pandoc 3.8+ が codelisting + lstlisting[caption] の両方を出す | `code-blocks.lua` で captionof + lstlisting に変換（`pLaTeX学会論文` 参照） |
+| 画像ファイル名がPDFにテキストで表示される（画像が貼られない） | (a) pandoc の作業ディレクトリが .md の場所なのでパック内画像が見つからない、(b) pandoc が絶対パスを72桁で折り返し、スペースが改行に置換されて lualatex が画像を見失いドラフトモードでファイル名を描画 | (a) Lua フィルタで画像を絶対パス解決（`縦書き二段組/chapter-bg.lua`）、(b) defaults.yaml に `wrap: none` を追加（パスを1行に保つ）。画像は *metadata:* に置くこと（Lua フィルタが読めるのは metadata のみ） |
 
 ---
 
@@ -252,12 +292,32 @@ TEXINPUTS="MdTex Templates/<パック>:" platex -interaction=nonstopmode -halt-o
 ## 設計の指針
 
 - **Markdown 本文に LaTeX コマンドを大量に書かせない。** 記法は Lua フィルタで拡張し、
-  本文は Markdown らしく保つ。`縦書き二段組` の `aozora-ruby.lua`（`｜親文字《よみ》` → `\ruby`）が実例。
+  本文は Markdown らしく保つ。`縦書き二段組` の `aozora-ruby.lua` が実例:
+  `｜親文字《よみ》` → `\ruby`、`::: novel-chapter` → 章扉マクロ `\novelchapter`。
 - **見出しは Markdown の `#`/`##` を使い、見た目は preamble の `titlesec` で整える。**
-  本文に `\novelchapter{}` 等の LaTeX マクロを直接書かない。
+  本文に `\novelchapter{}` 等の LaTeX マクロを直接書かず、`::: novel-chapter` 記法を使う。
+  （章扉の「雨を大きく・の を小さく」のような1字ごとの微調整が必要な場合だけ、
+  `{=latex}` 生ブロックで TikZ 座標を直接書く。`縦書き二段組/sample.md` に両方の実例。）
 - **責務分離**: `defaults.yaml`（Pandoc 設定）/ `*.tex`（枠）/ `preamble.tex`（見た目）/ `*.lua`（記法拡張）。
 - builtin 方式の GUI 設定と混同しない。defaults 方式では
   documentclass / fontsize / geometry は **defaults.yaml 側** で管理する。
+- **章扉・表題は「装飾」と「文字」を分離する。** 装飾（薄墨・淡円・植物など）は
+  `chapter-bg.pdf` 等の「文字なし画像/PDF」で作り、文字は LaTeX で組む。背景は
+  `\AddToShipoutPictureBG*`（現ページ限定）で貼り、文字は絶対座標の TikZ ノードで載せる。
+  `縦書き二段組/preamble.tex` の `\chapterbg` / `\novelchapter` / `\noveltitle` 参照。
+- **装飾画像は defaults.yaml の *metadata:* で差し替える（preamble を編集しない）。**
+  `metadata: chapter-bg-image: chapter-bg.pdf` をセットすると、`chapter-bg.lua` が実
+  ファイルを探索して絶対パスに解決し、テンプレートが
+  `\renewcommand{\chapterbg}{\includegraphics{...}}` を生成して TikZ 既定装飾を上書き
+  する。未指定時は TikZ 既定（薄墨＋淡円）にフォールバックする。注意:
+  - *metadata:* に書くこと（Lua フィルタが読めるのは metadata のみ）。plugin 経由では
+    pandoc の作業ディレクトリが元の .md の場所になるため、パックフォルダの画像が
+    見つからず「File not found: using draft setting」でファイル名がテキスト描画される。
+    chapter-bg.lua の絶対パス解決がこの落とし穴を潰す。
+  - ファイル名にスペース・全角文字は使わないこと（graphicx がトークン分割する）。
+  - `${.}` は defaults file の `template:` / `include-in-header:` / `resource-path:` 等
+    「ファイル参照」フィールドでのみ絶対パスに展開される。`variables:` の値では
+    リテラルの `${.}` になるので、変数値経由では絶対パスを渡せない（Lua フィルタで処理）。
 - **学会論文クラスでは simple-table.lua を必ず入れる。** longtable は 2カラムで停止するが、
   Lua フィルタで `table`+`tabular` に変換すれば本体制御不要で解決する（上記「学会論文クラスを使う場合」参照）。
 - **画像・コード・表の LaTeX 変換は Pandoc（+ Lua フィルタ）に委譲する。** MdTex 本体は

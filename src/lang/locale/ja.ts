@@ -151,6 +151,16 @@ const ja: Record<TranslationKeys, string> = {
   notice_sample_packs_installed: "サンプルテンプレートを展開しました: {0}",
   button_install_samples: "サンプルを再展開",
 
+  setting_pack_info_engine: "想定エンジン: {0}",
+  pack_requires_missing:
+    "このパックにはフォルダ内への配置が必要なファイルがあります: {0}",
+  pack_requires_hint: "配置手順は SKILL.md を参照してください。",
+  button_open_skill_doc: "SKILL.md を開く",
+  notice_skill_not_found: "テンプレートフォルダに SKILL.md が見つかりません。",
+  button_apply_recommended: "推奨設定を適用",
+  notice_recommended_applied: "推奨設定を適用しました。",
+  notice_recommended_uptodate: "推奨設定は現在のプロファイルと一致しています。",
+
   heading_preamble: "LaTeX プリアンブル",
   heading_document_frame: "文書の体裁（クラス・フォント・余白）",
   heading_pdf_engine_advanced: "詳細: PDF エンジンのオプション",

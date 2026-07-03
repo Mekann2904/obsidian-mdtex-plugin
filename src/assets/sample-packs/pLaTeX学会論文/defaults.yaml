@@ -16,6 +16,19 @@
 #   上書きしないため、テンプレートパック側の指定がそのまま有効になる。
 #   upLaTeX 専用クラスなら下の `-latex=platex` を `-latex=uplatex` に変更する。
 
+# --- MdTex パックメタ（Pandoc は未知キーを無視・MdTex だけが読む）---
+# 設定画面のパック選択時に表示される説明・前提・推奨設定。書き方は SKILL.md 参照。
+_mdtex:
+  title: "pLaTeX 学会論文（ipsj 等の土台）"
+  description: "pLaTeX/upLaTeX 専用クラスの土台。公式 .cls の手動配置が必要。"
+  engine: latexmk
+  requires:
+    - ipsj.cls
+  recommendedProfile:
+    citationMode: natbib
+    latexEngine: latexmk
+    pdfEngineOpts: "-latex=platex -pdfdvi"
+
 from: markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes
 to: pdf
 

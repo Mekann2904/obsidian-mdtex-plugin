@@ -23,8 +23,10 @@ MdTex Templates/
 ├── 縦書き二段組/              ← パック例（初回展開されたサンプル）
 │   ├── defaults.yaml          ← ★必須: パックの入口（Pandoc defaults file）
 │   ├── tate-twocolumn.tex     ←    任意: カスタム Pandoc テンプレート
-│   ├── preamble.tex           ←    任意: プリアンブル（\usepackage 等）
-│   └── aozora-ruby.lua        ←    任意: ルビ変換などの Lua フィルタ
+│   ├── preamble.tex           ←    任意: プリアンブル（章扉・表題ページ付き）
+│   ├── aozora-ruby.lua        ←    任意: ルビ変換・章扉記法などの Lua フィルタ
+│   ├── chapter-bg.lua         ←    任意: 章扉背景画像の絶対パス解決 Lua フィルタ
+│   └── sample.md              ←    任意: すぐPDF出せる本文サンプル
 └── あなたのテンプレート/      ← 自作パック
     └── defaults.yaml          ← 最低これだけあれば認識されます
 ```
@@ -67,11 +69,13 @@ MdTex Templates/
 
 | パック | 用途 |
 |---|---|
-| `縦書き二段組` | 縦書き小説（ルビ・圏点付き）。青空文庫風ルビ記法 `｜親文字《よみ》` を LaTeX の `\ruby` に変換する Lua フィルタ同梱。 |
+| `縦書き二段組` | 縦書き小説（ルビ・圏点・章扉・表題ページ付き）。青空文庫風ルビ記法 `｜親文字《よみ》` を `\ruby` に変換する Lua フィルタ同梱。章扉は `::: novel-chapter`、表題は `::: novel-title` 記法で出せる。装飾背景は既定で TikZ の薄墨＋淡円、`defaults.yaml` の `metadata: chapter-bg-image` で文字なし画像に切替可（chapter-bg.lua が絶対パス解決し、装飾と文字を分離する商業組版ワークフロー）。 |
 | `情報系論文風` | 情報処理学会・人工知能学会風の二段組論文（LuaLaTeX 前提）。和文タイトル・概要・キーワード・表・数式・コード。 |
 | `pLaTeX学会論文` | **pLaTeX 専用クラス**（情報処理学会 ipsj 等）の土台。ipsj.cls は手動配置（著作権）。partial 全除外の自前テンプレで、スペース入り画像・表・コードの pLaTeX 固有問題を解決する Lua フィルタ 3 種同梱。詳しくは [SKILL.md](./SKILL.md) の「pLaTeX 専用クラスを使う場合」。 |
 
 サンプルパックの中身を読むのが、構造を知る一番の近道です。
+
+> 各パックは `defaults.yaml` の `_mdtex:` セクションで**用途・前提ファイル・推奨設定**を自己記述します。設定画面でパックを選ぶと、その説明と不足ファイルの警告・推奨設定の適用が表示されます。書き方は [SKILL.md](./SKILL.md) の「パックメタ」を参照。
 
 ---
 

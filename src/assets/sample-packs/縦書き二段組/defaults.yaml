@@ -8,10 +8,30 @@
 # ${.} は Pandoc が「この defaults file 自身のディレクトリ」に展開する特殊変数。
 # テンプレート一式をフォルダ単位で持ち運べるため、Git 管理や学会配布と相性が良い。
 
+# --- MdTex パックメタ（Pandoc は未知キーを無視・MdTex だけが読む）---
+# 設定画面のパック選択時に表示される説明・前提・推奨設定。書き方は SKILL.md 参照。
+_mdtex:
+  title: "縦書き二段組（小説・文芸）"
+  description: "青空文庫風ルビ・章扉・表題ページ。A5縦組二段。LuaLaTeX 必要。"
+  engine: lualatex
+  requires: []
+  recommendedProfile:
+    citationMode: none
+    latexEngine: lualatex
+
 from: markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes
 to: pdf
 pdf-engine: lualatex
 standalone: true
+
+# pandoc の行折り返し（soft-wrapping）を無効化する。
+# 理由: chapter-bg.lua が背景画像を絶対パスに解決して \includegraphics に渡すが、
+# パスが72桁を超えると pandoc がパスの途中で改行を挿入してしまう。パスにスペースが
+# 含まれる（“MdTex Templates” 等）と、そのスペースが改行に置換され、lualatex が
+# 画像を見失いドラフトモードでファイル名をテキスト描画してしまう。
+# wrap: none でパスを1行に保てば graphicx がスペース付きパスを正しく処理する。
+# LaTeX 出力では本文の折り返しは LaTeX が独自に行うため、wrap: none は見た目に無害。
+wrap: none
 
 # 文書の「枠」をこのカスタムテンプレートで構築（builtin のデフォルトラテンブルから差し替え）。
 # 段抜けタイトル（twocolumn[\@maketitle]）に調整済み。
@@ -31,16 +51,39 @@ variables:
     - left=9mm
     - right=9mm
 
+# 章扉・表題の装飾背景画像（文字なし PDF/PNG/JPG）。
+# 【重要】Lua フィルタ（chapter-bg.lua）が読めるように *metadata:* に書くこと
+# （variables: ではなく）。フィルタが実ファイルを探索して絶対パスに解決し、
+# \includegraphics に渡す。これにより pandoc の作業ディレクトリ・TEXINPUTS に
+# 依存せず安定して画像が貼れる（無指定だと「File not found: using draft setting」
+# でファイル名がテキスト描画される落とし穴を回避）。
+# 使い方:
+#   1. 文字なし装飾画像をパックフォルダ（この defaults.yaml と同じフォルダ）に置く
+#   2. 下のコメントを外してファイル名を指定する
+#   3. ※ ファイル名にスペース・全角文字は使わないこと（graphicx がトークン分割する）
+# 画像が見つからない場合は警告を出し、TikZ の既定装飾（薄墨＋淡円）にフォールバック。
+# 省略時（コメントアウト時）も TikZ の既定装飾を使う。
+metadata:
+  # chapter-bg-image: chapter-bg.pdf
+
 # 文書の「プリアンブル」（\begin{document} の直前に挿入）。
 # builtin の DEFAULT_LATEX_PREAMBLE 相当だが、縦書きに最適化して最小化している。
 # luatexja-fontspec は ltjtarticle が既定で読み込むため、ここでは和文フォント指定のみ。
 # 欧文フォントは縦組でも自然に回転するよう MatchUppercase で和文に寄せる。
+# パックフォルダ内の chapter-bg.pdf 等の画像を Pandoc と LaTeX の両方が
+# 発見できるようにする（MdTex は TEXINPUTS にも自動追加するが、pandoc の
+# resource-path も明示しておくと Markdown からの画像参照が安定する）。
+resource-path:
+  - ${.}
+
 include-in-header: ${.}/preamble.tex
 
 # Markdown 本文では青空文庫風の ルビ《るび》 記法を使い、
 # LaTeX 出力時だけ \ruby{ルビ}{るび} に変換する。
+# chapter-bg.lua は章扉・表題の背景画像（metadata: chapter-bg-image）を絶対パス解決する。
 filters:
   - ${.}/aozora-ruby.lua
+  - ${.}/chapter-bg.lua
 
 # 目次や章番号が必要なら以下を有効化。
 # table-of-contents: true
