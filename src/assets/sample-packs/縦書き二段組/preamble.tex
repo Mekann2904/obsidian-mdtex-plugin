@@ -77,3 +77,146 @@
 % NOTE: LuaTeX-ja の和文単位 zw は begin{document} 後に定義されるため、
 % preamble では使えない。pt / mm 等の絶対単位で指定する。
 \setlength{\columnsep}{6mm}
+
+% ===========================================================================
+% 章扉・表題ページ（装飾と文字の分離 / 商業組版ワークフロー）
+% ---------------------------------------------------------------------------
+% 原則: 「装飾」は画像/PDF で作り、「文字」は LaTeX で組む。最終 PDF で合成する。
+%   装飾レイヤ = \chapterbg（既定は TikZ の最小装飾。実運用では文字なし PDF に差替）
+%   文字レイヤ   = 第N章 / 章題を TikZ ノードで配置（ベクター・字面管理）
+%
+% 【縦組 ltjtarticle + twocolumn での設計上の注意（重要）】
+%   * メインテキストフロー内の tikzpicture は縦組の方向設定を引き継ぐため、
+%     TikZ 座標軸がページに対し90°回転する（tikz +x=ページ下、tikz +y=ページ右）。
+%     さらに \begin{center} による水平中央寄せが位置依存で安定しない。
+%   * 一方、背景描画用の eso-pic \put(0,0){...} の中の tikzpicture は
+%     「絶対ページ座標（回転なし）」で動く。(0,0)=左下、+x=右、+y=上。
+%   * よって本パックでは、章扉・表題の「文字」も背景と同じ絶対座標の
+%     tikzpicture に載せる。複数文字ノードは [align=center] + "\\" で縦に積む
+%     （Lua フィルタが ::: novel-chapter の章題を1字ずつ "\\" 区切りで渡す）。
+%     これで 1パス確定・縦組/段組に依存しない正確な配置になる。
+% ===========================================================================
+\usepackage{tikz}
+\usetikzlibrary{calc}
+\usepackage{eso-pic}
+
+% --- 装飾背景（章扉・表題ページ共通のアンビエント装飾。文字は含めない）---
+% 既定: TikZ で紙面いっぱいの薄墨・淡円を描く（パック単独でコンパイルを通すため）。
+% 【画像に差し替える場合】preamble を直接編集せず、defaults.yaml の *metadata:* で指定:
+%     metadata:
+%       chapter-bg-image: chapter-bg.pdf
+% chapter-bg.lua が実ファイルを探索して絶対パスに解決し、テンプレート
+% （tate-twocolumn.tex）が \renewcommand{\chapterbg}{\includegraphics{...}} を生成する。
+% 画像はパックフォルダ（resource-path: ${.}）に置けば発見する。
+\newcommand{\chapterbg}{%
+  \begin{tikzpicture}
+    \useasboundingbox (0,0) rectangle (\paperwidth,\paperheight);
+    \fill[black!4] (0,0) rectangle (\paperwidth,\paperheight);% 薄い地色
+    \fill[black!7] (\paperwidth/2,\paperheight/2) circle (34mm);% 中央の淡円（薄墨のにじみ）
+  \end{tikzpicture}%
+}
+
+% 装飾背景を「このページだけ」に敷く（\AddToShipoutPictureBG* の * は現ページ限定）。
+\newcommand{\chapterbgshipout}{%
+  \AddToShipoutPictureBG*{\put(0,0){\chapterbg}}%
+}
+
+% 第N章 の N（漢数字1〜10、超過は算用数字）。
+\newcounter{nchapter}
+\newcommand{\nchapterkanji}{%
+  \ifcase\value{nchapter}\or
+    一\or 二\or 三\or 四\or 五\or
+    六\or 七\or 八\or 九\or 十\else \arabic{nchapter}%
+  \fi
+}
+\newcommand{\nchaptertwodigits}{\ifnum\value{nchapter}<10 0\fi\arabic{nchapter}}
+
+% 横組の小さなテキストブロックを縦組文書中の TikZ ノードに置くための補助。
+\newcommand{\chapterYokoBox}[2]{%
+  \begin{minipage}{#1}\yoko #2\end{minipage}%
+}
+
+% --- 表題ページ（参照画像風のモダン・エディトリアル配置）---
+% aozora-ruby.lua の ::: novel-title が \noveltitle[副題]{題} に変換する。
+% 背景は画像/PDF、文字は LaTeX で別レイヤーに配置する。
+\newcommand{\noveltitle}[6]{%
+  \clearpage
+  \thispagestyle{empty}%
+  \chapterbgshipout
+  \AddToShipoutPictureBG*{%
+    \put(0,0){%
+      \begin{tikzpicture}
+        \useasboundingbox (0,0) rectangle (\paperwidth,\paperheight);
+        % 左上ラベル（Markdown の novel-title 第3段落）
+        \draw[line width=0.35pt] (10mm,\paperheight-10mm) -- (22mm,\paperheight-10mm);
+        \node[anchor=north west] at (10mm,\paperheight-13mm)
+          {\chapterYokoBox{28mm}{\sffamily\bfseries\fontsize{6pt}{8pt}\selectfont #3}};
+        % 上部キャプション（Markdown 第5段落）
+        \draw[line width=0.25pt] (62mm,\paperheight-8mm) -- (62mm,\paperheight-20mm);
+        \node[anchor=north west] at (70mm,\paperheight-9mm)
+          {\chapterYokoBox{48mm}{\sffamily\bfseries\fontsize{5.5pt}{7pt}\selectfont #5}};
+        % 大きな装飾番号（Markdown 第4段落）
+        \node[anchor=north west,inner sep=0pt] at (9mm,\paperheight-42mm)
+          {\chapterYokoBox{44mm}{\fontsize{64pt}{64pt}\selectfont #4}};
+        \draw[line width=0.25pt,black!65] (54mm,\paperheight-78mm) -- (88mm,\paperheight-44mm);
+        % 表題・副題（Markdown 第1・第2段落）
+        \node[anchor=north west] at (10mm,\paperheight-92mm)
+          {\chapterYokoBox{72mm}{\gtfamily\bfseries\fontsize{18pt}{26pt}\selectfont #1}};
+        \draw[line width=0.3pt] (10mm,\paperheight-118mm) -- (82mm,\paperheight-118mm);
+        \node[anchor=north west] at (10mm,\paperheight-124mm)
+          {\chapterYokoBox{72mm}{\rmfamily\bfseries\fontsize{8pt}{11pt}\selectfont #2}};
+        % 下部キャプション（Markdown 第6段落）
+        \node[anchor=south west] at (10mm,13mm)
+          {\chapterYokoBox{70mm}{\sffamily\bfseries\fontsize{5.5pt}{7pt}\selectfont #6}};
+      \end{tikzpicture}%
+    }%
+  }%
+  \mbox{}\clearpage
+}
+
+% --- 章扉ページ（参照画像風：大きな章番号＋横組章題）---
+% aozora-ruby.lua の ::: novel-chapter が \novelchapter{題} に変換する。
+\newcommand{\novelchapter}[8]{%
+  \clearpage
+  \thispagestyle{empty}%
+  \chapterbgshipout
+  \refstepcounter{nchapter}%
+  \AddToShipoutPictureBG*{%
+    \put(0,0){%
+      \begin{tikzpicture}
+        \useasboundingbox (0,0) rectangle (\paperwidth,\paperheight);
+        % 左上ラベル（Markdown 第5段落）
+        \draw[line width=0.35pt] (10mm,\paperheight-10mm) -- (22mm,\paperheight-10mm);
+        \node[anchor=north west] at (10mm,\paperheight-13mm)
+          {\chapterYokoBox{28mm}{\sffamily\bfseries\fontsize{6pt}{8pt}\selectfont #5}};
+        % 上部キャプション・右上番号（Markdown 第6・第7段落）
+        \draw[line width=0.25pt] (62mm,\paperheight-8mm) -- (62mm,\paperheight-20mm);
+        \node[anchor=north west] at (70mm,\paperheight-9mm)
+          {\chapterYokoBox{48mm}{\sffamily\bfseries\fontsize{5.5pt}{7pt}\selectfont #6}};
+        \node[anchor=north east] at (\paperwidth-10mm,\paperheight-10mm)
+          {\yoko\sffamily\bfseries\fontsize{6pt}{7pt}\selectfont #7};
+        % 主役の大きな章番号は自動採番（構造情報）
+        \node[anchor=north west,inner sep=0pt] at (9mm,\paperheight-44mm)
+          {\yoko\fontsize{70pt}{70pt}\selectfont \nchaptertwodigits};
+        \draw[line width=0.25pt,black!65] (54mm,\paperheight-80mm) -- (88mm,\paperheight-46mm);
+        % 章ラベル・章題・リード（Markdown 第1〜第3段落）
+        \node[anchor=north west] at (12mm,\paperheight-94mm)
+          {\chapterYokoBox{72mm}{\gtfamily\bfseries\fontsize{9pt}{13pt}\selectfont 第 \arabic{nchapter} 章}};
+        \node[anchor=north west] at (10mm,\paperheight-107mm)
+          {\chapterYokoBox{76mm}{\gtfamily\bfseries\fontsize{18pt}{28pt}\selectfont #1}};
+        \draw[line width=0.3pt] (10mm,\paperheight-128mm) -- (82mm,\paperheight-128mm);
+        \node[anchor=north west] at (10mm,\paperheight-135mm)
+          {\chapterYokoBox{72mm}{\gtfamily\bfseries\fontsize{7pt}{12pt}\selectfont #2}};
+        \node[anchor=north west] at (14mm,\paperheight-156mm)
+          {\chapterYokoBox{68mm}{\gtfamily\fontsize{4.9pt}{8.2pt}\selectfont #3}};
+        % 目次風の小リスト（Markdown 第4ブロックの箇条書き）。
+        \node[anchor=south west] at (30mm,28mm)
+          {\chapterYokoBox{72mm}{\gtfamily\bfseries\fontsize{5.1pt}{7.8pt}\selectfont #4}};
+        % 右端の回転キャプション（Markdown 第8段落）
+        \node[rotate=90,anchor=south] at (\paperwidth-8mm,\paperheight/2)
+          {\yoko\sffamily\bfseries\fontsize{5.5pt}{7pt}\selectfont #8};
+      \end{tikzpicture}%
+    }%
+  }%
+  \mbox{}\clearpage
+}

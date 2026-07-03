@@ -9,6 +9,8 @@ import tateDefaults from "./sample-packs/縦書き二段組/defaults.yaml";
 import tateTemplate from "./sample-packs/縦書き二段組/tate-twocolumn.tex";
 import tatePreamble from "./sample-packs/縦書き二段組/preamble.tex";
 import tateRuby from "./sample-packs/縦書き二段組/aozora-ruby.lua";
+import tateChapterBg from "./sample-packs/縦書き二段組/chapter-bg.lua";
+import tateSample from "./sample-packs/縦書き二段組/sample.md";
 
 import infoDefaults from "./sample-packs/情報系論文風/defaults.yaml";
 import infoTemplate from "./sample-packs/情報系論文風/info-paper.tex";
@@ -48,6 +50,8 @@ export const SAMPLE_TEMPLATE_PACKS: SampleTemplatePack[] = [
       { name: "tate-twocolumn.tex", content: tateTemplate },
       { name: "preamble.tex", content: tatePreamble },
       { name: "aozora-ruby.lua", content: tateRuby },
+      { name: "chapter-bg.lua", content: tateChapterBg },
+      { name: "sample.md", content: tateSample },
     ],
   },
   {

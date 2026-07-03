@@ -61,6 +61,15 @@ $endfor$
 $after-header-includes.latex()$
 $hypersetup.latex()$
 
+$if(chapter-bg-image)$
+% --- 装飾背景画像で \chapterbg を上書き（defaults.yaml の metadata: chapter-bg-image）---
+% chapter-bg.lua が画像を絶対パスに解決し、その \renewcommand{\chapterbg}{...} を
+% テンポラリファイル（/tmp/mdtex-chapterbg-include.tex）に書き出す。メタデータには
+% そのテンポラリファイルの短いパスが入り、\input で読み込む。長い絶対パスは
+% テンポラリ内にしか存在せず pandoc の行折り返しの対象にならない（wrap 設定非依存）。
+\input{$chapter-bg-image$}
+$endif$
+
 $if(title)$
 \title{$title$$if(thanks)$\thanks{$thanks$}$endif$}
 $endif$
