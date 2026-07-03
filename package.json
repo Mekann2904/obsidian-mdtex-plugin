@@ -3,6 +3,9 @@
   "version": "1.1.1",
   "description": "MdTex is a tool that converts Markdown to PDF using Pandoc and LuaLaTeX. It is characterized by its stable support for Japanese output.",
   "main": "main.js",
+  "bin": {
+    "mdtex": "dist/cli.js"
+  },
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "npm run lint && tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
@@ -10,6 +13,8 @@
     "prepare": "husky",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
+    "build:cli": "node esbuild.cli.config.mjs production",
+    "dev:cli": "node esbuild.cli.config.mjs",
     "lint": "eslint src/ --ext .ts",
     "lint:fix": "eslint src/ --ext .ts --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"tests/**/*.{ts,tsx}\"",

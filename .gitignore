@@ -27,3 +27,6 @@ data.json
 
 # Exclude backup files (e.g. chapter-bg.png.bak-20260621175145)
 *.bak-*
+
+# Exclude CLI build output (dist/cli.js; npm run build:cli で生成)
+dist/
