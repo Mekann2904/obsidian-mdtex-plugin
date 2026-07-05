@@ -15,6 +15,7 @@ import {
   type PackValidation,
 } from "../services/packAccess";
 import type { PackMetadata } from "../services/templatePackMeta";
+import { testPack, type PackTestOptions, type PackTestResult } from "./packTest";
 
 /**
  * Node fs を PackFileAccess に適応させる（CLI 版）。共通ロジック（packAccess）と
@@ -74,4 +75,8 @@ export async function validatePackFs(
   strict: boolean,
 ): Promise<PackValidation> {
   return validatePack(fsAccess, norm(templateFolder), packName, strict);
+}
+
+export async function testPackFs(options: PackTestOptions): Promise<PackTestResult> {
+  return testPack(fsAccess, { ...options, folder: norm(options.folder) });
 }

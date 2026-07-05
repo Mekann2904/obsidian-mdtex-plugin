@@ -9,6 +9,7 @@
 import {
   listTemplatePacksFs,
   readPackMetadataFs,
+  testPackFs,
   validatePackFs,
 } from "./fsTemplatePack";
 
@@ -109,6 +110,7 @@ Usage: mdtex pack <subcommand> [options]
 Subcommands:
   list       パック一覧（_mdtex の title/description 付き）
   validate   パックの検証（defaults 構文 + メタ + requires チェック）
+  test       サンプル原稿で PDF 生成テスト
 
 Options:
   --folder <path>  テンプレートフォルダ（既定: MdTex Templates）
@@ -158,6 +160,34 @@ Examples:
   mdtex pack validate 縦書き二段組
   mdtex pack validate pLaTeX学会論文 --strict
   mdtex pack validate pLaTeX学会論文 --json
+`;
+}
+
+function testHelp(): string {
+  return `mdtex pack test — サンプル原稿で PDF 生成テスト
+
+Usage: mdtex pack test <pack> [--folder <path>] [--sample <file>] [--output <path>] [--pandoc <path>] [--dry-run] [--keep-artifacts] [--json]
+
+引数:
+  <pack>              パック名
+
+Options:
+  --folder <path>     テンプレートフォルダ（既定: MdTex Templates）
+  --sample <file>     サンプル原稿（指定無ければパック内 sample.md）
+  --output <path>     出力 PDF（指定無ければ temp）
+  --pandoc <path>     Pandoc バイナリ（指定無ければ PATH の pandoc）
+  --dry-run           コマンドを表示するのみ（実行しない）
+  --keep-artifacts    中間 .tex も保存
+  --json              構造化出力
+
+Exit codes:
+  0  PDF 生成成功 / dry-run
+  2  エラー（defaults/sample 無し、pandoc 失敗）
+
+Examples:
+  mdtex pack test 縦書き二段組
+  mdtex pack test 縦書き二段組 --dry-run
+  mdtex pack test 縦書き二段組 --keep-artifacts --json
 `;
 }
 
@@ -235,6 +265,41 @@ async function cmdPackValidate(
   return validation.status === "errors" ? 2 : validation.status === "warnings" ? 1 : 0;
 }
 
+async function cmdPackTest(
+  pack: string,
+  folder: string,
+  opts: { sample?: string; output?: string; pandoc?: string; keepArtifacts: boolean; dryRun: boolean },
+  asJson: boolean,
+): Promise<number> {
+  if (!pack) {
+    process.stderr.write(
+      "Error: パック名が未指定です。\n  mdtex pack test <pack>\n  例: mdtex pack test 縦書き二段組\n",
+    );
+    return 2;
+  }
+
+  const result = await testPackFs({ folder, pack, ...opts });
+
+  if (asJson) {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else if (result.status === "dry-run") {
+    process.stdout.write(`(dry-run) ${result.command}\n`);
+  } else {
+    process.stdout.write(`パック: ${pack}\n`);
+    process.stdout.write(`サンプル: ${result.sampleUsed}\n`);
+    if (result.status === "ok") {
+      process.stdout.write(`✓ PDF 生成成功: ${result.output}\n`);
+      if (result.texArtifact) process.stdout.write(`  .tex: ${result.texArtifact}\n`);
+    } else {
+      process.stderr.write(`✗ ${result.error}\n`);
+      if (result.stderrTail)
+        process.stderr.write(`--- pandoc stderr ---\n${result.stderrTail}\n`);
+    }
+  }
+
+  return result.status === "error" ? 2 : 0;
+}
+
 // === dispatch =============================================================
 
 async function main(): Promise<number> {
@@ -276,6 +341,20 @@ async function main(): Promise<number> {
       }
       const pack = positional[2] ?? "";
       return cmdPackValidate(pack, folder, asJson, strict);
+    }
+    if (sub === "test") {
+      if (help) {
+        process.stdout.write(testHelp());
+        return 0;
+      }
+      const pack = positional[2] ?? "";
+      return cmdPackTest(pack, folder, {
+        sample: flagString(flags, "sample"),
+        output: flagString(flags, "output"),
+        pandoc: flagString(flags, "pandoc"),
+        keepArtifacts: flags["keep-artifacts"] === true,
+        dryRun: flags["dry-run"] === true,
+      }, asJson);
     }
     process.stderr.write(
       `Error: 不明な pack サブコマンド: ${sub}\n  mdtex pack --help で一覧\n`,
