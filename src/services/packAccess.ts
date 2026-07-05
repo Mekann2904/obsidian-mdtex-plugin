@@ -11,6 +11,7 @@
 import {
   DEFAULTS_FILE_NAME,
   isEmptyPackMetadata,
+  MDTEX_META_FILE_NAME,
   parsePackMetadata,
   type PackMetadata,
 } from "./templatePackMeta";
@@ -66,7 +67,7 @@ export async function readPackMeta(
   packName: string,
 ): Promise<PackMetadata | null> {
   if (!folder || !packName) return null;
-  const content = await access.readText(joinPath(folder, packName, DEFAULTS_FILE_NAME));
+  const content = await access.readText(joinPath(folder, packName, MDTEX_META_FILE_NAME));
   if (content === null) return null;
   return parsePackMetadata(content);
 }

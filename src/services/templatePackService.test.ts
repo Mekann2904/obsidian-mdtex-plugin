@@ -94,8 +94,10 @@ describe("resolveDefaultsFilePath", () => {
 });
 
 describe("parsePackMetadata", () => {
-  it("_mdtex: セクションが無ければ null", () => {
-    expect(parsePackMetadata("pdf-engine: lualatex\n")).toBeNull();
+  it("_mdtex.yaml にメタ宣言が無ければ空メタ（null ではない）", () => {
+    const meta = parsePackMetadata("pdf-engine: lualatex\n");
+    expect(meta).not.toBeNull();
+    expect(isEmptyPackMetadata(meta)).toBe(true);
   });
 
   it("空文字・null は null", () => {

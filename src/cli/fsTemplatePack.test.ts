@@ -30,15 +30,14 @@ async function writePack(
   }
 }
 
-const META_OK = `_mdtex:
-  title: "テストパック"
-  description: "検証用"
-  engine: lualatex
-  requires:
-    - extra.cls
-  recommendedProfile:
-    citationMode: none
-    latexEngine: lualatex
+const META_OK = `title: "テストパック"
+description: "検証用"
+engine: lualatex
+requires:
+  - extra.cls
+recommendedProfile:
+  citationMode: none
+  latexEngine: lualatex
 `;
 
 describe("listTemplatePacksFs", () => {
@@ -76,19 +75,19 @@ describe("readPackMetadataFs", () => {
     await fs.rm(vault, { recursive: true, force: true });
   });
 
-  it("_mdtex: を読む", async () => {
-    await writePack(vault, "P", { "defaults.yaml": META_OK });
+  it("_mdtex.yaml を読む", async () => {
+    await writePack(vault, "P", { "_mdtex.yaml": META_OK });
     const meta = await readPackMetadataFs(vault, "P");
     expect(meta?.title).toBe("テストパック");
     expect(meta?.requires).toEqual(["extra.cls"]);
   });
 
-  it("_mdtex: 無しは null", async () => {
+  it("_mdtex.yaml 無しは null", async () => {
     await writePack(vault, "P", { "defaults.yaml": "from: markdown\n" });
     expect(await readPackMetadataFs(vault, "P")).toBeNull();
   });
 
-  it("defaults.yaml 無しは null", async () => {
+  it("パックフォルダが空は null", async () => {
     await fs.mkdir(path.join(vault, "P"));
     expect(await readPackMetadataFs(vault, "P")).toBeNull();
   });
@@ -105,7 +104,8 @@ describe("validatePackFs", () => {
 
   it("全て揃っている → OK（errors/warnings 空）", async () => {
     await writePack(vault, "P", {
-      "defaults.yaml": META_OK,
+      "defaults.yaml": "from: markdown\n",
+      "_mdtex.yaml": META_OK,
       "extra.cls": "% dummy class",
     });
     const v = await validatePackFs(vault, "P", false);
@@ -118,7 +118,10 @@ describe("validatePackFs", () => {
   });
 
   it("requires 不足 → 警告（strict=false）", async () => {
-    await writePack(vault, "P", { "defaults.yaml": META_OK }); // extra.cls 無し
+    await writePack(vault, "P", {
+      "defaults.yaml": "from: markdown\n",
+      "_mdtex.yaml": META_OK,
+    }); // extra.cls 無し
     const v = await validatePackFs(vault, "P", false);
     expect(v.missingRequires).toEqual(["extra.cls"]);
     expect(v.errors).toEqual([]);
@@ -127,7 +130,10 @@ describe("validatePackFs", () => {
   });
 
   it("requires 不足 + strict → エラー", async () => {
-    await writePack(vault, "P", { "defaults.yaml": META_OK });
+    await writePack(vault, "P", {
+      "defaults.yaml": "from: markdown\n",
+      "_mdtex.yaml": META_OK,
+    });
     const v = await validatePackFs(vault, "P", true);
     expect(v.errors).toEqual(["必須ファイル不足: extra.cls"]);
     expect(v.warnings).toEqual([]);

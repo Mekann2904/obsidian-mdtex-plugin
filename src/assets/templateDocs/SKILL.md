@@ -111,30 +111,30 @@ pandoc <本文>.md \
 
 ## パックメタ（自己記述化）
 
-defaults.yaml に `_mdtex:` セクションを書くと、パックが**自分自身の説明・前提・推奨設定**を宣言できます。設定画面でパックを選んだとき、MdTex がこのメタを読んで:
+パックフォルダに `_mdtex.yaml` を置くと、パックが**自分自身の説明・前提・推奨設定**を宣言できます。設定画面でパックを選んだとき、MdTex がこのメタを読んで:
 
 - **title / description** を表示（フォルダ名だけだと分からない用途を明示）
 - **requires** のファイルがパックフォルダに無ければ**警告**（ipsj.cls 未配置等を実行前検知）
 - **recommendedProfile** が現在のプロファイルとズレていれば**「推奨設定を適用」**ボタンを提示
 
-Pandoc は未知キーを無視するため、`_mdtex:` を書いても Pandoc の動作に影響しません。書かなくてもパックは動きます（フォルダ名だけで選択できる従来動作を維持）。
+`_mdtex.yaml` は defaults.yaml と**別ファイル**にします（Pandoc が読む defaults.yaml に未知キーを書くと `Unknown option` エラーになるため）。MdTex だけが `_mdtex.yaml` を読みます。書かなくてもパックは動きます（フォルダ名だけで選択できる従来動作を維持）。
 
 ### フィールド
 
 ```yaml
-_mdtex:
-  title: "情報系論文風（LuaLaTeX）"        # 表示名。未指定ならフォルダ名を使う
-  description: "AI学会風の二段組。"         # 一行説明
-  engine: lualatex                          # 想定 PDF エンジン（表示専用）
-  requires:                                 # ユーザー配置が必要な外部ファイル
-    - ipsj.cls
-  recommendedProfile:                       # パックが推奨するプロファイル設定
-    citationMode: natbib                    # none / natbib / citeproc
-    latexEngine: latexmk
-    pdfEngineOpts: "-latex=platex -pdfdvi"  # スペースを含む場合はクォート
+# _mdtex.yaml（パックフォルダに配置。defaults.yaml と同じフォルダ）
+title: "情報系論文風（LuaLaTeX）"        # 表示名。未指定ならフォルダ名を使う
+description: "AI学会風の二段組。"         # 一行説明
+engine: lualatex                          # 想定 PDF エンジン（表示専用）
+requires:                                 # ユーザー配置が必要な外部ファイル
+  - ipsj.cls
+recommendedProfile:                       # パックが推奨するプロファイル設定
+  citationMode: natbib                    # none / natbib / citeproc
+  latexEngine: latexmk
+  pdfEngineOpts: "-latex=platex -pdfdvi"  # スペースを含む場合はクォート
 ```
 
-- 全フィールド省略可能。`_mdtex:` だけ書いても、中身が空なら表示しない。
+- 全フィールド省略可能。`_mdtex.yaml` が空でもエラーにはなりません（表示しないだけ）。
 - `requires` はパックフォルダ（defaults.yaml と同じフォルダ）内のファイル名。MdTex が存在確認し、不足を警告する。
 - `recommendedProfile` の「適用」は、ズレている項目だけを現在のプロファイルに上書きする。
 

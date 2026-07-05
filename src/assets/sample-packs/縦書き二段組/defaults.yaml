@@ -10,15 +10,6 @@
 
 # --- MdTex パックメタ（Pandoc は未知キーを無視・MdTex だけが読む）---
 # 設定画面のパック選択時に表示される説明・前提・推奨設定。書き方は SKILL.md 参照。
-_mdtex:
-  title: "縦書き二段組（小説・文芸）"
-  description: "青空文庫風ルビ・章扉・表題ページ。A5縦組二段。LuaLaTeX 必要。"
-  engine: lualatex
-  requires: []
-  recommendedProfile:
-    citationMode: none
-    latexEngine: lualatex
-
 from: markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes
 to: pdf
 pdf-engine: lualatex
