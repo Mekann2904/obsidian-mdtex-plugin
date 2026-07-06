@@ -7,12 +7,12 @@ import { App, Notice } from "obsidian";
 import type MdTexPlugin from "../MdTexPlugin";
 import type { ProfileSettings } from "../MdTexPluginSettings";
 import { t } from "../lang/helpers";
+import { checkPackRequirements } from "../services/templatePackService";
 import {
-  checkPackRequirements,
   isEmptyPackMetadata,
   type PackMetadata,
   type PackRecommendedProfile,
-} from "../services/templatePackService";
+} from "../services/templatePackMeta";
 
 export interface TemplatePackPanelContext {
   app: App;

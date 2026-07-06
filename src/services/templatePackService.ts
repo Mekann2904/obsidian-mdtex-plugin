@@ -25,12 +25,6 @@ import {
   type PackFileAccess,
 } from "./packAccess";
 
-// 既存 import 互換: 純粋関数・型を再公開（消費者を templatePackMeta 直 import に
-// 切り替えれば削除可能。TODO: review #5 で整理）。
-export { DEFAULTS_FILE_NAME, normalizeTemplateFolder };
-export { parsePackMetadata, isEmptyPackMetadata } from "./templatePackMeta";
-export type { PackMetadata, PackRecommendedProfile } from "./templatePackMeta";
-
 /**
  * Obsidian vault を PackFileAccess に適応させる（GUI 版）。共通ロジック（packAccess）
  * と vault I/O を繋ぐ薄いアダプタ（review #1: 重複解消）。
