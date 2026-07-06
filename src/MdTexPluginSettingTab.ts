@@ -13,14 +13,10 @@ import {
 import { DEFAULT_LATEX_COMMANDS_YAML } from "./data/latexCommands";
 import { addProfile, removeProfile } from "./services/profileManager";
 import {
-  checkPackRequirements,
-  isEmptyPackMetadata,
   listTemplatePacks,
   readPackMetadata,
   scaffoldSampleTemplatePacks,
   scaffoldTemplateDocs,
-  type PackMetadata,
-  type PackRecommendedProfile,
 } from "./services/templatePackService";
 import { t } from "./lang/helpers";
 import {
@@ -30,6 +26,7 @@ import {
   discoverMarkdownlint,
   type DiscoveredBinary,
 } from "./utils/binDiscover";
+import { renderTemplatePackInfoPanel } from "./settings/templatePackPanel";
 
 /**
  * 折りたたみセクションの「既定の開閉」。
@@ -895,139 +892,16 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     const selectedPack = currentProfile.selectedTemplatePack?.trim();
     if (selectedPack && packs.includes(selectedPack)) {
       const metadata = await readPackMetadata(this.app, currentProfile.templateFolder, selectedPack);
-      await this.renderPackInfoPanel(containerEl, currentProfile, selectedPack, metadata);
+      await renderTemplatePackInfoPanel({
+        app: this.app,
+        plugin: this.plugin,
+        containerEl,
+        currentProfile,
+        packName: selectedPack,
+        metadata,
+        refresh: () => this.display(),
+      });
     }
-  }
-
-  /**
-   * 選択中テンプレートパックのメタ情報パネルを描画する（ADR-008 拡張）。
-   *
-   * - title/description/engine の表示
-   * - requires の不足ファイル警告（SKILL.md 導線付き）
-   * - recommendedProfile と現在のプロファイルの差分 → 「推奨設定を適用」ボタン
-   *
-   * メタが空の場合はパネル自体を描画しない。インラインスタイルは styles.css 抽出の余地を
-   * 残すため最小限。現在は設定タブ内の完結性を優先。
-   */
-  private async renderPackInfoPanel(
-    containerEl: HTMLElement,
-    currentProfile: ProfileSettings,
-    packName: string,
-    metadata: PackMetadata | null,
-  ): Promise<void> {
-    if (isEmptyPackMetadata(metadata)) return;
-
-    const panel = containerEl.createDiv({ cls: "mdtex-pack-info" });
-    panel.style.marginLeft = "1.5em";
-    panel.style.padding = "0.6em 0.8em";
-    panel.style.marginBottom = "0.75em";
-    panel.style.borderLeft = "3px solid var(--text-muted)";
-    panel.style.background = "var(--background-secondary)";
-    panel.style.borderRadius = "0 4px 4px 0";
-
-    if (metadata!.title || metadata!.description) {
-      if (metadata!.title) {
-        const tEl = panel.createEl("div", { text: metadata!.title });
-        tEl.style.fontWeight = "600";
-      }
-      if (metadata!.description) {
-        const dEl = panel.createEl("div", { text: metadata!.description });
-        dEl.style.opacity = "0.85";
-        dEl.style.marginTop = metadata!.title ? "0.2em" : "0";
-        dEl.style.fontSize = "0.92em";
-      }
-    }
-
-    if (metadata!.engine) {
-      const eEl = panel.createDiv({ text: t("setting_pack_info_engine", [metadata!.engine]) });
-      eEl.style.marginTop = "0.3em";
-      eEl.style.fontSize = "0.85em";
-      eEl.style.opacity = "0.75";
-    }
-
-    // requires の不足チェック。揃っていれば警告を出さない（動ける状態を静かにする）。
-    const missing = await checkPackRequirements(
-      this.app,
-      currentProfile.templateFolder,
-      packName,
-      metadata,
-    );
-    if (missing.length > 0) {
-      const warn = panel.createDiv({ cls: "mdtex-pack-warning" });
-      warn.style.marginTop = "0.5em";
-      warn.style.padding = "0.5em 0.7em";
-      warn.style.borderRadius = "4px";
-      warn.style.background = "rgba(255, 190, 80, 0.12)";
-      warn.style.border = "1px solid rgba(255, 190, 80, 0.45)";
-      warn.createEl("div", { text: t("pack_requires_missing", [missing.join(", ")]) });
-      const hint = warn.createEl("div", { text: t("pack_requires_hint") });
-      hint.style.fontSize = "0.85em";
-      hint.style.opacity = "0.8";
-      hint.style.marginTop = "0.2em";
-      const btnRow = warn.createDiv();
-      btnRow.style.marginTop = "0.4em";
-      const btn = btnRow.createEl("button", { text: t("button_open_skill_doc") });
-      btn.onclick = async () => {
-        await this.openPackGuide(currentProfile.templateFolder);
-      };
-    }
-
-    // recommendedProfile の差分。現在のプロファイルが推奨を満たしていれば隠す。
-    const rec = metadata!.recommendedProfile;
-    if (this.collectRecommendedDiff(currentProfile, rec).length > 0) {
-      const recRow = panel.createDiv();
-      recRow.style.marginTop = "0.5em";
-      const applyBtn = recRow.createEl("button", { text: t("button_apply_recommended") });
-      applyBtn.classList.add("mod-cta");
-      applyBtn.onclick = async () => {
-        this.applyRecommendedProfile(currentProfile, rec);
-        await this.plugin.saveSettings();
-        new Notice(t("notice_recommended_applied"));
-        await this.display();
-      };
-    }
-  }
-
-  /** テンプレートフォルダ直下の SKILL.md（パック自作ガイド）を開く。無ければ通知。 */
-  private async openPackGuide(templateFolder: string): Promise<void> {
-    const folder = (templateFolder ?? "").trim().replace(/^\/+|\/+$/g, "");
-    const skillPath = folder ? `${folder}/SKILL.md` : "SKILL.md";
-    const file = this.app.vault.getAbstractFileByPath(skillPath);
-    if (!file) {
-      new Notice(t("notice_skill_not_found"));
-      return;
-    }
-    await this.app.workspace.openLinkText(skillPath, "", false);
-  }
-
-  /**
-   * パック推奨プロファイルと現在のプロファイルの差分（適用すべき項目）を返す。
-   * 空配列なら「推奨は既に満たされている」で「適用」ボタンを隠す。
-   */
-  private collectRecommendedDiff(
-    profile: ProfileSettings,
-    rec: PackRecommendedProfile,
-  ): string[] {
-    const diff: string[] = [];
-    if (rec.citationMode && profile.citationMode !== rec.citationMode) {
-      diff.push(`citationMode: ${rec.citationMode}`);
-    }
-    const recEngine = rec.latexEngine?.trim();
-    if (recEngine && (profile.latexEngine ?? "").trim() !== recEngine) {
-      diff.push(`latexEngine: ${recEngine}`);
-    }
-    const recOpts = rec.pdfEngineOpts?.trim();
-    if (recOpts && (profile.pdfEngineOpts ?? "").trim() !== recOpts) {
-      diff.push(`pdfEngineOpts: ${recOpts}`);
-    }
-    return diff;
-  }
-
-  /** パック推奨プロファイルを現在のプロファイルに反映する（非 NULL 項目のみ）。 */
-  private applyRecommendedProfile(profile: ProfileSettings, rec: PackRecommendedProfile): void {
-    if (rec.citationMode) profile.citationMode = rec.citationMode;
-    if (rec.latexEngine?.trim()) profile.latexEngine = rec.latexEngine.trim();
-    if (rec.pdfEngineOpts?.trim()) profile.pdfEngineOpts = rec.pdfEngineOpts.trim();
   }
 }
 

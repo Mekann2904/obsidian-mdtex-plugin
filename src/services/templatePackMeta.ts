@@ -5,6 +5,8 @@
 //          関数は templatePackService.ts（GUI 用）に残す。
 // Related: src/services/templatePackService.ts, src/cli/fsTemplatePack.ts
 
+import { parseDocument } from "yaml";
+
 /**
  * defaults file の標準ファイル名。テンプレートパックの入口（Pandoc が読む）。
  */
@@ -74,130 +76,59 @@ export function isEmptyPackMetadata(meta: PackMetadata | null): boolean {
 }
 
 /**
- * _mdtex.yaml を最小 YAML パーサで読み、PackMetadata を返す。
+ * _mdtex.yaml を YAML として読み、PackMetadata を返す。
  *
- * 依存関係に YAML パーサ（js-yaml）を足してバンドルを肥大化させるのを避けるため、
- * 限定構造（スカラー / 配列 / 1レベルネストの recommendedProfile）を行ベースでパースする。
+ * 以前は限定構造だけを行ベースで読む独自パーサだったが、ユーザーが書く `_mdtex.yaml`
+ * を「YAML っぽい別言語」にしないため、実 YAML パーサをこの境界で使う。
  * 未知キー・不正値は無視し、例外は投げない。
  *
  * 後方互換: 万一 `_mdtex:` ラッパー（旧 defaults.yaml 埋め込み方式）がある場合は、
- * その配下のブロックを抜いて扱う。
+ * その配下のオブジェクトを扱う。
  *
  * @returns メタ。空の場合は null。
  */
 export function parsePackMetadata(metaYaml: string): PackMetadata | null {
   if (!metaYaml) return null;
-  const lines = metaYaml.split(/\r?\n/);
 
-  // 後方互換: `_mdtex:` ラッパーがあればその配下を抜く。無ければ全体をパース。
-  const wrappedIdx = lines.findIndex(line => /^_mdtex:\s*$/.test(line));
-  const block: string[] =
-    wrappedIdx >= 0 ? extractMdtexBlock(lines, wrappedIdx) : lines;
+  const parsed = parseYamlObject(metaYaml);
+  if (!parsed) return null;
+  const source = isRecord(parsed._mdtex) ? parsed._mdtex : parsed;
 
   const meta: PackMetadata = { requires: [], recommendedProfile: {} };
-  let i = 0;
-  while (i < block.length) {
-    const raw = block[i];
-    const trimmed = raw.trim();
-    if (trimmed === "" || trimmed.startsWith("#")) {
-      i++;
-      continue;
-    }
-    const match = trimmed.match(/^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
-    if (!match) {
-      i++;
-      continue;
-    }
-    const [, key, inline] = match;
-
-    if (inline !== "") {
-      // インライン値（スカラー）。requires: [] のような空配列リテラルは無視して空配列維持。
-      if (key !== "requires" && key !== "recommendedProfile") {
-        setPackMetaScalar(meta, key, unquoteYaml(inline));
-      }
-      i++;
-      continue;
-    }
-
-    // ブロック値: 配列（requires）or ネストオブジェクト（recommendedProfile）。
-    // baseIndent より深いインデントの行を子として集める。
-    const baseIndent = indentWidth(raw);
-    const children: string[] = [];
-    let j = i + 1;
-    while (j < block.length) {
-      const child = block[j];
-      if (child.trim() === "") {
-        j++;
-        continue;
-      }
-      if (indentWidth(child) <= baseIndent) break;
-      children.push(child);
-      j++;
-    }
-
-    if (key === "requires") {
-      for (const c of children) {
-        const item = c.trim().replace(/^-\s+/, "").trim();
-        if (item) meta.requires.push(unquoteYaml(item));
-      }
-    } else if (key === "recommendedProfile") {
-      for (const c of children) {
-        const cm = c.trim().match(/^([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
-        if (!cm) continue;
-        const [, ck, cv] = cm;
-        if (ck === "citationMode") {
-          const v = unquoteYaml(cv);
-          if (v === "none" || v === "natbib" || v === "citeproc") {
-            meta.recommendedProfile.citationMode = v;
-          }
-        } else if (ck === "latexEngine") {
-          meta.recommendedProfile.latexEngine = unquoteYaml(cv);
-        } else if (ck === "pdfEngineOpts") {
-          meta.recommendedProfile.pdfEngineOpts = unquoteYaml(cv);
-        }
-      }
-    }
-    i = j;
+  if (typeof source.title === "string") meta.title = source.title;
+  if (typeof source.description === "string") meta.description = source.description;
+  if (typeof source.engine === "string") meta.engine = source.engine;
+  if (Array.isArray(source.requires)) {
+    meta.requires = source.requires.filter((v): v is string => typeof v === "string");
   }
+
+  if (isRecord(source.recommendedProfile)) {
+    const rec = source.recommendedProfile;
+    if (
+      rec.citationMode === "none" ||
+      rec.citationMode === "natbib" ||
+      rec.citationMode === "citeproc"
+    ) {
+      meta.recommendedProfile.citationMode = rec.citationMode;
+    }
+    if (typeof rec.latexEngine === "string") meta.recommendedProfile.latexEngine = rec.latexEngine;
+    if (typeof rec.pdfEngineOpts === "string") meta.recommendedProfile.pdfEngineOpts = rec.pdfEngineOpts;
+  }
+
   return meta;
 }
 
-/** `_mdtex:` ラッパー（旧方式）の配下ブロックを抜く。後方互換用。 */
-function extractMdtexBlock(lines: string[], startIdx: number): string[] {
-  const block: string[] = [];
-  for (let i = startIdx + 1; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.trim() === "") {
-      block.push(line);
-      continue;
-    }
-    if (/^\S/.test(line)) break;
-    block.push(line);
+function parseYamlObject(src: string): Record<string, unknown> | null {
+  try {
+    const doc = parseDocument(src);
+    if (doc.errors.length > 0) return null;
+    const value = doc.toJS({}) as unknown;
+    return isRecord(value) ? value : null;
+  } catch {
+    return null;
   }
-  return block;
 }
 
-function setPackMetaScalar(meta: PackMetadata, key: string, value: string): void {
-  if (key === "title") meta.title = value;
-  else if (key === "description") meta.description = value;
-  else if (key === "engine") meta.engine = value;
-  // 未知キーは無視（将来拡張を壊さない）
-}
-
-/** YAML のダブル/シングルクォートを剥がす。クォート無しはそのまま。 */
-function unquoteYaml(s: string): string {
-  const trimmed = s.trim();
-  if (
-    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))
-  ) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-}
-
-/** 行頭のスペース数を返す（タブは展開しない; `_mdtex:` ブロックはスペースインデントを前提）。 */
-function indentWidth(line: string): number {
-  const match = line.match(/^ */);
-  return match ? match[0].length : 0;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

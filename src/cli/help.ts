@@ -1,0 +1,122 @@
+// File: src/cli/help.ts
+// Purpose: mdtex CLI の help text を command dispatch から分離する。
+// Reason: サブコマンド追加で index.ts が巨大化しないようにするため。
+
+// esbuild の define で package.json の version を注入（未定義時は dev）。
+declare const CLI_VERSION: string | undefined;
+export const VERSION: string = typeof CLI_VERSION !== "undefined" ? CLI_VERSION : "dev";
+
+export function topHelp(): string {
+  return `mdtex ${VERSION} — Obsidian Markdown を Pandoc/LuaLaTeX で組版する CLI
+（LLM コーディングエージェント向けの誠実な道具）
+
+Usage: mdtex <command> [subcommand] [options]
+
+Commands:
+  pack      テンプレートパックの管理（list / validate）
+  profile   プロファイル管理                                [予定]
+  convert   Markdown を PDF/LaTeX/DOCX に変換              [予定]
+  doctor    環境診断（pandoc / latex の発見と版）           [予定]
+
+Global options:
+  --json        構造化出力（エージェント向け）
+  --help, -h    ヘルプ
+  --version, -V バージョン
+
+Examples:
+  mdtex pack list
+  mdtex pack validate 縦書き二段組
+  mdtex pack validate pLaTeX学会論文 --strict --json
+
+詳細は各コマンドの --help を参照（例: mdtex pack --help）。
+`;
+}
+
+export function packHelp(): string {
+  return `mdtex pack — テンプレートパックの管理
+
+Usage: mdtex pack <subcommand> [options]
+
+Subcommands:
+  list       パック一覧（_mdtex の title/description 付き）
+  validate   パックの検証（defaults 構文 + メタ + requires チェック）
+  test       サンプル原稿で PDF 生成テスト
+
+Options:
+  --folder <path>  テンプレートフォルダ（既定: MdTex Templates）
+
+Examples:
+  mdtex pack list
+  mdtex pack list --folder ./templates --json
+  mdtex pack validate 縦書き二段組
+  mdtex pack validate pLaTeX学会論文 --strict
+`;
+}
+
+export function listHelp(): string {
+  return `mdtex pack list — パック一覧
+
+Usage: mdtex pack list [--folder <path>] [--json]
+
+Options:
+  --folder <path>  テンプレートフォルダ（既定: MdTex Templates）
+  --json           構造化出力（name/title/description/engine の配列）
+
+Examples:
+  mdtex pack list
+  mdtex pack list --json
+`;
+}
+
+export function validateHelp(): string {
+  return `mdtex pack validate — パックの検証
+
+Usage: mdtex pack validate <pack> [--folder <path>] [--strict] [--json]
+
+引数:
+  <pack>           パック名（テンプレートフォルダ直下のサブフォルダ名）
+
+Options:
+  --folder <path>  テンプレートフォルダ（既定: MdTex Templates）
+  --strict         警告（メタ未宣言・requires 不足）をエラー扱い
+  --json           構造化出力
+
+Exit codes:
+  0  検証成功
+  1  警告あり（--strict 未使用時）
+  2  エラー（defaults 読めない、--strict で警告が昇格）
+
+Examples:
+  mdtex pack validate 縦書き二段組
+  mdtex pack validate pLaTeX学会論文 --strict
+  mdtex pack validate pLaTeX学会論文 --json
+`;
+}
+
+export function testHelp(): string {
+  return `mdtex pack test — サンプル原稿で PDF 生成テスト
+
+Usage: mdtex pack test <pack> [--folder <path>] [--sample <file>] [--output <path>] [--pandoc <path>] [--dry-run] [--keep-artifacts] [--json]
+
+引数:
+  <pack>              パック名
+
+Options:
+  --folder <path>     テンプレートフォルダ（既定: MdTex Templates）
+  --sample <file>     サンプル原稿（指定無ければパック内 sample.md）
+  --output <path>     出力 PDF（指定無ければ temp）
+  --pandoc <path>     Pandoc バイナリ（指定無ければ PATH の pandoc）
+  --dry-run           コマンドを表示するのみ（実行しない）
+  --keep-artifacts    中間 .tex も保存
+  --json              構造化出力
+
+Exit codes:
+  0  PDF 生成成功 / dry-run
+  2  エラー（defaults/sample 無し、pandoc 失敗）
+
+Examples:
+  mdtex pack test 縦書き二段組
+  mdtex pack test 縦書き二段組 --dry-run
+  mdtex pack test 縦書き二段組 --keep-artifacts --json
+`;
+}
