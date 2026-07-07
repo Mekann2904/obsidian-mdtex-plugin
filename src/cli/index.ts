@@ -7,8 +7,9 @@
 // Related: src/cli/args.ts, src/cli/help.ts, src/cli/commands/pack.ts
 
 import { flagString, parseArgs } from "./args";
-import { listHelp, packHelp, testHelp, topHelp, validateHelp, VERSION } from "./help";
+import { convertHelp, listHelp, packHelp, testHelp, topHelp, validateHelp, VERSION } from "./help";
 import { cmdPackList, cmdPackTest, cmdPackValidate } from "./commands/pack";
+import { cmdConvert } from "./commands/convert";
 
 async function main(): Promise<number> {
   const { positional, flags } = parseArgs(process.argv.slice(2));
@@ -31,6 +32,14 @@ async function main(): Promise<number> {
 
   if (cmd === "pack") {
     return dispatchPack(positional, flags, { asJson, help, folder, strict });
+  }
+
+  if (cmd === "convert") {
+    if (help) {
+      process.stdout.write(convertHelp());
+      return 0;
+    }
+    return cmdConvert(positional[1] ?? "", flags, folder, asJson);
   }
 
   process.stderr.write(`Error: 不明なコマンド: ${cmd}\n  mdtex --help で一覧\n`);

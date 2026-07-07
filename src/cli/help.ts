@@ -13,9 +13,9 @@ export function topHelp(): string {
 Usage: mdtex <command> [subcommand] [options]
 
 Commands:
-  pack      テンプレートパックの管理（list / validate）
+  pack      テンプレートパックの管理（list / validate / test）
+  convert   Markdown を PDF/LaTeX/DOCX に変換
   profile   プロファイル管理                                [予定]
-  convert   Markdown を PDF/LaTeX/DOCX に変換              [予定]
   doctor    環境診断（pandoc / latex の発見と版）           [予定]
 
 Global options:
@@ -26,9 +26,36 @@ Global options:
 Examples:
   mdtex pack list
   mdtex pack validate 縦書き二段組
-  mdtex pack validate pLaTeX学会論文 --strict --json
+  mdtex convert paper.md --pack 縦書き二段組 --output paper.pdf
+  mdtex convert paper.md --defaults ./templates/defaults.yaml --dry-run --json
 
 詳細は各コマンドの --help を参照（例: mdtex pack --help）。
+`;
+}
+
+export function convertHelp(): string {
+  return `mdtex convert — Markdown を PDF/LaTeX/DOCX に変換
+
+Usage: mdtex convert <input.md> [options]
+
+Options:
+  --output <path>     出力ファイル（未指定時: input basename + format 拡張子）
+  --format <format>   pdf / latex / docx（既定: pdf）
+  --defaults <path>   Pandoc defaults file
+  --folder <path>     テンプレートフォルダ（--pack 使用時、既定: MdTex Templates）
+  --pack <name>       テンプレートパック名（<folder>/<pack>/defaults.yaml を使用）
+  --pandoc <path>     Pandoc バイナリ（既定: pandoc）
+  --dry-run           コマンドを表示するのみ（実行しない）
+  --json              構造化出力
+
+Exit codes:
+  0  変換成功 / dry-run
+  2  エラー（入力/defaults 無し、pandoc 失敗）
+
+Examples:
+  mdtex convert paper.md --output paper.pdf
+  mdtex convert paper.md --pack 縦書き二段組 --output paper.pdf
+  mdtex convert paper.md --defaults ./templates/P/defaults.yaml --dry-run --json
 `;
 }
 

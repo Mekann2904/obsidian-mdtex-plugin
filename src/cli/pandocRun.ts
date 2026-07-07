@@ -1,0 +1,81 @@
+// File: src/cli/pandocRun.ts
+// Purpose: Pandoc を1回実行して Markdown→PDF/LaTeX/DOCX 変換を行う共通コア。
+// Reason: convert と pack test で同じ「引数構築 → dry-run → 実行 → exit code の結果写像」が
+//          重複していたため、pandoc-convert 実行の知識を1箇所に集める。
+// Related: src/cli/convert.ts, src/cli/packTest.ts, src/utils/processRunner.ts
+
+import * as fs from "fs/promises";
+import { runCommand } from "../utils/processRunner";
+
+export type PandocRunStatus = "ok" | "error" | "dry-run";
+
+/** pandoc-convert の実行結果（共通）。各コマンドはこれを拡張して返す。 */
+export interface PandocRunResult {
+  status: PandocRunStatus;
+  /** 実行（または dry-run 表示）したコマンド文字列。 */
+  command: string;
+  /** 出力ファイルの絶対パス。 */
+  output: string;
+  /** エラーメッセージ（失敗時）。 */
+  error?: string;
+  /** Pandoc の stderr 末尾（失敗時、原因特定用）。 */
+  stderrTail?: string;
+}
+
+export interface PandocRunParams {
+  /** 入力 Markdown。 */
+  input: string;
+  /** Pandoc defaults file。未指定時は -d を省く。 */
+  defaultsPath?: string;
+  /** 出力ファイル。 */
+  output: string;
+  /** Pandoc バイナリ（既定: pandoc）。 */
+  pandoc?: string;
+  /** コマンドを表示するのみで実行しない。 */
+  dryRun?: boolean;
+  /** runCommand の cwd。 */
+  cwd: string;
+  /** 実行時に mkdir するディレクトリ（dry-run 時は作らない）。出力/cwd の确保用。 */
+  ensureDir?: string;
+}
+
+/**
+ * pandoc を1回起動して変換する。dry-run は実行せず status="dry-run" で返す。
+ * 実行時は ensureDir を作ってから pandoc を起動し、exit code を結果に写す。
+ * 例外は投げず、全て status/error に丸める（CLI の exit code 源をここに集中）。
+ */
+export async function runPandocConvert(params: PandocRunParams): Promise<PandocRunResult> {
+  const pandocBin = params.pandoc ?? "pandoc";
+  const args = params.defaultsPath
+    ? [params.input, "-d", params.defaultsPath, "-o", params.output]
+    : [params.input, "-o", params.output];
+  const command = [pandocBin, ...args].join(" ");
+
+  if (params.dryRun) {
+    return { status: "dry-run", command, output: params.output };
+  }
+
+  try {
+    if (params.ensureDir) {
+      await fs.mkdir(params.ensureDir, { recursive: true });
+    }
+    const res = await runCommand(pandocBin, args, { cwd: params.cwd });
+    if (res.exitCode !== 0) {
+      return {
+        status: "error",
+        command,
+        output: params.output,
+        error: `pandoc が終了コード ${res.exitCode} で失敗しました`,
+        stderrTail: res.stderr.slice(-2000),
+      };
+    }
+    return { status: "ok", command, output: params.output };
+  } catch (e) {
+    return {
+      status: "error",
+      command,
+      output: params.output,
+      error: `pandoc の実行に失敗: ${e instanceof Error ? e.message : String(e)}`,
+    };
+  }
+}
