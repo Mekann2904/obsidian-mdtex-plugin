@@ -42,7 +42,9 @@ async function main(): Promise<number> {
     return cmdConvert(positional[1] ?? "", flags, folder, asJson);
   }
 
-  process.stderr.write(`Error: 不明なコマンド: ${cmd}\n  mdtex --help で一覧\n`);
+  process.stderr.write(
+    `Error: 不明なコマンド: ${cmd}\n  利用可能: mdtex pack, mdtex convert\n  mdtex --help で一覧\n`,
+  );
   return 2;
 }
 
@@ -92,7 +94,9 @@ function dispatchPack(
       dryRun: flags["dry-run"] === true,
     }, opts.asJson);
   }
-  process.stderr.write(`Error: 不明な pack サブコマンド: ${sub}\n  mdtex pack --help で一覧\n`);
+  process.stderr.write(
+    `Error: 不明な pack サブコマンド: ${sub}\n  利用可能: list, validate, test\n  mdtex pack --help で一覧\n`,
+  );
   return 2;
 }
 

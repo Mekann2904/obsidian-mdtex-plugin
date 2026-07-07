@@ -1,6 +1,6 @@
 # MdTex 開発計画（plan.md）
 
-最終更新: 2026-07-03
+最終更新: 2026-07-07
 ブランチ: `dev/v4_0_0`
 
 ---
@@ -65,6 +65,11 @@ CLI バンドル（`dist/cli.js`）は obsidian / sampleTemplatePacks に一切�
 - ✅ **`pack test`**（未コミット・実装済み）— サンプル原稿で PDF 生成・`--dry-run`・`--keep-artifacts`・`--json`
   - ⚠️ 実際の PDF 生成が `_mdtex:` ブロッカーで通らない
 
+### mdtex CLI（P2: 実行の中核）
+
+- ✅ **`mdtex convert <file>`**（`102b885`）— Markdown → PDF/LaTeX/DOCX。`--output` / `--format` / `--defaults` / `--pack` / `--pandoc` / `--dry-run` / `--json`。pandoc 実行を共通コア（`pandocRun`）に集約し、convert と pack test で共有
+  - 🟡 L3（Obsidian 記法: WikiLink / transclusion / `%%` コメント）は未対応 — `VaultLike` 抽象化で今後拡張
+
 ### 検証状況
 
 - テスト: **410 passed**（純粋関数 + fs 統合テスト）
@@ -117,9 +122,8 @@ pandoc sample.md -d defaults.yaml -o out.pdf
 
 ### P2（実行の中核）
 
-- 🟡 **`mdtex convert <file>`** — Markdown → PDF/LaTeX/DOCX
-  - L2（fs ベース前処理 + Pandoc 呼び出し）→ plain Markdown 向けが先
-  - L3（Obsidian 記法: WikiLink / transclusion / `%%` コメント）→ `VaultLike` 抽象化で再現。MdTex の核心価値（Obsidian 記法の正規化）を CLI に拡張
+- ✅ **`mdtex convert <file>`**（L2 達成・`102b885`）— Markdown → PDF/LaTeX/DOCX。plain Markdown 向けの fs ベース前処理 + Pandoc 呼び出しを実装
+  - 🟡 L3（Obsidian 記法: WikiLink / transclusion / `%%` コメント）→ `VaultLike` 抽象化で今後拡張。MdTex の核心価値（Obsidian 記法の正規化）を CLI に拡張
 
 ### P3 以降（拡張）
 
@@ -160,9 +164,13 @@ mdtex pack list [--folder <path>] [--json]
 mdtex pack validate <pack> [--folder <path>] [--strict] [--json]
 mdtex pack test <pack> [--folder <path>] [--sample <file>] [--output <path>]
                   [--pandoc <path>] [--dry-run] [--keep-artifacts] [--json]
+mdtex convert <file.md> [--output <path>] [--format pdf|latex|docx]
+               [--defaults <path>] [--pack <name>] [--folder <path>]
+               [--pandoc <path>] [--dry-run] [--json]
 ```
 
 `pack test` は `_mdtex.yaml` 分離修正（#1）後に実際の PDF 生成が通るようになる。
+`convert` は plain Markdown 向け（L2）が実装済み。Obsidian 記法（WikiLink/transclusion）は L3 で対応予定。
 
 ---
 

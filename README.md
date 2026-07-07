@@ -2,7 +2,7 @@
 title: MdTexプラグイン
 category: ユーザードキュメント
 audience: 新規ユーザー, 既存ユーザー, 開発者
-last_updated: 2026-02-12
+last_updated: 2026-07-07
 tags: [概要, インストール, 機能]
 related: [docs/quickstart.md, docs/features.md, CONTRIBUTING.md]
 ---
@@ -30,6 +30,7 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 - [設定ガイド](#設定ガイド)
 - [依存関係](#依存関係一覧)
 - [トラブルシューティング](#トラブルシューティング)
+- [mdtex CLI（コマンドライン・自動化向け）](#mdtex-cli)
 
 ---
 
@@ -233,6 +234,58 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - アーキテクチャ解説
 - バグ報告や新機能の提案：[GitHub Issues](https://github.com/Mekann2904/obsidian-mdtex-plugin/issues)
 - プルリクエストも受け付けています
+
+---
+
+## mdtex CLI
+
+MdTex は GUI（Obsidian プラグイン）に加え、`mdtex` コマンドラインツールを提供します。スクリプト・CI・LLM コーディングエージェントなど、GUI を介さずに MdTex を観測・実行するために設計された「誠実な道具」です（cli-for-agents 準拠）。
+
+> **対象**: スクリプト / CI / LLM エージェント。通常の執筆には Obsidian プラグインを使います。
+
+### インストール
+
+リポジトリをクローンしてビルドします。`npm run build` がプラグイン（`main.js`）と CLI（`dist/cli.js`）の両方を生成します。
+
+```bash
+git clone https://github.com/Mekann2904/obsidian-mdtex-plugin
+cd obsidian-mdtex-plugin
+npm install
+npm run build     # main.js と dist/cli.js を生成
+npm link          # mdtex コマンドを PATH に登録
+mdtex --version
+```
+
+### 主なコマンド
+
+| コマンド | 説明 |
+|---------|------|
+| `mdtex pack list` | テンプレートパック一覧 |
+| `mdtex pack validate <pack>` | パックの検証（defaults + メタ + requires） |
+| `mdtex pack test <pack>` | サンプル原稿で PDF 生成テスト |
+| `mdtex convert <file.md>` | Markdown → PDF/LaTeX/DOCX 変換 |
+
+### エージェント・CI 向けの機能
+
+- **`--json`**: 構造化出力（status / data）。exit code（0=成功 / 1=警告 / 2=エラー）と整合します。
+- **`--dry-run`**: 実行せずにコマンドを表示（`convert` / `pack test`）。計画確認に。
+- **非対話**: 全入力はフラグ。プロンプトで停止しません（エージェントのデッドロック回避）。
+- **段階的 `--help`**: 各コマンド・サブコマンドの `--help` に examples を掲載。
+
+```bash
+# パックを検証して JSON で受け取る
+mdtex pack validate 縦書き二段組 --json
+
+# 変換コマンドを事前確認（実行しない）
+mdtex convert paper.md --pack 縦書き二段組 --output paper.pdf --dry-run
+
+# help の階層
+mdtex --help
+mdtex pack --help
+mdtex pack validate --help
+```
+
+各コマンドの詳細は `mdtex <command> --help` を参照。CLI の設計方針とロードマップは [plan.md](./plan.md) を参照。
 
 ---
 

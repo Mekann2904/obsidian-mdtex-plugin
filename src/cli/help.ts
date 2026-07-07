@@ -15,8 +15,6 @@ Usage: mdtex <command> [subcommand] [options]
 Commands:
   pack      テンプレートパックの管理（list / validate / test）
   convert   Markdown を PDF/LaTeX/DOCX に変換
-  profile   プロファイル管理                                [予定]
-  doctor    環境診断（pandoc / latex の発見と版）           [予定]
 
 Global options:
   --json        構造化出力（エージェント向け）
