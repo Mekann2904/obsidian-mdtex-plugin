@@ -10,6 +10,7 @@ import * as os from "os";
 import * as path from "path";
 import { runCommand } from "../utils/processRunner";
 import { DEFAULTS_FILE_NAME } from "../services/templatePackMeta";
+import { normalizeForCli } from "./normalize";
 import { runPandocConvert, type PandocRunResult } from "./pandocRun";
 import type { PackFileAccess } from "../services/packAccess";
 
@@ -72,8 +73,13 @@ export async function testPack(
   const workDir = path.join(os.tmpdir(), `mdtex-test-${pack}-${Date.now()}`);
   const outputPath = options.output ? path.resolve(options.output) : path.join(workDir, `${pack}.pdf`);
 
+  // sample を読み、正規化（GUI と同じパイプラインの CLI 版）して pandoc へ stdin で渡す。
+  const rawSample = await access.readText(samplePath);
+  const content = normalizeForCli(rawSample ?? "");
+
   const run = await runPandocConvert({
     input: samplePath,
+    inputContent: content,
     defaultsPath,
     output: outputPath,
     pandoc: options.pandoc,
@@ -84,14 +90,14 @@ export async function testPack(
 
   const result: PackTestResult = { pack, sampleUsed: samplePath, ...run };
 
-  // keepArtifacts の .tex 生成は pack test 固有（共通コアの convert 引数に収まらない -t latex パス）。
+  // keepArtifacts の .tex 生成も stdin で本文を渡す（共通コアと同じ本文経路）。
   if (run.status === "ok" && options.keepArtifacts) {
     const pandocBin = options.pandoc ?? "pandoc";
     const texPath = outputPath.replace(/\.pdf$/i, ".tex");
     const texRes = await runCommand(
       pandocBin,
-      [samplePath, "-d", defaultsPath, "-t", "latex", "-o", texPath],
-      { cwd: workDir },
+      ["-d", defaultsPath, "-t", "latex", "-o", texPath],
+      { cwd: workDir, input: content },
     );
     if (texRes.exitCode === 0) result.texArtifact = texPath;
   }

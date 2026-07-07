@@ -42,7 +42,7 @@ describe("convertMarkdownCli", () => {
     const result = await convertMarkdownCli({ input, defaults, output, dryRun: true });
 
     expect(result.status).toBe("dry-run");
-    expect(result.command).toBe(`pandoc ${input} -d ${defaults} -o ${output}`);
+    expect(result.command).toBe(`pandoc -d ${defaults} -o ${output} < ${input}`);
     expect(result.output).toBe(output);
     expect(mockedRunCommand).not.toHaveBeenCalled();
   });
@@ -60,7 +60,7 @@ describe("convertMarkdownCli", () => {
     expect(result.status).toBe("dry-run");
     expect(result.defaultsUsed).toBe(defaults);
     expect(result.output).toBe(path.join(dir, "input.pdf"));
-    expect(result.command).toBe(`pandoc ${input} -d ${defaults} -o ${path.join(dir, "input.pdf")}`);
+    expect(result.command).toBe(`pandoc -d ${defaults} -o ${path.join(dir, "input.pdf")} < ${input}`);
   });
 
   it("入力ファイルが無ければ error で pandoc を実行しない", async () => {
@@ -80,8 +80,9 @@ describe("convertMarkdownCli", () => {
     const result = await convertMarkdownCli({ input, output, pandoc: "pandoc-custom" });
 
     expect(result.status).toBe("ok");
-    expect(mockedRunCommand).toHaveBeenCalledWith("pandoc-custom", [input, "-o", output], {
+    expect(mockedRunCommand).toHaveBeenCalledWith("pandoc-custom", ["-o", output], {
       cwd: dir,
+      input: "# Hello\n",
     });
   });
 
@@ -112,5 +113,19 @@ describe("convertMarkdownCli", () => {
 
     expect(result.status).toBe("error");
     expect(result.error).toContain("spawn failed");
+  });
+
+  it("Obsidian の %% コメントを除去して pandoc へ stdin で渡す", async () => {
+    const input = path.join(dir, "input.md");
+    const output = path.join(dir, "out.pdf");
+    await fs.writeFile(input, "before %% hidden %% after\n");
+    mockedRunCommand.mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+
+    await convertMarkdownCli({ input, output });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith("pandoc", ["-o", output], {
+      cwd: dir,
+      input: "before  after\n",
+    });
   });
 });

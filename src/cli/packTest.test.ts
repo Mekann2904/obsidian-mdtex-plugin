@@ -28,8 +28,12 @@ function fsAccess(): PackFileAccess {
     async listChildDirs() {
       return [];
     },
-    async readText() {
-      return null;
+    async readText(filePath) {
+      try {
+        return await fs.readFile(filePath, "utf8");
+      } catch {
+        return null;
+      }
     },
     async exists(filePath) {
       try {
@@ -72,7 +76,7 @@ describe("testPack", () => {
     expect(result.pack).toBe("Paper");
     expect(result.sampleUsed).toBe(sample);
     expect(result.output).toBe(path.join(vault, "out.pdf"));
-    expect(result.command).toBe(`pandoc ${sample} -d ${defaults} -o ${path.join(vault, "out.pdf")}`);
+    expect(result.command).toBe(`pandoc -d ${defaults} -o ${path.join(vault, "out.pdf")} < ${sample}`);
     expect(mockedRunCommand).not.toHaveBeenCalled();
   });
 
@@ -118,8 +122,8 @@ describe("testPack", () => {
     expect(mockedRunCommand).toHaveBeenCalledTimes(1);
     expect(mockedRunCommand).toHaveBeenCalledWith(
       "pandoc",
-      [sample, "-d", defaults, "-o", path.join(vault, "out.pdf")],
-      expect.objectContaining({ cwd: expect.stringContaining("mdtex-test-Paper") }),
+      ["-d", defaults, "-o", path.join(vault, "out.pdf")],
+      expect.objectContaining({ cwd: expect.stringContaining("mdtex-test-Paper"), input: "# Hello\n" }),
     );
   });
 });

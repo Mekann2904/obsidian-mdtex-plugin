@@ -8,6 +8,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { DEFAULTS_FILE_NAME } from "../services/templatePackMeta";
+import { normalizeForCli } from "./normalize";
 import { runPandocConvert, type PandocRunResult } from "./pandocRun";
 
 export interface ConvertCliOptions {
@@ -62,8 +63,13 @@ export async function convertMarkdownCli(options: ConvertCliOptions): Promise<Co
     ? path.resolve(options.output)
     : defaultOutputPath(inputPath, options.format ?? "pdf");
 
+  // 本文を読み、正規化（GUI と同じパイプラインの CLI 版）して pandoc へ stdin で渡す。
+  const rawContent = await fs.readFile(inputPath, "utf8");
+  const content = normalizeForCli(rawContent);
+
   const run = await runPandocConvert({
     input: inputPath,
+    inputContent: content,
     defaultsPath,
     output: outputPath,
     pandoc: options.pandoc,

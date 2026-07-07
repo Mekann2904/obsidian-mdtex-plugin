@@ -23,8 +23,11 @@ export interface PandocRunResult {
 }
 
 export interface PandocRunParams {
-  /** 入力 Markdown。 */
+  /** 入力 Markdown ファイルのパス。dry-run 表示・エラー文脈に使う。
+   *  実行時の入力は inputContent を stdin で渡す（pandoc へファイルパスは渡さない）。 */
   input: string;
+  /** 入力本文（正規化済み）。pandoc へ stdin で渡す。GUI と同じ本文経路でファイルを汚さない。 */
+  inputContent: string;
   /** Pandoc defaults file。未指定時は -d を省く。 */
   defaultsPath?: string;
   /** 出力ファイル。 */
@@ -46,10 +49,11 @@ export interface PandocRunParams {
  */
 export async function runPandocConvert(params: PandocRunParams): Promise<PandocRunResult> {
   const pandocBin = params.pandoc ?? "pandoc";
-  const args = params.defaultsPath
-    ? [params.input, "-d", params.defaultsPath, "-o", params.output]
-    : [params.input, "-o", params.output];
-  const command = [pandocBin, ...args].join(" ");
+  const baseArgs = params.defaultsPath ? ["-d", params.defaultsPath] : [];
+  // 本文は常に stdin で渡す（input 引数は使わない）。GUI と同じ本文経路。
+  const args = [...baseArgs, "-o", params.output];
+  // dry-run 表示は stdin 実行と等価な shell 表現（< input）で、agent がコピペ実行可能にする。
+  const command = `${[pandocBin, ...args].join(" ")} < ${params.input}`;
 
   if (params.dryRun) {
     return { status: "dry-run", command, output: params.output };
@@ -59,7 +63,7 @@ export async function runPandocConvert(params: PandocRunParams): Promise<PandocR
     if (params.ensureDir) {
       await fs.mkdir(params.ensureDir, { recursive: true });
     }
-    const res = await runCommand(pandocBin, args, { cwd: params.cwd });
+    const res = await runCommand(pandocBin, args, { cwd: params.cwd, input: params.inputContent });
     if (res.exitCode !== 0) {
       return {
         status: "error",
