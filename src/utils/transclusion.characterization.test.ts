@@ -7,7 +7,7 @@
 // Related: src/utils/transclusion.ts, docs/design-decisions.md (ADR-005/006), CONTEXT.md
 
 import { describe, it, expect } from "vitest";
-import { App, TFile } from "obsidian";
+import type { VaultLike } from "./vaultLike";
 import { expandTransclusions } from "./transclusion";
 
 // extractSection は export されていないため、expandTransclusions 経由で観測する。
@@ -22,36 +22,27 @@ interface StubFile {
   content: string;
 }
 
-function makeStubApp(files: StubFile[], sourcePath = "src.md"): App {
+// expandTransclusions は obsidian 非依存（VaultLike 注入）なので、stub も VaultLike を返す。
+// 変数名 app は呼び出し側の互換のため残す（実体は VaultLike）。
+function makeStubApp(files: StubFile[], _sourcePath = "src.md"): VaultLike {
   const byPath = new Map(files.map(f => [f.path, f]));
   const byBasename = new Map<string, StubFile>();
   for (const f of files) {
     byBasename.set(f.path.split("/").pop()!.toLowerCase(), f);
   }
-
-  const app = new App();
-  // getFirstLinkpathDest(linktext, sourcePath): linktext から TFile インスタンスを返す
-  // instanceof TFile チェックを通すため、ダミーオブジェクトではなく new TFile() で生成する。
-  (app.metadataCache as unknown as { getFirstLinkpathDest: unknown }).getFirstLinkpathDest = (
-    linktext: string,
-  ) => {
-    const [pathPart] = linktext.split("|");
-    const bare = pathPart.split("#")[0].split("^")[0].trim();
-    // 完全パス優先、次に basename
-    const hit = byPath.get(bare) ?? byBasename.get(bare.split("/").pop()!.toLowerCase());
-    if (!hit) return null;
-    // extension は TFile のプロパティにはないが、テスト用に付与する。
-    // 本物の TFile は metadataCache 経由で extension を解決するが、モックでは直接持たせる。
-    const tf = new TFile(hit.path);
-    (tf as unknown as { extension: string }).extension = hit.extension;
-    return tf;
+  return {
+    resolveLink(linktext: string) {
+      const [pathPart] = linktext.split("|");
+      const bare = pathPart.split("#")[0].split("^")[0].trim();
+      // 完全パス優先、次に basename
+      const hit = byPath.get(bare) ?? byBasename.get(bare.split("/").pop()!.toLowerCase());
+      if (!hit) return null;
+      return { path: hit.path, extension: hit.extension };
+    },
+    async read(filePath: string) {
+      return byPath.get(filePath)?.content ?? null;
+    },
   };
-  (app.vault as unknown as { read: unknown }).read = async (file: TFile) => {
-    const stub = byPath.get(file.path);
-    if (!stub) throw new Error(`stub miss: ${file.path}`);
-    return stub.content;
-  };
-  return app;
 }
 
 describe("expandTransclusions / extractSection: characterization（現状振る舞いの録音）", () => {

@@ -16,6 +16,7 @@ import {
 } from "obsidian";
 import { extractLabels, LabelCompletion } from "./labelParser";
 import { expandTransclusions } from "../utils/transclusion";
+import { makeObsidianVault } from "../services/obsidianVaultLike";
 
 interface PandocPluginLike {
   settings: { suppressDeveloperLogs: boolean };
@@ -144,7 +145,7 @@ export class MyLabelSuggest extends EditorSuggest<LabelCompletion> {
       // これにより [@fig:sub-hoge] のようにリライト後の名前で補完できる。
       // キャッシュは変換時と共有しない（補完は軽量・都度読みで良い）。
       const cache = new Map<string, string>();
-      const expanded = await expandTransclusions(content, this.app, file.path, cache);
+      const expanded = await expandTransclusions(content, makeObsidianVault(this.app), file.path, cache);
       this.labels = extractLabels(expanded);
       if (!this.shouldSuppressLogs()) {
         console.log(

@@ -1,9 +1,11 @@
 // File: src/utils/transclusion.ts
 // Purpose: ![[link]] 埋め込みの解決（Markdown展開またはファイルパス取得）を行うユーティリティ。
-// Reason: Obsidian API を使ってリンク先の Markdown をインライン展開し、変換時に内容を取り込むため。
-// Related: src/services/convertService.ts, src/utils/markdownTransforms.ts
+// Reason: リンク先の Markdown をインライン展開し、変換時に内容を取り込むため。Obsidian API には
+//          VaultLike 抽象（resolveLink / read）経由でアクセスし、本 module を GUI/CLI 両対応の純粋
+//          ロジックにする（prototype 検証済み・src/cli/prototype/NOTES.md 参照）。
+// Related: src/utils/vaultLike.ts, src/services/obsidianVaultLike.ts, src/utils/markdownTransforms.ts
 
-import { App, TFile } from "obsidian";
+import type { VaultLike } from "./vaultLike";
 import { namespacedRewrite, stripLabelDefinitions } from "./crossrefLabels";
 
 function escapeRegExp(value: string): string {
@@ -35,7 +37,7 @@ function parseLink(linkText: string): { path: string; heading?: string; blockId?
  */
 export async function expandTransclusions(
   markdown: string,
-  app: App,
+  vault: VaultLike,
   sourcePath: string,
   cache: Map<string, string>,
   visited: Set<string> = new Set(),
@@ -68,16 +70,16 @@ export async function expandTransclusions(
     }
 
     const parsed = parseLink(inner);
-    const file = app.metadataCache.getFirstLinkpathDest(parsed.path, sourcePath);
+    const resolved = vault.resolveLink(parsed.path, sourcePath);
 
     // 埋め込み先が見つからない・Markdown以外の場合はそのまま残す
-    if (!file || !(file instanceof TFile) || file.extension.toLowerCase() !== "md") {
+    if (!resolved || resolved.extension.toLowerCase() !== "md") {
       result += fullMatch;
       lastIndex = regex.lastIndex;
       continue;
     }
 
-    const targetPath = file.path; // Vault 相対パス
+    const targetPath = resolved.path; // Vault 相対パス
 
     // 循環検出: 既に展開中ならプレースホルダーを追加してスキップ
     if (visited.has(targetPath)) {
@@ -87,15 +89,14 @@ export async function expandTransclusions(
       continue;
     }
 
-    const cachedKey = file.path;
-    let content: string | null = cache.get(cachedKey) ?? null;
+    let content: string | null = cache.get(targetPath) ?? null;
 
     if (content === null) {
       try {
-        content = await app.vault.read(file);
-        cache.set(cachedKey, content);
+        content = await vault.read(targetPath);
+        if (content !== null) cache.set(targetPath, content);
       } catch (e) {
-        console.error(`Failed to read embedded file: ${file.path}`, e);
+        console.error(`Failed to read embedded file: ${targetPath}`, e);
       }
     }
 
@@ -120,7 +121,7 @@ export async function expandTransclusions(
     }
 
     const newVisited = new Set(visited).add(targetPath);
-    const expandedContent = await expandTransclusions(sliced, app, targetPath, cache, newVisited, expanded);
+    const expandedContent = await expandTransclusions(sliced, vault, targetPath, cache, newVisited, expanded);
 
     // 方式W: 埋め込み先の crossref ラベルと参照にファイル名プレフィックスを付与し、
     // 別ファイル由来の同名ラベル衝突を自動解決する（ADR-005 関連）。

@@ -23,6 +23,7 @@ import {
 } from "../utils/markdownTransforms";
 import { resolveDraftRequest } from "../utils/frontmatter";
 import { expandTransclusions } from "../utils/transclusion";
+import { makeObsidianVault } from "./obsidianVaultLike";
 import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
 import { detectDuplicateLabels, type DuplicateLabel } from "../utils/crossrefLabels";
 import type { ConversionPaths } from "./conversionPaths";
@@ -97,7 +98,7 @@ export async function normalizeMarkdown(req: NormalizeRequest): Promise<Normaliz
   );
 
   // 3. トランスクルージョン (![[...]]) を先に展開（キャッシュを後段と共有）。
-  content = await expandTransclusions(content, app, sourcePath, cache);
+  content = await expandTransclusions(content, makeObsidianVault(app), sourcePath, cache);
 
   // 4. Mermaid コードブロックを一時 PNG 化し、PDF でも確実に図が描かれるようにする
   //    （実験的機能が有効な場合のみ）。
