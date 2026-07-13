@@ -50,13 +50,19 @@ export async function cmdConvert(
 
   if (asJson) {
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
-  } else if (result.status === "dry-run") {
-    process.stdout.write(`(dry-run) ${result.command}\n`);
-  } else if (result.status === "ok") {
-    process.stdout.write(`✓ 変換成功: ${result.output}\n`);
   } else {
-    process.stderr.write(`✗ ${result.error}\n`);
-    if (result.stderrTail) process.stderr.write(`--- pandoc stderr ---\n${result.stderrTail}\n`);
+    if (result.status === "dry-run") {
+      process.stdout.write(`(dry-run) ${result.command}\n`);
+    } else if (result.status === "ok") {
+      process.stdout.write(`✓ 変換成功: ${result.output}\n`);
+    } else {
+      process.stderr.write(`✗ ${result.error}\n`);
+      if (result.stderrTail) process.stderr.write(`--- pandoc stderr ---\n${result.stderrTail}\n`);
+    }
+    // 重複ラベル警告は status 行の後に（観測情報・pandoc 実行可否とは独立）。
+    for (const d of result.duplicateLabels ?? []) {
+      process.stderr.write(`⚠ crossref ラベル重複: ${d.label} (${d.count}回)\n`);
+    }
   }
 
   return result.status === "error" ? 2 : 0;

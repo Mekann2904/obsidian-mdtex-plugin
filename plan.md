@@ -72,7 +72,7 @@ CLI バンドル（`dist/cli.js`）は obsidian / sampleTemplatePacks に一切�
 
 ### 検証状況
 
-- テスト: **441 passed**（純粋関数 + fs 統合テスト・doctor 診断追加）
+- テスト: **448 passed**（純粋関数 + fs 統合テスト・doctor 診断・crossref 重複検出）
 - lint / tsc / build:cli / build（プラグイン）: 全てクリーン
 - main.js 影響なし（依存ゼロ増・js-yaml 非使用で `_mdtex:` パーサは最小自前）
 
@@ -123,7 +123,11 @@ pandoc sample.md -d defaults.yaml -o out.pdf
 ### P2（実行の中核）
 
 - ✅ **`mdtex convert <file>`**（L2 達成・`102b885`）— Markdown → PDF/LaTeX/DOCX。plain Markdown 向けの fs ベース前処理 + Pandoc 呼び出しを実装
-  - 🟡 L3（Obsidian 記法: WikiLink / transclusion / `%%` コメント）→ `VaultLike` 抽象化で今後拡張。MdTex の核心価値（Obsidian 記法の正規化）を CLI に拡張
+  - L3（Obsidian 記法の正規化）を normalizeForCli に段階的に拡張中:
+    - ✅ `%%` コメント除去（フェーズ1・`03b633d`）— stripObsidianComments を GUI/CLI 共有
+    - ✅ crossref ラベル重複検出（本コミット）— normalizeForCli の戻り値を拡張し detectDuplicateLabels を統合。convert / pack test の結果に duplicateLabels を伝播
+    - 🟠 WikiLink / transclusion — `VaultLike` 抽象化が必要（フェーズ3）
+    - 🟠 resolveDraftRequest（draft）— CLI に pandocExtraArgs / header 反映経路が無く別判断
 
 ### P3 以降（拡張）
 

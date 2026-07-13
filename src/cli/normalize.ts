@@ -3,14 +3,30 @@
 // Reason: convert / packTest が正規化ステップを直接インラインで持つと、ステップ追加で
 //          呼び出し側に spaghetti 成長する。正規化知識を1箇所に集約し、GUI と共有する
 //          normalizeMarkdown（plan.md L3 / VaultLike 抽象化）への移行地点にする。
-// Related: src/utils/stripObsidianComments.ts, src/services/normalizeMarkdown.ts, src/cli/convert.ts, src/cli/packTest.ts
+// Related: src/utils/stripObsidianComments.ts, src/utils/crossrefLabels.ts,
+//          src/services/normalizeMarkdown.ts, src/cli/convert.ts, src/cli/packTest.ts
 
 import { stripObsidianComments } from "../utils/stripObsidianComments";
+import { detectDuplicateLabels, type DuplicateLabel } from "../utils/crossrefLabels";
+
+/** CLI 正規化の結果。content は pandoc へ渡す本文、duplicateLabels は crossref 重複。 */
+export interface NormalizeForCliResult {
+  content: string;
+  duplicateLabels: DuplicateLabel[];
+}
 
 /**
- * CLI 変換前の本文正規化。現在は GUI normalizeMarkdown の第1ステップ（%% コメント除去）のみ。
- * 今後 lint / transclusion / WikiLink を段階的に追加し、最終的に GUI と共有パイプラインへ。
+ * CLI 変換前の本文正規化。GUI の normalizeMarkdown のステップのうち、obsidian 非依存で
+ * 実現可能なものを段階的に追加する:
+ *   1. stripObsidianComments（%% コメント除去）— GUI と同じ純粋関数を共有
+ *   2. detectDuplicateLabels（crossref ラベル重複検出）— content 不変・重複を報告
+ * 今後 lint / transclusion / WikiLink を追加し、最終的に GUI と共有パイプライン（VaultLike）へ。
+ *
+ * draft 要求（resolveDraftRequest）は CLI に pandocExtraArgs / header 反映経路が無く
+ * 設計判断が要るため未統合（別スライス）。
  */
-export function normalizeForCli(rawContent: string): string {
-  return stripObsidianComments(rawContent);
+export function normalizeForCli(rawContent: string): NormalizeForCliResult {
+  const content = stripObsidianComments(rawContent);
+  const duplicateLabels = detectDuplicateLabels(content);
+  return { content, duplicateLabels };
 }

@@ -128,4 +128,26 @@ describe("convertMarkdownCli", () => {
       input: "before  after\n",
     });
   });
+
+  it("crossref ラベル重複を result.duplicateLabels に含む", async () => {
+    const input = path.join(dir, "input.md");
+    const output = path.join(dir, "out.pdf");
+    await fs.writeFile(input, "![[a.png]]{#fig:dup}\n\n![[b.png]]{#fig:dup}\n");
+    mockedRunCommand.mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+
+    const result = await convertMarkdownCli({ input, output });
+
+    expect(result.duplicateLabels).toEqual([{ label: "fig:dup", count: 2 }]);
+  });
+
+  it("重複無しは duplicateLabels 空配列", async () => {
+    const input = path.join(dir, "input.md");
+    const output = path.join(dir, "out.pdf");
+    await fs.writeFile(input, "# Hello\n");
+    mockedRunCommand.mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+
+    const result = await convertMarkdownCli({ input, output });
+
+    expect(result.duplicateLabels).toEqual([]);
+  });
 });

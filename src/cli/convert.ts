@@ -9,6 +9,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { DEFAULTS_FILE_NAME } from "../services/templatePackMeta";
 import { normalizeForCli } from "./normalize";
+import type { DuplicateLabel } from "../utils/crossrefLabels";
 import { runPandocConvert, type PandocRunResult } from "./pandocRun";
 
 export interface ConvertCliOptions {
@@ -37,6 +38,8 @@ export interface ConvertCliResult extends PandocRunResult {
   input: string;
   /** 解決した defaults file（指定/pack 解決時）。 */
   defaultsUsed?: string;
+  /** crossref ラベルの重複（normalizeForCli が検出）。pandoc 実行可否に影響しない観測情報。 */
+  duplicateLabels?: DuplicateLabel[];
 }
 
 /**
@@ -65,7 +68,8 @@ export async function convertMarkdownCli(options: ConvertCliOptions): Promise<Co
 
   // 本文を読み、正規化（GUI と同じパイプラインの CLI 版）して pandoc へ stdin で渡す。
   const rawContent = await fs.readFile(inputPath, "utf8");
-  const content = normalizeForCli(rawContent);
+  const normalized = normalizeForCli(rawContent);
+  const content = normalized.content;
 
   const run = await runPandocConvert({
     input: inputPath,
@@ -78,7 +82,10 @@ export async function convertMarkdownCli(options: ConvertCliOptions): Promise<Co
     ensureDir: path.dirname(outputPath),
   });
 
-  return defaultsPath ? { ...run, input: inputPath, defaultsUsed: defaultsPath } : { ...run, input: inputPath };
+  const base = defaultsPath
+    ? { ...run, input: inputPath, defaultsUsed: defaultsPath }
+    : { ...run, input: inputPath };
+  return { ...base, duplicateLabels: normalized.duplicateLabels };
 }
 
 function resolveDefaultsPath(options: ConvertCliOptions): string | undefined {

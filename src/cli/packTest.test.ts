@@ -126,4 +126,22 @@ describe("testPack", () => {
       expect.objectContaining({ cwd: expect.stringContaining("mdtex-test-Paper"), input: "# Hello\n" }),
     );
   });
+
+  it("crossref ラベル重複を result.duplicateLabels に含む", async () => {
+    vault = await makeTempVault();
+    const defaults = path.join(vault, "Paper", "defaults.yaml");
+    const sample = path.join(vault, "Paper", "sample.md");
+    await fs.mkdir(path.dirname(defaults), { recursive: true });
+    await fs.writeFile(defaults, "from: markdown\n");
+    await fs.writeFile(sample, "![[a.png]]{#fig:dup}\n\n![[b.png]]{#fig:dup}\n");
+    mockedRunCommand.mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+
+    const result = await testPack(fsAccess(), {
+      folder: vault,
+      pack: "Paper",
+      output: path.join(vault, "out.pdf"),
+    });
+
+    expect(result.duplicateLabels).toEqual([{ label: "fig:dup", count: 2 }]);
+  });
 });

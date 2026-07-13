@@ -118,6 +118,10 @@ export async function cmdPackTest(
       process.stderr.write(`✗ ${result.error}\n`);
       if (result.stderrTail) process.stderr.write(`--- pandoc stderr ---\n${result.stderrTail}\n`);
     }
+    // 重複ラベル警告（観測情報）。
+    for (const d of result.duplicateLabels ?? []) {
+      process.stderr.write(`⚠ crossref ラベル重複: ${d.label} (${d.count}回)\n`);
+    }
   }
 
   return result.status === "error" ? 2 : 0;

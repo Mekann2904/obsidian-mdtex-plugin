@@ -11,6 +11,7 @@ import * as path from "path";
 import { runCommand } from "../utils/processRunner";
 import { DEFAULTS_FILE_NAME } from "../services/templatePackMeta";
 import { normalizeForCli } from "./normalize";
+import type { DuplicateLabel } from "../utils/crossrefLabels";
 import { runPandocConvert, type PandocRunResult } from "./pandocRun";
 import type { PackFileAccess } from "../services/packAccess";
 
@@ -39,6 +40,8 @@ export interface PackTestResult extends PandocRunResult {
   sampleUsed: string;
   /** keepArtifacts 時の .tex パス。 */
   texArtifact?: string;
+  /** crossref ラベルの重複（normalizeForCli が検出）。観測情報。 */
+  duplicateLabels?: DuplicateLabel[];
 }
 
 /**
@@ -75,7 +78,8 @@ export async function testPack(
 
   // sample を読み、正規化（GUI と同じパイプラインの CLI 版）して pandoc へ stdin で渡す。
   const rawSample = await access.readText(samplePath);
-  const content = normalizeForCli(rawSample ?? "");
+  const normalized = normalizeForCli(rawSample ?? "");
+  const content = normalized.content;
 
   const run = await runPandocConvert({
     input: samplePath,
@@ -88,7 +92,12 @@ export async function testPack(
     ensureDir: workDir,
   });
 
-  const result: PackTestResult = { pack, sampleUsed: samplePath, ...run };
+  const result: PackTestResult = {
+    pack,
+    sampleUsed: samplePath,
+    ...run,
+    duplicateLabels: normalized.duplicateLabels,
+  };
 
   // keepArtifacts の .tex 生成も stdin で本文を渡す（共通コアと同じ本文経路）。
   if (run.status === "ok" && options.keepArtifacts) {
