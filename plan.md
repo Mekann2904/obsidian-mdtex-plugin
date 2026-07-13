@@ -1,6 +1,6 @@
 # MdTex 開発計画（plan.md）
 
-最終更新: 2026-07-07
+最終更新: 2026-07-14
 ブランチ: `dev/v4_0_0`
 
 ---
@@ -72,7 +72,7 @@ CLI バンドル（`dist/cli.js`）は obsidian / sampleTemplatePacks に一切�
 
 ### 検証状況
 
-- テスト: **410 passed**（純粋関数 + fs 統合テスト）
+- テスト: **441 passed**（純粋関数 + fs 統合テスト・doctor 診断追加）
 - lint / tsc / build:cli / build（プラグイン）: 全てクリーン
 - main.js 影響なし（依存ゼロ増・js-yaml 非使用で `_mdtex:` パーサは最小自前）
 
@@ -118,7 +118,7 @@ pandoc sample.md -d defaults.yaml -o out.pdf
 
 - 🔴 **#1 `_mdtex.yaml` 分離修正**（ブロッカー解消）→ pack test が通る
 - 🟠 **`pack test` のコミット**（#1 修正後に PDF 生成が通ることを確認してコミット）
-- 🟠 **`mdtex doctor`** — 環境診断（pandoc / latexmk / lualatex / markdownlint の発見と版・`--json`）。`binDiscover` を再利用。CI 前提チェック・トラブルシュートの最初の一歩
+- ✅ **`mdtex doctor`**（本コミット）— 環境診断（pandoc / latexmk / lualatex / pandoc-crossref / markdownlint-cli2 の発見と版）。`binDiscover` を再利用し、版取得は `resolveVersionSubprocess` に隔離。status モデルは pack validate と統一（ok/degraded/errors → exit 0/1/2）。診断ロジックを純粋関数3つ（`doctorDiagnose` / `doctorVersion` / `doctorReport`）に分離し、fsLayer・resolveVersion 注入でテスト
 
 ### P2（実行の中核）
 
@@ -167,6 +167,7 @@ mdtex pack test <pack> [--folder <path>] [--sample <file>] [--output <path>]
 mdtex convert <file.md> [--output <path>] [--format pdf|latex|docx]
                [--defaults <path>] [--pack <name>] [--folder <path>]
                [--pandoc <path>] [--dry-run] [--json]
+mdtex doctor [--json]
 ```
 
 `pack test` は `_mdtex.yaml` 分離修正（#1）後に実際の PDF 生成が通るようになる。

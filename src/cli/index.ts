@@ -7,9 +7,10 @@
 // Related: src/cli/args.ts, src/cli/help.ts, src/cli/commands/pack.ts
 
 import { flagString, parseArgs } from "./args";
-import { convertHelp, listHelp, packHelp, testHelp, topHelp, validateHelp, VERSION } from "./help";
+import { convertHelp, doctorHelp, listHelp, packHelp, testHelp, topHelp, validateHelp, VERSION } from "./help";
 import { cmdPackList, cmdPackTest, cmdPackValidate } from "./commands/pack";
 import { cmdConvert } from "./commands/convert";
+import { cmdDoctor } from "./commands/doctor";
 
 async function main(): Promise<number> {
   const { positional, flags } = parseArgs(process.argv.slice(2));
@@ -42,8 +43,16 @@ async function main(): Promise<number> {
     return cmdConvert(positional[1] ?? "", flags, folder, asJson);
   }
 
+  if (cmd === "doctor") {
+    if (help) {
+      process.stdout.write(doctorHelp());
+      return 0;
+    }
+    return cmdDoctor(asJson);
+  }
+
   process.stderr.write(
-    `Error: 不明なコマンド: ${cmd}\n  利用可能: mdtex pack, mdtex convert\n  mdtex --help で一覧\n`,
+    `Error: 不明なコマンド: ${cmd}\n  利用可能: mdtex pack, mdtex convert, mdtex doctor\n  mdtex --help で一覧\n`,
   );
   return 2;
 }

@@ -15,6 +15,7 @@ Usage: mdtex <command> [subcommand] [options]
 Commands:
   pack      テンプレートパックの管理（list / validate / test）
   convert   Markdown を PDF/LaTeX/DOCX に変換
+  doctor    環境診断（外部バイナリの発見と版）
 
 Global options:
   --json        構造化出力（エージェント向け）
@@ -22,12 +23,35 @@ Global options:
   --version, -V バージョン
 
 Examples:
+  mdtex doctor
   mdtex pack list
   mdtex pack validate 縦書き二段組
   mdtex convert paper.md --pack 縦書き二段組 --output paper.pdf
   mdtex convert paper.md --defaults ./templates/defaults.yaml --dry-run --json
 
 詳細は各コマンドの --help を参照（例: mdtex pack --help）。
+`;
+}
+
+export function doctorHelp(): string {
+  return `mdtex doctor — 環境診断
+
+Usage: mdtex doctor [--json]
+
+外部バイナリ（pandoc / latexmk / lualatex / pandoc-crossref / markdownlint-cli2）の
+発見と版を調べ、環境が変換可能か診断する。CI 前提チェック・トラブルシュートの最初の一歩。
+
+Options:
+  --json   構造化出力（status / entries / summary）
+
+Exit codes:
+  0  全バイナリ発見（変換可能）
+  1  必須は揃ったがオプションが不足（degraded）
+  2  必須バイナリが不足（PDF 変換不可）
+
+Examples:
+  mdtex doctor
+  mdtex doctor --json
 `;
 }
 
