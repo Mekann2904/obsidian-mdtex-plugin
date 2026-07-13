@@ -72,7 +72,7 @@ CLI バンドル（`dist/cli.js`）は obsidian / sampleTemplatePacks に一切�
 
 ### 検証状況
 
-- テスト: **448 passed**（純粋関数 + fs 統合テスト・doctor 診断・crossref 重複検出）
+- テスト: **454 passed**（純粋関数 + fs 統合テスト・doctor 診断・crossref 重複・VaultLike prototype）
 - lint / tsc / build:cli / build（プラグイン）: 全てクリーン
 - main.js 影響なし（依存ゼロ増・js-yaml 非使用で `_mdtex:` パーサは最小自前）
 
@@ -125,8 +125,10 @@ pandoc sample.md -d defaults.yaml -o out.pdf
 - ✅ **`mdtex convert <file>`**（L2 達成・`102b885`）— Markdown → PDF/LaTeX/DOCX。plain Markdown 向けの fs ベース前処理 + Pandoc 呼び出しを実装
   - L3（Obsidian 記法の正規化）を normalizeForCli に段階的に拡張中:
     - ✅ `%%` コメント除去（フェーズ1・`03b633d`）— stripObsidianComments を GUI/CLI 共有
-    - ✅ crossref ラベル重複検出（本コミット）— normalizeForCli の戻り値を拡張し detectDuplicateLabels を統合。convert / pack test の結果に duplicateLabels を伝播
-    - 🟠 WikiLink / transclusion — `VaultLike` 抽象化が必要（フェーズ3）
+    - ✅ crossref ラベル重複検出（`03e1cc9`）— normalizeForCli の戻り値を拡張し detectDuplicateLabels を統合。convert / pack test の結果に duplicateLabels を伝播
+    - ✅ expandTransclusions の VaultLike 化（フェーズ2 step2-1・`749c450`）— app 依存を VaultLike（resolveLink / read）に抽象化し、transclusion.ts を GUI/CLI 共有の純粋モジュール化。prototype（src/cli/prototype/NOTES.md）で境界を実証
+    - 🟠 fsVault（CLI 版 VaultLike）+ normalizeForCli 統合（step2-2）— 設計判断: vault ルートの指定方法（`--vault-root` フラグ vs cwd vs 入力mdの親）。fsVault は rootDir 再帰スキャン + 拡張子省略 + shortest-path 解決
+    - 🟠 WikiLink 系（unwrapValidWikiLinks / replaceWikiLinksAndCodeAsync）— profile 依存（imageScale / searchDirectory）で VaultLike だけでは足りず ProfileLike 抽象が必要（別検証）
     - 🟠 resolveDraftRequest（draft）— CLI に pandocExtraArgs / header 反映経路が無く別判断
 
 ### P3 以降（拡張）
