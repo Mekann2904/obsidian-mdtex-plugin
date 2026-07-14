@@ -29,6 +29,7 @@ function fullMacFs(): BinFsLayer {
     "/Library/TeX/texbin/lualatex",
     "/usr/local/bin/pandoc-crossref",
     "/usr/local/bin/markdownlint-cli2",
+    "/usr/local/bin/pdftoppm",
   ]);
 }
 
@@ -68,8 +69,8 @@ describe("diagnoseEnvironment — status 集計", () => {
     const report = await diagnoseEnvironment("darwin", "", async () => null, fullMacFs());
     expect(report.status).toBe("ok");
     expect(report.summary).toEqual({
-      total: 5,
-      found: 5,
+      total: 6,
+      found: 6,
       requiredMissing: 0,
       optionalMissing: 0,
     });
@@ -101,10 +102,10 @@ describe("diagnoseEnvironment — status 集計", () => {
     const report = await diagnoseEnvironment("darwin", "", async () => null, fs);
     expect(report.status).toBe("degraded");
     expect(report.summary).toEqual({
-      total: 5,
+      total: 6,
       found: 3,
       requiredMissing: 0,
-      optionalMissing: 2,
+      optionalMissing: 3,
     });
   });
 });

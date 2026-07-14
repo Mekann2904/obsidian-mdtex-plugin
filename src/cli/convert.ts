@@ -12,14 +12,15 @@ import { DEFAULTS_FILE_NAME } from "../services/templatePackMeta";
 import { normalizeFileForCli } from "./normalize";
 import type { DuplicateLabel } from "../utils/crossrefLabels";
 import { runPandocConvert, type PandocRunResult } from "./pandocRun";
+import { rasterizePdf } from "./imageRasterize";
 
 export interface ConvertCliOptions {
   /** 入力 Markdown。 */
   input: string;
   /** 出力ファイル。未指定時は input の拡張子を format に応じて置換する。 */
   output?: string;
-  /** 出力形式。未指定時は pdf。出力拡張子経由で pandoc の writer が決まる。 */
-  format?: "pdf" | "latex" | "docx";
+  /** 出力形式。未指定時は pdf。png は PDF 生成後に pdftoppm で画像化する。 */
+  format?: "pdf" | "latex" | "docx" | "png";
   /** Pandoc defaults file。 */
   defaults?: string;
   /** テンプレートフォルダ。pack 指定時に使う。 */
@@ -35,6 +36,8 @@ export interface ConvertCliOptions {
   /** 中間ファイル（.aux/.log 等）を隔離する作業ディレクトリ。未指定時は OS temp 直下の専用 dir。
    *  未指定でも入力 md のディレクトリは汚さず、画像は --vault-root から解決する。 */
   workDir?: string;
+  /** pdftoppm バイナリ（--format png 時。既定: pdftoppm）。 */
+  pdftoppm?: string;
   /** コマンドを表示するのみで実行しない。 */
   dryRun?: boolean;
 }
@@ -50,6 +53,8 @@ export interface ConvertCliResult extends PandocRunResult {
   duplicateLabels?: DuplicateLabel[];
   /** dry-run 時の正規化後本文。agent が transclusion/WikiLink 等の正規化結果を観測する用。 */
   normalizedContent?: string;
+  /** --format png で生成した画像パス一覧（ページ順）。出力は images[0]。 */
+  images?: string[];
 }
 
 /**
@@ -91,13 +96,19 @@ export async function convertMarkdownCli(options: ConvertCliOptions): Promise<Co
   // 中間ファイルを入力 md のディレクトリ（= vault）で汚さないよう、cwd を専用 workDir に隔離する。
   // 画像は --resource-path 経由で vaultRoot から解決する（cwd に依存しない）。
   const workDir = options.workDir ?? path.join(os.tmpdir(), `mdtex-convert-${Date.now()}`);
+  // --format png: pandoc には PDF を生成させ（writerFormat: pdf）、その後 pdftoppm で画像化する。
+  // pandoc の出力先は workDir 内の tmp PDF（最終 PNG ではない）。
+  const isPng = options.format === "png";
+  const pdfOutput = isPng
+    ? path.join(workDir, `${path.basename(inputPath, path.extname(inputPath))}.pdf`)
+    : outputPath;
   const run = await runPandocConvert({
     input: inputPath,
     inputContent: content,
     defaultsPath,
-    output: outputPath,
-    // --format 明示時は -t で defaults の to: を上書き（未指定時は defaults に任せる）。
-    writerFormat: options.format,
+    output: pdfOutput,
+    // --format png のとき pandoc は PDF。--format latex/docx は -t で defaults の to: を上書き。
+    writerFormat: isPng ? "pdf" : options.format,
     resourcePath: vaultRoot,
     pandoc: options.pandoc,
     dryRun: options.dryRun,
@@ -108,12 +119,21 @@ export async function convertMarkdownCli(options: ConvertCliOptions): Promise<Co
   const base = defaultsPath
     ? { ...run, input: inputPath, defaultsUsed: defaultsPath }
     : { ...run, input: inputPath };
-  // normalizedContent は dry-run 時のみ（agent が正規化結果を観測する用途。実行結果には含めない）。
-  return {
+  const baseResult: ConvertCliResult = {
     ...base,
     duplicateLabels: normalized.duplicateLabels,
     ...(options.dryRun ? { normalizedContent: content } : {}),
   };
+  // PNG 出力でない、または dry-run/pandoc 失敗なら pandoc の結果をそのまま返す。
+  if (!isPng || options.dryRun || run.status !== "ok") return baseResult;
+
+  // PDF → PNG 画像化。出力先は outputPath の拡張子を除いたものを prefix に（pdftoppm が prefix-N.png を生成）。
+  const prefix = outputPath.replace(/\.png$/i, "");
+  const rast = await rasterizePdf(pdfOutput, prefix, { cwd: workDir, tool: options.pdftoppm });
+  if (!rast.ok) {
+    return { ...baseResult, status: "error", error: rast.error, images: [] };
+  }
+  return { ...baseResult, output: rast.images[0], images: rast.images };
 }
 
 function resolveDefaultsPath(options: ConvertCliOptions): string | undefined {
@@ -123,7 +143,7 @@ function resolveDefaultsPath(options: ConvertCliOptions): string | undefined {
   return path.resolve(folder, options.pack, DEFAULTS_FILE_NAME);
 }
 
-function defaultOutputPath(inputPath: string, format: "pdf" | "latex" | "docx"): string {
+function defaultOutputPath(inputPath: string, format: "pdf" | "latex" | "docx" | "png"): string {
   const ext = format === "latex" ? ".tex" : `.${format}`;
   return path.join(path.dirname(inputPath), `${path.basename(inputPath, path.extname(inputPath))}${ext}`);
 }

@@ -31,6 +31,8 @@ const VERSION_PARSERS: Record<string, (firstLine: string) => string | null> = {
   "pandoc-crossref": line => /\bv(\d[\w.]*)/.exec(line)?.[1] ?? null,
   // markdownlint-cli2 v0.18.1 (markdownlint v0.38.0)  → "0.18.1"（最初の v版）
   "markdownlint-cli2": line => /\bv(\d[\d.]*)/.exec(line)?.[1] ?? null,
+  // pdftoppm version 24.02.0  → "24.02.0"（poppler）
+  pdftoppm: line => /version\s+(\S+)/.exec(line)?.[1] ?? null,
 };
 
 /**
@@ -59,8 +61,10 @@ export async function resolveVersionSubprocess(
   timeoutMs: number = VERSION_PROBE_TIMEOUT_MS,
 ): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync(binPath, ["--version"], { timeout: timeoutMs });
-    return parseVersionOutput(name, stdout);
+    // pdftoppm（poppler）は --version でなく -v を使い、stderr に版を出すことがある。
+    const args = name === "pdftoppm" ? ["-v"] : ["--version"];
+    const { stdout, stderr } = await execFileAsync(binPath, args, { timeout: timeoutMs });
+    return parseVersionOutput(name, stdout) ?? parseVersionOutput(name, stderr);
   } catch {
     return null;
   }

@@ -62,13 +62,14 @@ Usage: mdtex convert <input.md> [options]
 
 Options:
   --output <path>     出力ファイル（未指定時: input basename + format 拡張子）
-  --format <format>   pdf / latex / docx（既定: pdf。指定時は -t で defaults の to: を上書き）
+  --format <format>   pdf / latex / docx / png（既定: pdf。png は PDF 後に pdftoppm で画像化）
   --defaults <path>   Pandoc defaults file
   --folder <path>     テンプレートフォルダ（--pack 使用時、既定: MdTex Templates）
   --pack <name>       テンプレートパック名（<folder>/<pack>/defaults.yaml を使用）
   --pandoc <path>     Pandoc バイナリ（既定: pandoc）
   --vault-root <path> ![[link]] 展開の探索範囲（既定: 入力 md のディレクトリ）
   --image-scale <val> 画像のスケール属性（例: width=0.8\\textwidth。既定: 省略）
+  --pdftoppm <path>   PDF→PNG 変換バイナリ（--format png 時。既定: pdftoppm）
   --dry-run           コマンドと正規化後本文を表示（実行しない）
   --workdir <path>    中間ファイル（.aux/.log 等）隔離 dir（既定: OS temp の専用 dir）
   --json              構造化出力

@@ -313,3 +313,28 @@ export function discoverMarkdownlint(
     fsLayer,
   );
 }
+
+// ============================================================================
+// pdftoppm（poppler・PDF→画像変換）
+// ============================================================================
+
+/** 探索対象の pdftoppm バイナリ名（basename）。 */
+export const PDFTOPPM_NAMES = ["pdftoppm"] as const;
+
+/**
+ * プラットフォーム別の pdftoppm 候補ディレクトリを返す（純粋関数）。
+ * pdftoppm は poppler 配布物。Homebrew/macPorts やディストリパッケージで bin に置かれるため、
+ * pandoc と同じ候補ディレクトリを使う（PATH 走査も追加で走る）。
+ */
+export function getPdftoppmCandidates(platform: NodeJS.Platform): string[] {
+  return getPandocCandidates(platform);
+}
+
+/** pdftoppm を探索する（discoverBinaries の thin wrapper）。 */
+export function discoverPdftoppm(
+  platform: NodeJS.Platform,
+  pathEnv: string,
+  fsLayer: BinFsLayer = defaultBinFsLayer,
+): DiscoveredBinary[] {
+  return discoverBinaries(PDFTOPPM_NAMES, getPdftoppmCandidates(platform), platform, pathEnv, fsLayer);
+}

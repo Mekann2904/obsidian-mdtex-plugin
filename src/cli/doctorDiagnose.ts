@@ -16,6 +16,7 @@ import {
   discoverMarkdownlint,
   discoverPandoc,
   discoverPandocCrossref,
+  discoverPdftoppm,
   discoverTexEngines,
   type BinFsLayer,
   type DiscoveredBinary,
@@ -73,6 +74,7 @@ export const DOCTOR_BIN_SPECS: readonly BinSpec[] = [
   { name: "lualatex", required: true, purpose: "既定の TeX エンジン（和文組版）" },
   { name: "pandoc-crossref", required: false, purpose: "crossref フィルタ（使用パックのみ必要）" },
   { name: "markdownlint-cli2", required: false, purpose: "Markdown lint（profile.lintEnabled 時）" },
+  { name: "pdftoppm", required: false, purpose: "PDF→画像変換（--format png 時）" },
 ];
 
 /**
@@ -102,6 +104,7 @@ export async function diagnoseEnvironment(
     lualatex: texAll,
     "pandoc-crossref": crossrefAll,
     "markdownlint-cli2": mdAll,
+    pdftoppm: discoverPdftoppm(platform, pathEnv, fsLayer),
   };
 
   // 発見結果（同期・安価）を先に確定し、版取得（サブプロセス・独立）を並列化する。

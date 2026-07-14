@@ -6,11 +6,11 @@
 import { flagString } from "../args";
 import { convertMarkdownCli } from "../convert";
 
-export type ConvertFormat = "pdf" | "latex" | "docx";
+export type ConvertFormat = "pdf" | "latex" | "docx" | "png";
 
 function parseFormat(raw: string | undefined): ConvertFormat | undefined {
   if (raw === undefined) return undefined;
-  if (raw === "pdf" || raw === "latex" || raw === "docx") return raw;
+  if (raw === "pdf" || raw === "latex" || raw === "docx" || raw === "png") return raw;
   return undefined;
 }
 
@@ -32,7 +32,7 @@ export async function cmdConvert(
 
   const rawFormat = flagString(flags, "format");
   if (rawFormat !== undefined && parseFormat(rawFormat) === undefined) {
-    process.stderr.write("Error: --format は pdf / latex / docx のいずれかを指定してください。\n");
+    process.stderr.write("Error: --format は pdf / latex / docx / png のいずれかを指定してください。\n");
     return 2;
   }
   const format = parseFormat(rawFormat);
@@ -48,6 +48,7 @@ export async function cmdConvert(
     vaultRoot: flagString(flags, "vault-root"),
     imageScale: flagString(flags, "image-scale"),
     workDir: flagString(flags, "workdir"),
+    pdftoppm: flagString(flags, "pdftoppm"),
     dryRun: flags["dry-run"] === true,
   });
 
