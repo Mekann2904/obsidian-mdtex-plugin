@@ -37,13 +37,21 @@ export interface ScaffoldResult {
   message: string;
 }
 
-/** defaults.yaml の内容（純粋）。engine を pdf-engine に反映する。 */
+/** engine に応じた documentclass（lualatex→ltjarticle / latexmk→jsarticle）。純粋。 */
+export function documentclassFor(engine: string): string {
+  return engine === "latexmk" ? "jsarticle" : "ltjarticle";
+}
+
+/** defaults.yaml の内容（純粋）。engine を pdf-engine/documentclass に反映する。 */
 export function defaultsYamlFor(engine: string): string {
   return `from: markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes
 to: pdf
 pdf-engine: ${engine}
 standalone: true
 include-in-header: \${.}/preamble.tex
+
+variables:
+  documentclass: ${documentclassFor(engine)}
 `;
 }
 
@@ -89,10 +97,27 @@ print("hello, mdtex")
 `;
 }
 
-/** preamble.tex の内容（純粋）。空に近い最小限。 */
-export function preambleTexFor(name: string): string {
-  return `% ${name} のプリアンブル。必要な LaTeX パッケージを追加してください。
-% 例: \\usepackage{booktabs}
+/** preamble.tex の内容（純粋）。engine に応じた日本語組版の最小設定を含む。 */
+export function preambleTexFor(name: string, engine: string): string {
+  if (engine === "latexmk") {
+    return `% ${name} のプリアンブル（latexmk / platex 向け）。必要なパッケージを追加してください。
+% jsarticle クラスが和文処理を担うため、luatexja は使いません。
+\\providecommand{\\passthrough}[1]{#1}
+\\usepackage{amsmath}
+\\usepackage{graphicx}
+\\usepackage{booktabs}
+\\usepackage[unicode,hidelinks]{hyperref}
+`;
+  }
+  // lualatex 既定。ltjarticle クラス + luatexja-preset で日本語組版（原ノ味フォント・TeX Live 収録）。
+  return `% ${name} のプリアンブル（LuaLaTeX 向け）。必要なパッケージを追加してください。
+% ltjarticle クラス + luatexja-preset で日本語組版（原ノ味フォント・TeX Live 収録）。
+\\providecommand{\\passthrough}[1]{#1}
+\\usepackage[haranoaji]{luatexja-preset}
+\\usepackage{amsmath}
+\\usepackage{graphicx}
+\\usepackage{booktabs}
+\\usepackage[unicode,hidelinks]{hyperref}
 `;
 }
 
@@ -103,7 +128,7 @@ export function buildScaffoldFiles(options: ScaffoldOptions): ScaffoldFile[] {
     { relativePath: DEFAULTS_FILE_NAME, content: defaultsYamlFor(engine) },
     { relativePath: MDTEX_META_FILE_NAME, content: metaYamlFor(options.name, engine) },
     { relativePath: SAMPLE_FILE_NAME, content: sampleMdFor(options.name) },
-    { relativePath: PREAMBLE_FILE_NAME, content: preambleTexFor(options.name) },
+    { relativePath: PREAMBLE_FILE_NAME, content: preambleTexFor(options.name, engine) },
   ];
 }
 

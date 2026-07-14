@@ -30,6 +30,14 @@ describe("defaultsYamlFor", () => {
     expect(c).toContain("standalone: true");
     expect(c).toContain("include-in-header: ${.}/preamble.tex");
   });
+
+  it("lualatex 既定は documentclass: ltjarticle（日本語クラス）", () => {
+    expect(defaultsYamlFor("lualatex")).toContain("documentclass: ltjarticle");
+  });
+
+  it("latexmk は documentclass: jsarticle（platex 用）", () => {
+    expect(defaultsYamlFor("latexmk")).toContain("documentclass: jsarticle");
+  });
 });
 
 describe("metaYamlFor", () => {
@@ -54,7 +62,18 @@ describe("sampleMdFor", () => {
 
 describe("preambleTexFor", () => {
   it("パック名のコメントを含む", () => {
-    expect(preambleTexFor("論文A")).toContain("論文A のプリアンブル");
+    expect(preambleTexFor("論文A", "lualatex")).toContain("論文A のプリアンブル");
+  });
+
+  it("lualatex 既定は luatexja-preset を含む（日本語組版）", () => {
+    expect(preambleTexFor("P", "lualatex")).toContain("luatexja-preset");
+    expect(preambleTexFor("P", "lualatex")).toContain("ltjarticle");
+  });
+
+  it("latexmk は platex 向き（luatexja を含まない）", () => {
+    const c = preambleTexFor("P", "latexmk");
+    expect(c).toContain("platex");
+    expect(c).not.toContain("luatexja-preset");
   });
 });
 
@@ -73,7 +92,15 @@ describe("buildScaffoldFiles", () => {
   it("engine 指定を反映する", () => {
     const files = buildScaffoldFiles({ folder: "x", name: "P", engine: "latexmk" });
     expect(files[0].content).toContain("pdf-engine: latexmk");
+    expect(files[0].content).toContain("documentclass: jsarticle");
     expect(files[1].content).toContain("engine: latexmk");
+    expect(files[3].content).toContain("platex");
+  });
+
+  it("lualatex 既定は documentclass: ltjarticle + luatexja-preset", () => {
+    const files = buildScaffoldFiles({ folder: "x", name: "P" });
+    expect(files[0].content).toContain("documentclass: ltjarticle");
+    expect(files[3].content).toContain("luatexja-preset");
   });
 });
 
