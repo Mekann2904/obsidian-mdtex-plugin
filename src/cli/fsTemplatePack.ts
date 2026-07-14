@@ -16,6 +16,7 @@ import {
 } from "../services/packAccess";
 import type { PackMetadata } from "../services/templatePackMeta";
 import { testPack, type PackTestOptions, type PackTestResult } from "./packTest";
+import { scaffoldPack, type ScaffoldFileAccess, type ScaffoldOptions, type ScaffoldResult } from "./packScaffold";
 
 /**
  * Node fs を PackFileAccess に適応させる（CLI 版）。共通ロジック（packAccess）と
@@ -79,4 +80,25 @@ export async function validatePackFs(
 
 export async function testPackFs(options: PackTestOptions): Promise<PackTestResult> {
   return testPack(fsAccess, { ...options, folder: norm(options.folder) });
+}
+
+/** fs 版 ScaffoldFileAccess を構築して scaffoldPack に渡す（CLI 版 thin wrapper）。 */
+export async function scaffoldPackFs(options: ScaffoldOptions): Promise<ScaffoldResult> {
+  const access: ScaffoldFileAccess = {
+    async exists(p) {
+      try {
+        await fs.access(p);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    async ensureDir(p) {
+      await fs.mkdir(p, { recursive: true });
+    },
+    async writeText(p, content) {
+      await fs.writeFile(p, content, "utf8");
+    },
+  };
+  return scaffoldPack(access, { ...options, folder: norm(options.folder) });
 }

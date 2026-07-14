@@ -94,6 +94,7 @@ Subcommands:
   list       パック一覧（_mdtex の title/description 付き）
   validate   パックの検証（defaults 構文 + メタ + requires チェック）
   test       サンプル原稿で PDF 生成テスト
+  new        新パックの土台を生成（defaults / _mdtex / sample / preamble）
 
 Options:
   --folder <path>  テンプレートフォルダ（既定: MdTex Templates）
@@ -171,5 +172,37 @@ Examples:
   mdtex pack test 縦書き二段組
   mdtex pack test 縦書き二段組 --dry-run
   mdtex pack test 縦書き二段組 --keep-artifacts --json
+`;
+}
+
+export function newHelp(): string {
+  return `mdtex pack new — 新パックの土台を生成
+
+Usage: mdtex pack new <name> [--folder <path>] [--engine <engine>] [--json]
+
+引数:
+  <name>            パック名（テンプレートフォルダ直下に作成するサブフォルダ名）
+
+Options:
+  --folder <path>   テンプレートフォルダ（既定: MdTex Templates）
+  --engine <engine> LaTeX エンジン（既定: lualatex。latexmk 等）
+  --json            構造化出力
+
+生成ファイル:
+  defaults.yaml     Pandoc defaults（to: pdf / pdf-engine / standalone）
+  _mdtex.yaml       パックメタ（title/description/engine）
+  sample.md         サンプル原稿（pack test で即 PDF 生成できる）
+  preamble.tex      プリアンブル（空・編集して使う）
+
+既に同名パックが存在する場合は上書きしません。
+
+Exit codes:
+  0  生成成功
+  2  エラー（パック名未指定・既存パック・書き込み失敗）
+
+Examples:
+  mdtex pack new 論文A
+  mdtex pack new beamer講習 --engine latexmk
+  mdtex pack new 論文A --json
 `;
 }

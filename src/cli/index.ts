@@ -7,8 +7,8 @@
 // Related: src/cli/args.ts, src/cli/help.ts, src/cli/commands/pack.ts
 
 import { flagString, parseArgs } from "./args";
-import { convertHelp, doctorHelp, listHelp, packHelp, testHelp, topHelp, validateHelp, VERSION } from "./help";
-import { cmdPackList, cmdPackTest, cmdPackValidate } from "./commands/pack";
+import { convertHelp, doctorHelp, listHelp, newHelp, packHelp, testHelp, topHelp, validateHelp, VERSION } from "./help";
+import { cmdPackList, cmdPackNew, cmdPackTest, cmdPackValidate } from "./commands/pack";
 import { cmdConvert } from "./commands/convert";
 import { cmdDoctor } from "./commands/doctor";
 
@@ -105,8 +105,16 @@ function dispatchPack(
       dryRun: flags["dry-run"] === true,
     }, opts.asJson);
   }
+  if (sub === "new") {
+    if (opts.help) {
+      process.stdout.write(newHelp());
+      return 0;
+    }
+    const name = positional[2] ?? "";
+    return cmdPackNew(name, opts.folder, { engine: flagString(flags, "engine") }, opts.asJson);
+  }
   process.stderr.write(
-    `Error: 不明な pack サブコマンド: ${sub}\n  利用可能: list, validate, test\n  mdtex pack --help で一覧\n`,
+    `Error: 不明な pack サブコマンド: ${sub}\n  利用可能: list, validate, test, new\n  mdtex pack --help で一覧\n`,
   );
   return 2;
 }

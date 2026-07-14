@@ -5,6 +5,7 @@
 import {
   listTemplatePacksFs,
   readPackMetadataFs,
+  scaffoldPackFs,
   testPackFs,
   validatePackFs,
 } from "../fsTemplatePack";
@@ -131,4 +132,39 @@ export async function cmdPackTest(
   }
 
   return result.status === "error" ? 2 : 0;
+}
+
+export interface PackNewCliOptions {
+  engine?: string;
+}
+
+/**
+ * `mdtex pack new` のエントリ。新パックの土台生成（defaults / _mdtex / sample / preamble）。
+ * 生成後は validate → test で検証できる（メッセージで次ステップを提示）。exit code 0/2。
+ */
+export async function cmdPackNew(
+  name: string,
+  folder: string,
+  opts: PackNewCliOptions,
+  asJson: boolean,
+): Promise<number> {
+  if (!name) {
+    process.stderr.write(
+      "Error: パック名が未指定です。\n  mdtex pack new <name>\n  例: mdtex pack new 論文A\n",
+    );
+    return 2;
+  }
+
+  const result = await scaffoldPackFs({ folder, name, engine: opts.engine });
+
+  if (asJson) {
+    process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+  } else if (result.ok) {
+    process.stdout.write(`✓ ${result.message}\n`);
+    process.stdout.write(`  次のステップ: mdtex pack validate ${name} && mdtex pack test ${name}\n`);
+  } else {
+    process.stderr.write(`✗ ${result.message}\n`);
+  }
+
+  return result.ok ? 0 : 2;
 }
