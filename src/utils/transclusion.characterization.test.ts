@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { VaultLike } from "./vaultLike";
+import { resolveLinkPath, extensionOf } from "./vaultLinking";
 import { expandTransclusions } from "./transclusion";
 
 // extractSection は export されていないため、expandTransclusions 経由で観測する。
@@ -25,19 +26,14 @@ interface StubFile {
 // expandTransclusions は obsidian 非依存（VaultLike 注入）なので、stub も VaultLike を返す。
 // 変数名 app は呼び出し側の互換のため残す（実体は VaultLike）。
 function makeStubApp(files: StubFile[], _sourcePath = "src.md"): VaultLike {
+  const paths = files.map(f => f.path);
   const byPath = new Map(files.map(f => [f.path, f]));
-  const byBasename = new Map<string, StubFile>();
-  for (const f of files) {
-    byBasename.set(f.path.split("/").pop()!.toLowerCase(), f);
-  }
   return {
-    resolveLink(linktext: string) {
+    resolveLink(linktext: string, sourcePath: string) {
       const [pathPart] = linktext.split("|");
       const bare = pathPart.split("#")[0].split("^")[0].trim();
-      // 完全パス優先、次に basename
-      const hit = byPath.get(bare) ?? byBasename.get(bare.split("/").pop()!.toLowerCase());
-      if (!hit) return null;
-      return { path: hit.path, extension: hit.extension };
+      const p = resolveLinkPath(paths, bare, sourcePath);
+      return p ? { path: p, extension: extensionOf(p) } : null;
     },
     async read(filePath: string) {
       return byPath.get(filePath)?.content ?? null;

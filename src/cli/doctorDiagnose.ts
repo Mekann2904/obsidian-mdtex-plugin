@@ -104,32 +104,34 @@ export async function diagnoseEnvironment(
     "markdownlint-cli2": mdAll,
   };
 
-  const entries: DiagnosticEntry[] = [];
-  for (const spec of DOCTOR_BIN_SPECS) {
-    // 探索結果リストには別名バイナリ（latexmk/lualatex 等）が混在するので、spec.name で
-    // pickup する。[0] では別名の先頭要素を誤認する（例: lualatex の位置に latexmk）。
-    const found = discoverMap[spec.name]?.find(b => b.name === spec.name);
+  // 発見結果（同期・安価）を先に確定し、版取得（サブプロセス・独立）を並列化する。
+  // 探索結果リストには別名バイナリ（latexmk/lualatex 等）が混在するので spec.name で pickup
+  // する（[0] では別名の先頭要素を誤認する: 例 lualatex の位置に latexmk）。
+  const foundPerSpec = DOCTOR_BIN_SPECS.map(spec => ({
+    spec,
+    found: discoverMap[spec.name]?.find(b => b.name === spec.name) ?? null,
+  }));
+  const versions = await Promise.all(
+    foundPerSpec.map(({ found }) =>
+      found ? resolveVersion(found.name, found.binPath).catch(() => null) : Promise.resolve(null),
+    ),
+  );
+  const entries: DiagnosticEntry[] = foundPerSpec.map(({ spec, found }, i) => {
     const binPath = found?.binPath ?? null;
-    let version: string | null = null;
-    let versionError: string | null = null;
-    if (binPath) {
-      // 版取得は観測。失敗しても status を落とさない（発見できていれば変換可能）。
-      const v = await resolveVersion(spec.name, binPath).catch(() => null);
-      version = v;
-      if (v === null) {
-        versionError = "版を取得できませんでした（--version が応答しない、または出力を解析不可）";
-      }
-    }
-    entries.push({
+    const v = versions[i];
+    return {
       name: spec.name,
       required: spec.required,
       purpose: spec.purpose,
       found: !!found,
       binPath,
-      version,
-      versionError,
-    });
-  }
+      version: v,
+      versionError:
+        binPath && v === null
+          ? "版を取得できませんでした（--version が応答しない、または出力を解析不可）"
+          : null,
+    };
+  });
 
   const requiredMissing = entries.filter(e => e.required && !e.found).length;
   const optionalMissing = entries.filter(e => !e.required && !e.found).length;

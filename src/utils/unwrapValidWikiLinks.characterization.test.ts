@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { VaultLike } from "./vaultLike";
+import { resolveLinkPath, extensionOf } from "./vaultLinking";
 import { unwrapValidWikiLinks } from "./markdownTransforms";
 
 // テスト用スタブ VaultLike: 指定したファイルパス群を「実在」として解決する。
@@ -14,26 +15,11 @@ import { unwrapValidWikiLinks } from "./markdownTransforms";
 // "note.md" を解決するため、スタブも同様に「ベース名が先頭から一致するファイル」を許容する。
 // 変数名 app は呼び出し側の互換のため残す（実体は VaultLike）。
 function makeStubApp(existingPaths: string[]): VaultLike {
-  const lower = existingPaths.map(p => p.toLowerCase());
-  const extOf = (p: string) => {
-    const dot = p.lastIndexOf(".");
-    return dot >= 0 ? p.slice(dot + 1) : "";
-  };
   return {
-    resolveLink(linktext: string) {
+    resolveLink(linktext: string, sourcePath: string) {
       const pathPart = linktext.split("|")[0].split("#")[0].split("^")[0].trim();
-      if (!pathPart) return null;
-      const lp = pathPart.toLowerCase();
-      // 完全パス優先
-      if (lower.includes(lp)) return { path: pathPart, extension: extOf(pathPart) };
-      // ベース名先頭一致: "note" が "note.md" にマッチするように
-      const basename = lp.split("/").pop()!;
-      const hit = lower.find(p => {
-        const fileBase = p.split("/").pop()!;
-        return fileBase === basename || fileBase.startsWith(basename + ".");
-      });
-      if (hit) return { path: hit, extension: extOf(hit) };
-      return null;
+      const p = resolveLinkPath(existingPaths, pathPart, sourcePath);
+      return p ? { path: p, extension: extensionOf(p) } : null;
     },
     async read() {
       return null;

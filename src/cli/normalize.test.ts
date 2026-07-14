@@ -8,31 +8,20 @@
 import { describe, expect, it } from "vitest";
 import { normalizeForCli } from "./normalize";
 import type { VaultLike, ProfileLike } from "../utils/vaultLike";
+import { resolveLinkPath, extensionOf } from "../utils/vaultLinking";
 
 /** 空の vault（埋め込み無しのテスト用・何も解決しない）。 */
 function emptyVault(): VaultLike {
   return { resolveLink: () => null, read: async () => null };
 }
 
-/** メモリ vault（files を解決するテスト用）。 */
+/** メモリ vault（files を解決するテスト用）。リンク解決は正規実装（vaultLinking）に委譲。 */
 function memVault(files: Record<string, string>): VaultLike {
+  const paths = Object.keys(files);
   return {
-    resolveLink(linkPath) {
-      const found = Object.keys(files).find(p => {
-        const base = p.slice(p.lastIndexOf("/") + 1);
-        const baseNoExt = base.replace(/\.\w+$/, "");
-        return (
-          p === linkPath ||
-          p === linkPath + ".md" ||
-          p.endsWith("/" + linkPath) ||
-          p.endsWith("/" + linkPath + ".md") ||
-          baseNoExt === linkPath ||
-          base === linkPath
-        );
-      });
-      if (!found) return null;
-      const dot = found.lastIndexOf(".");
-      return { path: found, extension: dot >= 0 ? found.slice(dot + 1) : "" };
+    resolveLink(linkPath, sourcePath) {
+      const p = resolveLinkPath(paths, linkPath, sourcePath);
+      return p ? { path: p, extension: extensionOf(p) } : null;
     },
     async read(filePath) {
       return files[filePath] ?? null;

@@ -29,6 +29,8 @@ export interface NormalizeForCliResult {
  *   4. replaceWikiLinksAndCodeAsync（![[image]] の標準画像記法化・profile.imageScale 適用）
  *   5. detectDuplicateLabels（crossref ラベル重複検出）
  * 今後 lint / draft を追加し、最終的に GUI と共有パイプラインへ。
+ * ※ ステップ順序は GUI の normalizeMarkdown（src/services/normalizeMarkdown.ts）と同期する
+ *   前提。いずれかを編集する際は両者の順序不変条件を維持すること。
  *
  * draft 要求（resolveDraftRequest）は CLI に pandocExtraArgs / header 反映経路が無く
  * 設計判断が要るため未統合（別スライス）。

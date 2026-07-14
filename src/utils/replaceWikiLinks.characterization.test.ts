@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from "vitest";
 import type { VaultLike } from "./vaultLike";
+import { resolveLinkPath, extensionOf } from "./vaultLinking";
 import { DEFAULT_PROFILE } from "../MdTexPluginSettings";
 import { replaceWikiLinksAndCodeAsync } from "./markdownTransforms";
 import type { ProfileSettings } from "../MdTexPluginSettings";
@@ -21,27 +22,13 @@ interface StubFile {
 // expandTransclusions と同じく、replaceWikiLinksAndCodeAsync は obsidian 非依存（VaultLike 注入）。
 // stub は VaultLike を返す。変数名 app は呼び出し側の互換のため残す（実体は VaultLike）。
 function makeStubApp(files: StubFile[], _vaultBase = "/vault"): VaultLike {
-  const byPath = new Map(files.map(f => [f.path, f]));
-  const byBasenameLower = new Map<string, StubFile>();
-  for (const f of files) {
-    byBasenameLower.set(f.path.split("/").pop()!.toLowerCase(), f);
-  }
+  const paths = files.map(f => f.path);
   return {
-    resolveLink(linktext: string) {
+    resolveLink(linktext: string, sourcePath: string) {
       const bare = linktext.split("|")[0].split("#")[0].split("^")[0].trim();
-      const lp = bare.toLowerCase();
-      // 完全パス優先、次に basename（拡張子なし許容: "img" が "img.png" にマッチ）
-      const hit =
-        byPath.get(bare) ??
-        (() => {
-          const basename = lp.split("/").pop()!;
-          return [...byBasenameLower.values()].find(f => {
-            const fb = f.path.split("/").pop()!.toLowerCase();
-            return fb === basename || fb.startsWith(basename + ".");
-          });
-        })();
-      if (!hit) return null;
-      return { path: hit.path, extension: hit.extension };
+      // リンク解決の正規実装（vaultLinking）に委譲。拡張子は path から導出。
+      const p = resolveLinkPath(paths, bare, sourcePath);
+      return p ? { path: p, extension: extensionOf(p) } : null;
     },
     async read() {
       return null;
