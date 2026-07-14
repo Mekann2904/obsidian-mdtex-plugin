@@ -2,7 +2,9 @@
 // Purpose: Obsidian の `%% ... %%` コメントを Pandoc 受理前に除去する純粋関数。
 //          obsidian 非依存（GUI/CLI 共有）。markdownTransforms.ts から切り出し。
 // Reason: 純粋関数を obsidian 依存モジュールから解放し、CLI バンドルから直接 import できるようにするため。
-// Related: src/utils/markdownTransforms.ts（re-export で後方互換）, src/services/normalizeMarkdown.ts, src/cli/convert.ts
+// Related: src/utils/markdownTransforms.ts（re-export で後方互換）, src/services/normalizeMarkdown.ts, src/cli/convert.ts, src/utils/markdownScan.ts
+
+import { findInlineCodeRanges } from "./markdownScan";
 
 /**
  * Obsidian の `%% ... %%` コメントを Pandoc へ渡す前に取り除く。
@@ -24,38 +26,8 @@ export function stripObsidianComments(markdown: string): string {
   const fenceRegex = /^\s{0,3}(?:>\s*)*([`~]{3,})/;
 
   const buildProtectedRanges = (line: string): Array<[number, number]> => {
-    const ranges: Array<[number, number]> = [];
-
-    // インラインコード: 開きと同じ本数のバッククォートで閉じるものだけを保護
-    let i = 0;
-    while (i < line.length) {
-      if (line[i] !== "`") {
-        i += 1;
-        continue;
-      }
-      let j = i;
-      while (j < line.length && line[j] === "`") j += 1;
-      const openLen = j - i;
-      let k = j;
-      let closed = false;
-      while (k < line.length) {
-        if (line[k] !== "`") {
-          k += 1;
-          continue;
-        }
-        let l = k;
-        while (l < line.length && line[l] === "`") l += 1;
-        const closeLen = l - k;
-        if (closeLen === openLen) {
-          ranges.push([i, l]);
-          i = l;
-          closed = true;
-          break;
-        }
-        k = l;
-      }
-      if (!closed) i = j;
-    }
+    // インラインコード区間は markdownScan の共有ヘルパで取得（canonical helper の再利用・thermo-nuclear review 第3ラウンド #1）。
+    const ranges: Array<[number, number]> = [...findInlineCodeRanges(line)];
 
     // 行内の $$...$$ を保護（同一行で閉じる場合）
     let m: RegExpExecArray | null;

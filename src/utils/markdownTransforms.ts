@@ -7,6 +7,9 @@
 // Related: src/services/normalizeMarkdown.ts, src/utils/transclusion.ts, src/utils/vaultLike.ts
 
 import type { VaultLike, ProfileLike } from "./vaultLike";
+import { isFenceLine } from "./markdownScan";
+// applyBlockquotePrefix は transclusion.ts の正規実装を共用（thermo-nuclear review #4）。
+import { applyBlockquotePrefix } from "./transclusion";
 
 // stripObsidianComments は obsidian 非依存の純粋関数として別モジュールに切り出した（GUI/CLI 共有）。
 export { stripObsidianComments } from "./stripObsidianComments";
@@ -74,7 +77,9 @@ export async function replaceWikiLinksAndCodeAsync(
       const attrBlock = attrs ? `{${attrs}}` : "";
 
       const imageMarkdown = `![${captionPart}](${resolved.path})${attrBlock}`;
-      result += applyBlockquotePrefix(imageMarkdown, blockquotePrefix);
+      result += blockquotePrefix
+        ? applyBlockquotePrefix(imageMarkdown, blockquotePrefix)
+        : imageMarkdown;
       continue;
     }
 
@@ -84,15 +89,6 @@ export async function replaceWikiLinksAndCodeAsync(
 
   result += markdown.slice(lastIndex);
   return result;
-}
-
-function applyBlockquotePrefix(text: string, blockquotePrefix?: string): string {
-  if (!blockquotePrefix) return text;
-  const prefix = blockquotePrefix.endsWith(" ") ? blockquotePrefix : `${blockquotePrefix} `;
-  return text
-    .split("\n")
-    .map(line => `${prefix}${line}`)
-    .join("\n");
 }
 
 /**
@@ -105,12 +101,9 @@ export function unwrapValidWikiLinks(markdown: string, vault: VaultLike, sourceP
   const lines = markdown.split("\n");
   let inFence = false;
 
-  // CommonMark 互換のフェンス開閉行: 0個以上の空白 + (``` または ~~~) 3本以上。
-  const fenceLineRegex = /^\s*(`{3,}|~{3,})/;
-
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (fenceLineRegex.test(line)) {
+    if (isFenceLine(line)) {
       inFence = !inFence;
       continue;
     }

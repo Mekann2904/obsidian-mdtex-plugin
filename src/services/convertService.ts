@@ -4,7 +4,7 @@
 // Related: src/MdTexPlugin.ts, src/services/lintService.ts, src/services/normalizeMarkdown.ts,
 //          src/services/conversionPaths.ts, src/utils/markdownTransforms.ts
 
-import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
+import { Notice, FileSystemAdapter } from "obsidian";
 import * as path from "path";
 import * as fs from "fs/promises";
 import { isDefaultsTemplateMode, ProfileSettings } from "../MdTexPluginSettings";
@@ -18,10 +18,37 @@ import { invokePandoc } from "./pandocInvocation";
 import { joinFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
 import { resolveDefaultsFilePath } from "./templatePackService";
 import { cleanupTemporaryFiles } from "./tempFiles";
+import { saveActiveMarkdownViewIfMatching } from "./activeView";
+import { makeObsidianVault } from "./obsidianVaultLike";
+import { rasterizeMermaidBlocks } from "../utils/mermaidRasterizer";
 
 
 export interface ConvertDeps {
   runMarkdownlintFix: (ctx: PluginContext, targetPath: string) => Promise<void>;
+}
+
+/**
+ * ADR-008: defaults 方式の defaults file パスを解決する（convertCurrentPage から切り出し・純粋関数）。
+ *
+ * - pack: resolveDefaultsFilePath が返す vault 相対パスを getFullPath で絶対パスへ。
+ * - custom: defaultsFilePath（絶対パス）をそのまま（getFullPath に渡して二重化しない）。
+ * - 非 defaults 方式: 空パス（呼び出し側は defaults 不要として扱う）。
+ *
+ * パス未指定/未解決は { error: "missing" } で表し、呼び出し側で Notice/中断する。
+ * getFullPath（vault 相対→絶対）を inject し、パス計算と vault I/O を分離する
+ * （thermo-nuclear review 第3ラウンド #4: convertCurrentPage 冒頭の35行を実装詳細から解放）。
+ */
+function resolveEffectiveDefaultsPath(
+  profile: ProfileSettings,
+  getFullPath: (vaultRelative: string) => string,
+): { path: string } | { error: "missing" } {
+  if (!isDefaultsTemplateMode(profile)) return { path: "" };
+  const resolved = resolveDefaultsFilePath(profile);
+  const isCustom = profile.defaultsSelection === "custom";
+  const path = !isCustom && resolved
+    ? getFullPath(resolved)
+    : (profile.defaultsFilePath?.trim() ?? "");
+  return path ? { path } : { error: "missing" };
 }
 
 function resolveResourcePath(profile: ProfileSettings, vaultBasePath: string): string {
@@ -48,13 +75,7 @@ export async function convertCurrentPage(
     return;
   }
 
-  const leaf = ctx.app.workspace.activeLeaf;
-  if (leaf && leaf.view instanceof MarkdownView) {
-    const markdownView = leaf.view as MarkdownView;
-    if (markdownView.file && markdownView.file.path === activeFile.path) {
-      await markdownView.save();
-    }
-  }
+  await saveActiveMarkdownViewIfMatching(ctx.app, activeFile);
 
   if (!activeFile.path.endsWith(".md")) {
     new Notice(t("notice_not_markdown"));
@@ -68,34 +89,22 @@ export async function convertCurrentPage(
   const fileAdapter = ctx.app.vault.adapter as FileSystemAdapter;
   const vaultBasePath = fileAdapter.getBasePath();
 
-  // ADR-008: defaults file のパスを解決する。
-  // pack: テンプレートフォルダ内の選択中パック → vault 相対パスを絶対パスへ。
-  // custom: 従来の defaultsFilePath（絶対パス）をそのまま。
-  // buildPandocCommand は純粋関数のため、vault I/O を伴う解決はここで済ませ、
-  // 解決済み絶対パスを defaultsFilePath にセットしたコピーを後段へ渡す
-  //（直接ミューテーションは data.json 汚染を招くため避ける）。
-  let effectiveDefaultsPath = "";
-  if (isDefaultsTemplateMode(originalProfile)) {
-    // ADR-008: pack モードでパックが解決できた場合のみ vault 相対→絶対変換する。
-    // resolveDefaultsFilePath は pack 未解決時に空を返すため、空でなければ vault 相対パス。
-    // custom モード、および pack 未選択のフォールバック（旧 data.json 互換）は
-    // defaultsFilePath をそのまま使う（絶対パスを getFullPath に渡して二重化しない）。
-    const resolved = resolveDefaultsFilePath(originalProfile);
-    const isCustom = originalProfile.defaultsSelection === "custom";
-    if (!isCustom && resolved) {
-      effectiveDefaultsPath = fileAdapter.getFullPath(resolved);
-    } else {
-      effectiveDefaultsPath = originalProfile.defaultsFilePath?.trim() ?? "";
-    }
-
-    // ガードレール（ADR-007/008）: パス未指定/未解決なら変換前にブロックする。
-    // `-d` に空パスを渡すと Pandoc が不可解なエラーを出すため、設定不備を通知して中断する。
-    if (!effectiveDefaultsPath) {
-      new Notice(t("notice_defaults_file_required"));
-      return;
-    }
+  // ADR-008: defaults file のパス解決（pack: vault 相対→絶対 / custom: そのまま）を純粋関数
+  // resolveEffectiveDefaultsPath に委譲する。getFullPath（vault I/O）は inject して純粋性を保つ。
+  const defaultsResolved = resolveEffectiveDefaultsPath(originalProfile, p =>
+    fileAdapter.getFullPath(p),
+  );
+  // ガードレール（ADR-007/008）: defaults 方式でパス未指定/未解決なら変換前にブロックする。
+  // `-d` に空パスを渡すと Pandoc が不可解なエラーを出すため、設定不備を通知して中断する。
+  if ("error" in defaultsResolved) {
+    new Notice(t("notice_defaults_file_required"));
+    return;
   }
-  const activeProfile = { ...originalProfile, defaultsFilePath: effectiveDefaultsPath };
+  // 非 defaults 方式は path が空（defaults 不要）。解決済みパスをコピーに載せて後段へ渡す
+  //（直接ミューテーションは data.json 汚染を招くため避ける）。
+  const activeProfile = defaultsResolved.path
+    ? { ...originalProfile, defaultsFilePath: defaultsResolved.path }
+    : originalProfile;
 
   const inputFilePath = fileAdapter.getFullPath(activeFile.path);
 
@@ -127,18 +136,33 @@ export async function convertCurrentPage(
     // 本文正規化パイプライン（8 step の順序・transclusion キャッシュ・lint 中間ファイル
     // lifecycle）を深い module（normalizeMarkdown）に委譲する（architecture review 候補 A）。
     // 呼び出し側は生本文を渡し、最終本文・draft フラグ・重複ラベル・cleanup 対象を受け取る。
+    // normalizeMarkdown は Obsidian App に依存しない（VaultLike + injectable mermaid/lint 通知）ため、
+    // CLI も同一パイプラインを共用する（thermo-nuclear review #1）。
     const normalized = await normalizeMarkdown({
       content: rawContent,
-      app: ctx.app,
+      vault: makeObsidianVault(ctx.app),
       sourcePath: activeFile.path,
       profile: activeProfile,
-      enableExperimentalMermaid: ctx.settings.enableExperimentalMermaid,
-      suppressDeveloperLogs: ctx.settings.suppressDeveloperLogs,
-      lintFix: lintEnabled
-        ? target => deps.runMarkdownlintFix(ctx, target)
+      pandocExtraArgs: activeProfile.pandocExtraArgs,
+      // Mermaid は enableExperimentalMermaid のときだけ callback を注入（未注入＝ステップ4スキップ）。
+      rasterizeMermaid: ctx.settings.enableExperimentalMermaid
+        ? content =>
+            rasterizeMermaidBlocks(content, {
+              app: ctx.app,
+              sourcePath: activeFile.path,
+              imageScale: activeProfile.imageScale,
+              suppressLogs: ctx.settings.suppressDeveloperLogs,
+            })
         : undefined,
-      paths,
-      keepLintIntermediate: !activeProfile.deleteIntermediateFiles,
+      // lint は enableMarkdownlintFix のときだけオブジェクトを注入（未注入＝ステップ5スキップ）。
+      lint: lintEnabled
+        ? {
+            fix: target => deps.runMarkdownlintFix(ctx, target),
+            intermediatePath: paths.intermediate,
+            onFailure: () => new Notice(t("notice_markdownlint_failed_continue")),
+            keepIntermediate: !activeProfile.deleteIntermediateFiles,
+          }
+        : undefined,
     });
     mermaidTempDirs.push(...normalized.cleanupDirs);
 

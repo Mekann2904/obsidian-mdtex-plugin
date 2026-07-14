@@ -3,7 +3,7 @@
 // Reason: ユーザーがプロファイルを管理し、各パラメータ（パス、ラベル、LaTeXプリアンブル等）をGUIで変更可能にするため。
 // Related: src/MdTexPlugin.ts, src/MdTexPluginSettings.ts
 
-import { App, PluginSettingTab, Setting, Notice, Modal, debounce } from "obsidian";
+import { App, PluginSettingTab, Setting, Notice, debounce } from "obsidian";
 import MdTexPlugin from "./MdTexPlugin";
 import {
   DEFAULT_LATEX_PREAMBLE,
@@ -27,6 +27,7 @@ import {
   type DiscoveredBinary,
 } from "./utils/binDiscover";
 import { renderTemplatePackInfoPanel } from "./settings/templatePackPanel";
+import { PreambleModal } from "./settings/PreambleModal";
 
 /**
  * 折りたたみセクションの「既定の開閉」。
@@ -246,88 +247,7 @@ export class PandocPluginSettingTab extends PluginSettingTab {
     // =================================================================
     // 1. プロファイル管理セクション（常時展開）
     // =================================================================
-    new Setting(containerEl).setName(t("heading_profile")).setHeading();
-
-    // アクティブプロファイル選択 ＋ 現在プロファイルの削除（ゴミ箱アイコン）を1行にまとめる。
-    // 削除は「現在アクティブなプロファイル」を消す操作なので、選択ドロップダウンの隣に
-    // コンパクトなアイコンボタンとして置く（Obsidian 標準の extra-button パターン）。
-    const profileCount = Object.keys(settings.profiles).length;
-    new Setting(containerEl)
-      .setName(t("setting_active_profile_name"))
-      .setDesc(t("setting_active_profile_desc"))
-      .addDropdown(dropdown => {
-        Object.keys(settings.profiles).forEach(key => {
-          dropdown.addOption(key, key);
-        });
-        dropdown.setValue(activeProfileKey);
-        dropdown.onChange(async value => {
-          settings.activeProfile = value;
-          await this.plugin.saveSettings();
-          this.display(); // 再描画して値を更新
-        });
-      })
-      .addExtraButton(btn => {
-        btn
-          .setIcon("trash")
-          .setTooltip(t("button_delete_profile"))
-          .setDisabled(profileCount <= 1)
-          .onClick(async () => {
-            if (profileCount <= 1) return;
-            if (!confirm(t("confirm_delete_profile", [activeProfileKey]))) return;
-
-            const nextState = removeProfile(
-              { profiles: settings.profiles, activeProfile: settings.activeProfile },
-              activeProfileKey,
-            );
-            settings.profiles = nextState.profiles;
-            settings.activeProfile = nextState.activeProfile;
-            await this.plugin.saveSettings();
-            this.display();
-            new Notice(t("notice_profile_deleted", [activeProfileKey]));
-          });
-      });
-
-    // 新規プロファイル作成（Enter キーでも作成できる）。現在のプロファイルをコピーして作る。
-    let newProfileName = "";
-    const createProfile = async () => {
-      if (!newProfileName || settings.profiles[newProfileName]) {
-        new Notice(t("notice_invalid_profile"));
-        return;
-      }
-      const createdName = newProfileName;
-      const nextState = addProfile(
-        { profiles: settings.profiles, activeProfile: settings.activeProfile },
-        createdName,
-        currentProfile,
-      );
-      settings.profiles = nextState.profiles;
-      settings.activeProfile = nextState.activeProfile;
-      await this.plugin.saveSettings();
-      newProfileName = "";
-      this.display();
-      new Notice(t("notice_profile_created", [createdName]));
-    };
-    new Setting(containerEl)
-      .setName(t("setting_create_profile_name"))
-      .setDesc(t("setting_create_profile_desc"))
-      .addText(text => {
-        text.setPlaceholder(t("placeholder_new_profile")).onChange(value => {
-          newProfileName = value;
-        });
-        // Enter で即作成（名前入力後、ボタンをクリックしなくて済む）
-        text.inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            void createProfile();
-          }
-        });
-      })
-      .addButton(button =>
-        button
-          .setButtonText(t("button_add_profile"))
-          .setCta()
-          .onClick(() => void createProfile()),
-      );
+    this.renderProfileSection(currentProfile);
 
     // =================================================================
     // 2. 変換・出力設定 (General)（常時展開）
@@ -409,109 +329,13 @@ export class PandocPluginSettingTab extends PluginSettingTab {
 
     const isDefaultsMode = isDefaultsTemplateMode(currentProfile);
 
+    // 方式（ADR-007）で分岐: defaults は defaults file 構成 UI、builtin は PDF エンジン + 文書体裁 UI。
+    // 方式固有の設定を1つのメソッドに集約し、この位置の分岐を対称にする（thermo-nuclear review #9）。
+    // preamble / localization / standalone の builtin 限定項目はトピックセクション内に留める（co-location を優先）。
     if (isDefaultsMode) {
       await this.renderDefaultsModeSettings(currentProfile);
-    }
-
-    // LaTeX エンジン / PDF エンジン追加オプションは builtin 方式の責務。
-    // defaults 方式では defaults.yaml の `pdf-engine` / `pdf-engine-opts` に委譲するため、UI でも非表示にする。
-    if (!isDefaultsMode) {
-      // ADR-009: latexEngine は「自動検出＋ドロップダウン選択」が基本（他の外部バイナリと共通 UX）。
-      // 実行時は normalizeLatexEngine で basename に正規化され PATH 解決されるため、年度更新に強い
-      // （binDiscover.ts）。TeX が見つからない環境ではドロップダウンが無効化されテキスト入力で手動指定。
-      this.addDiscoveredBinarySetting(
-        containerEl,
-        this.discoveredEngines ?? [],
-        currentProfile.latexEngine,
-        "setting_latex_engine_name",
-        "setting_latex_engine_desc",
-        "setting_latex_engine_not_found_dropdown",
-        "setting_latex_engine_custom",
-        "setting_latex_engine_placeholder",
-        async value => {
-          currentProfile.latexEngine = value;
-          await this.plugin.saveSettings();
-        },
-      );
-
-      // ADR-009: latexmk 等の PDF エンジンに追加オプション（--pdf-engine-opt）を渡す。
-      // bibtex/biber のラウンドトリップを通す学会論文などで latexmk + -lualatex を使う場合に必要。
-      // ほとんどのユーザーは使わない上級者向け設定なので、折りたたみで隠す。
-      const pdfAdvBody = this.createCollapsibleSection(
-        t("heading_pdf_engine_advanced"),
-        "pdf-engine-advanced",
-      );
-      new Setting(pdfAdvBody)
-        .setName(t("setting_pdf_engine_opts_name"))
-        .setDesc(t("setting_pdf_engine_opts_desc"))
-        .addText(text =>
-          text
-            .setValue(currentProfile.pdfEngineOpts ?? "")
-            .setPlaceholder("-lualatex")
-            .onChange(this.bindField(currentProfile, "pdfEngineOpts")),
-        );
-
-      // 委譲対象の GUI 項目（ドキュメントクラス・フォントサイズ・マージン・ページ番号・画像スケール）は
-      // defaults 方式では defaults file 側で管理するため非表示。builtin 方式のみ折りたたみ「文書の体裁」に表示。
-      const frameBody = this.createCollapsibleSection(
-        t("heading_document_frame"),
-        "document-frame",
-      );
-
-      new Setting(frameBody)
-        .setName(t("setting_document_class_name"))
-        .setDesc(t("setting_document_class_desc"))
-        .addText(text =>
-          text.setValue(currentProfile.documentClass).onChange(this.bindField(currentProfile, "documentClass")),
-        );
-
-      new Setting(frameBody)
-        .setName(t("setting_document_class_opts_name"))
-        .setDesc(t("setting_document_class_opts_desc"))
-        .addText(text =>
-          text.setValue(currentProfile.documentClassOptions).onChange(this.bindField(currentProfile, "documentClassOptions")),
-        );
-
-      new Setting(frameBody)
-        .setName(t("setting_font_size_name"))
-        .setDesc(t("setting_font_size_desc"))
-        .addText(text =>
-          text.setValue(currentProfile.fontSize).onChange(this.bindField(currentProfile, "fontSize")),
-        );
-
-      // マージン指定トグル → マージン幅入力を局所的に表示/非表示（全再描画しない）。
-      // marginSizeSetting をクロージャで遅延参照し、フォーカス・スクロール位置を保持したまま表示切替。
-      new Setting(frameBody)
-        .setName(t("setting_use_margin_name"))
-        .setDesc(t("setting_use_margin_desc"))
-        .addToggle(toggle =>
-          toggle.setValue(currentProfile.useMarginSize).onChange(async value => {
-            currentProfile.useMarginSize = value;
-            marginSizeSetting.settingEl.toggle(value);
-            await this.plugin.saveSettings();
-          }),
-        );
-      const marginSizeSetting = new Setting(frameBody)
-        .setName(t("setting_margin_size_name"))
-        .setDesc(t("setting_margin_size_desc"))
-        .addText(text =>
-          text.setValue(currentProfile.marginSize).onChange(this.bindField(currentProfile, "marginSize")),
-        );
-      marginSizeSetting.settingEl.toggle(currentProfile.useMarginSize);
-
-      new Setting(frameBody)
-        .setName(t("setting_page_numbers_name"))
-        .setDesc(t("setting_page_numbers_desc"))
-        .addToggle(toggle =>
-          toggle.setValue(currentProfile.usePageNumber).onChange(this.bindField(currentProfile, "usePageNumber")),
-        );
-
-      new Setting(frameBody)
-        .setName(t("setting_image_scale_name"))
-        .setDesc(t("setting_image_scale_desc"))
-        .addText(text =>
-          text.setValue(currentProfile.imageScale).onChange(this.bindField(currentProfile, "imageScale")),
-        );
+    } else {
+      this.renderBuiltinEngineSettings(currentProfile);
     }
 
     // =================================================================
@@ -773,6 +597,199 @@ export class PandocPluginSettingTab extends PluginSettingTab {
   }
 
   /**
+   * builtin 方式（ADR-007）の PDF エンジン + 文書体裁（ドキュメントクラス・フォントサイズ・
+   * マージン・ページ番号・画像スケール）の設定 UI を描画する（thermo-nuclear review #9）。
+   *
+   * renderDefaultsModeSettings と対称で、render() の方式分岐位置から呼ばれる。これらは全て
+   * defaults 方式では defaults file 側で管理されるため builtin 専用となる。PDF エンジン追加
+   * オプションと文書体裁はユーザーが滅多に変えない上級者向けなので折りたたむ（漸進的開示）。
+   */
+  private renderBuiltinEngineSettings(currentProfile: ProfileSettings): void {
+    // ADR-009: latexEngine は「自動検出＋ドロップダウン選択」が基本（他の外部バイナリと共通 UX）。
+    // 実行時は normalizeLatexEngine で basename に正規化され PATH 解決されるため、年度更新に強い
+    // （binDiscover.ts）。TeX が見つからない環境ではドロップダウンが無効化されテキスト入力で手動指定。
+    this.addDiscoveredBinarySetting(
+      this.containerEl,
+      this.discoveredEngines ?? [],
+      currentProfile.latexEngine,
+      "setting_latex_engine_name",
+      "setting_latex_engine_desc",
+      "setting_latex_engine_not_found_dropdown",
+      "setting_latex_engine_custom",
+      "setting_latex_engine_placeholder",
+      async value => {
+        currentProfile.latexEngine = value;
+        await this.plugin.saveSettings();
+      },
+    );
+
+    // ADR-009: latexmk 等の PDF エンジンに追加オプション（--pdf-engine-opt）を渡す。
+    // bibtex/biber のラウンドトリップを通す学会論文などで latexmk + -lualatex を使う場合に必要。
+    // ほとんどのユーザーは使わない上級者向け設定なので、折りたたみで隠す。
+    const pdfAdvBody = this.createCollapsibleSection(
+      t("heading_pdf_engine_advanced"),
+      "pdf-engine-advanced",
+    );
+    new Setting(pdfAdvBody)
+      .setName(t("setting_pdf_engine_opts_name"))
+      .setDesc(t("setting_pdf_engine_opts_desc"))
+      .addText(text =>
+        text
+          .setValue(currentProfile.pdfEngineOpts ?? "")
+          .setPlaceholder("-lualatex")
+          .onChange(this.bindField(currentProfile, "pdfEngineOpts")),
+      );
+
+    // 委譲対象の GUI 項目（ドキュメントクラス・フォントサイズ・マージン・ページ番号・画像スケール）は
+    // defaults 方式では defaults file 側で管理するため非表示。builtin 方式のみ折りたたみ「文書の体裁」に表示。
+    const frameBody = this.createCollapsibleSection(
+      t("heading_document_frame"),
+      "document-frame",
+    );
+
+    new Setting(frameBody)
+      .setName(t("setting_document_class_name"))
+      .setDesc(t("setting_document_class_desc"))
+      .addText(text =>
+        text.setValue(currentProfile.documentClass).onChange(this.bindField(currentProfile, "documentClass")),
+      );
+
+    new Setting(frameBody)
+      .setName(t("setting_document_class_opts_name"))
+      .setDesc(t("setting_document_class_opts_desc"))
+      .addText(text =>
+        text.setValue(currentProfile.documentClassOptions).onChange(this.bindField(currentProfile, "documentClassOptions")),
+      );
+
+    new Setting(frameBody)
+      .setName(t("setting_font_size_name"))
+      .setDesc(t("setting_font_size_desc"))
+      .addText(text =>
+        text.setValue(currentProfile.fontSize).onChange(this.bindField(currentProfile, "fontSize")),
+      );
+
+    // マージン指定トグル → マージン幅入力を局所的に表示/非表示（全再描画しない）。
+    // marginSizeSetting をクロージャで遅延参照し、フォーカス・スクロール位置を保持したまま表示切替。
+    new Setting(frameBody)
+      .setName(t("setting_use_margin_name"))
+      .setDesc(t("setting_use_margin_desc"))
+      .addToggle(toggle =>
+        toggle.setValue(currentProfile.useMarginSize).onChange(async value => {
+          currentProfile.useMarginSize = value;
+          marginSizeSetting.settingEl.toggle(value);
+          await this.plugin.saveSettings();
+        }),
+      );
+    const marginSizeSetting = new Setting(frameBody)
+      .setName(t("setting_margin_size_name"))
+      .setDesc(t("setting_margin_size_desc"))
+      .addText(text =>
+        text.setValue(currentProfile.marginSize).onChange(this.bindField(currentProfile, "marginSize")),
+      );
+    marginSizeSetting.settingEl.toggle(currentProfile.useMarginSize);
+
+    new Setting(frameBody)
+      .setName(t("setting_page_numbers_name"))
+      .setDesc(t("setting_page_numbers_desc"))
+      .addToggle(toggle =>
+        toggle.setValue(currentProfile.usePageNumber).onChange(this.bindField(currentProfile, "usePageNumber")),
+      );
+
+    new Setting(frameBody)
+      .setName(t("setting_image_scale_name"))
+      .setDesc(t("setting_image_scale_desc"))
+      .addText(text =>
+        text.setValue(currentProfile.imageScale).onChange(this.bindField(currentProfile, "imageScale")),
+      );
+  }
+
+  /**
+   * セクション1: プロファイル管理（アクティブ選択・削除・新規作成）。常時展開。
+   * render() のセクション分割パターン（thermo-nuclear review 第3ラウンド #2）。
+   */
+  private renderProfileSection(currentProfile: ProfileSettings): void {
+    const settings = this.plugin.settings;
+    new Setting(this.containerEl).setName(t("heading_profile")).setHeading();
+
+    const profileCount = Object.keys(settings.profiles).length;
+    const activeProfileKey = settings.activeProfile;
+    new Setting(this.containerEl)
+      .setName(t("setting_active_profile_name"))
+      .setDesc(t("setting_active_profile_desc"))
+      .addDropdown(dropdown => {
+        Object.keys(settings.profiles).forEach(key => {
+          dropdown.addOption(key, key);
+        });
+        dropdown.setValue(activeProfileKey);
+        dropdown.onChange(async value => {
+          settings.activeProfile = value;
+          await this.plugin.saveSettings();
+          this.display(); // 再描画して値を更新
+        });
+      })
+      .addExtraButton(btn => {
+        btn
+          .setIcon("trash")
+          .setTooltip(t("button_delete_profile"))
+          .setDisabled(profileCount <= 1)
+          .onClick(async () => {
+            if (profileCount <= 1) return;
+            if (!confirm(t("confirm_delete_profile", [activeProfileKey]))) return;
+
+            const nextState = removeProfile(
+              { profiles: settings.profiles, activeProfile: settings.activeProfile },
+              activeProfileKey,
+            );
+            settings.profiles = nextState.profiles;
+            settings.activeProfile = nextState.activeProfile;
+            await this.plugin.saveSettings();
+            this.display();
+            new Notice(t("notice_profile_deleted", [activeProfileKey]));
+          });
+      });
+
+    let newProfileName = "";
+    const createProfile = async () => {
+      if (!newProfileName || settings.profiles[newProfileName]) {
+        new Notice(t("notice_invalid_profile"));
+        return;
+      }
+      const createdName = newProfileName;
+      const nextState = addProfile(
+        { profiles: settings.profiles, activeProfile: settings.activeProfile },
+        createdName,
+        currentProfile,
+      );
+      settings.profiles = nextState.profiles;
+      settings.activeProfile = nextState.activeProfile;
+      await this.plugin.saveSettings();
+      newProfileName = "";
+      this.display();
+      new Notice(t("notice_profile_created", [createdName]));
+    };
+    new Setting(this.containerEl)
+      .setName(t("setting_create_profile_name"))
+      .setDesc(t("setting_create_profile_desc"))
+      .addText(text => {
+        text.setPlaceholder(t("placeholder_new_profile")).onChange(value => {
+          newProfileName = value;
+        });
+        text.inputEl.addEventListener("keydown", (e: KeyboardEvent) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void createProfile();
+          }
+        });
+      })
+      .addButton(button =>
+        button
+          .setButtonText(t("button_add_profile"))
+          .setCta()
+          .onClick(() => void createProfile()),
+      );
+  }
+
+  /**
    * defaults 方式（ADR-007/008）の設定 UI を描画する。
    *
    * テンプレートフォルダ・defaults file の指定方法（パック選択 / カスタムパス）・
@@ -902,47 +919,5 @@ export class PandocPluginSettingTab extends PluginSettingTab {
         refresh: () => this.display(),
       });
     }
-  }
-}
-
-class PreambleModal extends Modal {
-  private initial: string;
-  private onSave: (val: string) => Promise<void> | void;
-
-  constructor(app: App, initial: string, onSave: (val: string) => Promise<void> | void) {
-    super(app);
-    this.initial = initial;
-    this.onSave = onSave;
-  }
-
-  onOpen(): void {
-    const { contentEl } = this;
-    contentEl.empty();
-    contentEl.createEl("h2", { text: t("modal_preamble_title") });
-
-    // 共通クラスでフォント等を統一しつつ、モーダル内は全高（70vh）で上書き。
-    const area = contentEl.createEl("textarea", { text: this.initial, cls: "mdtex-code-area" });
-    area.style.height = "70vh";
-    area.style.lineHeight = "1.45";
-    area.spellcheck = false;
-
-    const note = contentEl.createEl("p", { text: t("modal_note") });
-    note.style.opacity = "0.8";
-
-    const buttons = contentEl.createDiv();
-    buttons.style.display = "flex";
-    buttons.style.justifyContent = "flex-end";
-    buttons.style.gap = "8px";
-    buttons.style.marginTop = "12px";
-
-    const cancel = buttons.createEl("button", { text: t("modal_cancel") });
-    cancel.onclick = () => this.close();
-
-    const save = buttons.createEl("button", { text: t("modal_save") });
-    save.classList.add("mod-cta");
-    save.onclick = async () => {
-      await this.onSave(area.value);
-      this.close();
-    };
   }
 }

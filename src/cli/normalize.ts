@@ -1,17 +1,17 @@
 // File: src/cli/normalize.ts
-// Purpose: CLI 変換前の本文正規化パイプライン（GUI の normalizeMarkdown の CLI 版）。
-// Reason: convert / packTest が正規化ステップを直接インラインで持つと、ステップ追加で
-//          呼び出し側に spaghetti 成長する。正規化知識を1箇所に集約し、GUI と共有する
-//          normalizeMarkdown（plan.md L3 / VaultLike 抽象化）への移行地点にする。
-// Related: src/utils/stripObsidianComments.ts, src/utils/crossrefLabels.ts,
-//          src/services/normalizeMarkdown.ts, src/cli/convert.ts, src/cli/packTest.ts
+// Purpose: CLI 変換前の本文正規化入り口。GUI と共有する normalizeMarkdown（src/services/normalizeMarkdown.ts）
+//   を fsVault + injectable な依存で呼ぶ薄い adapter。
+// Reason: かつて CLI 専用の normalizeForCli（5 step）が GUI の normalizeMarkdown（8 step）と並列に存在し、
+//   「ステップ順序は両者で同期する前提」という手同期になっていた。normalizeMarkdown を Obsidian
+//   App 非依存（VaultLike + injectable mermaid/lint）にしたことで、CLI は同じパイプラインを呼び、
+//   順序不変条件を1箇所（normalizeMarkdown）に集約した（thermo-nuclear review #1）。
+//   CLI は draft/lint/mermaid を持たないため、それらの依存（pandocExtraArgs/lintFix/rasterizeMermaid）
+//   を省略して呼ぶ = 該当ステップが自動的にスキップされる。
+// Related: src/services/normalizeMarkdown.ts, src/cli/convert.ts, src/cli/packTest.ts, src/cli/fsVault.ts
 
 import * as path from "path";
-import { stripObsidianComments } from "../utils/stripObsidianComments";
-import { detectDuplicateLabels, type DuplicateLabel } from "../utils/crossrefLabels";
-import { expandTransclusions } from "../utils/transclusion";
-import { unwrapValidWikiLinks, replaceWikiLinksAndCodeAsync } from "../utils/markdownTransforms";
-import type { VaultLike, ProfileLike } from "../utils/vaultLike";
+import { normalizeMarkdown, type NormalizeResult } from "../services/normalizeMarkdown";
+import type { DuplicateLabel } from "../utils/crossrefLabels";
 import { makeFsVault } from "./fsVault";
 
 /** CLI 正規化の結果。content は pandoc へ渡す本文、duplicateLabels は crossref 重複。 */
@@ -21,38 +21,13 @@ export interface NormalizeForCliResult {
 }
 
 /**
- * CLI 変換前の本文正規化。GUI の normalizeMarkdown のステップのうち、obsidian 非依存で
- * 実現可能なものを段階的に追加する:
- *   1. stripObsidianComments（%% コメント除去）
- *   2. expandTransclusions（![[link]] 展開）
- *   3. unwrapValidWikiLinks（有効な [[WikiLink]] のブラケット除去）
- *   4. replaceWikiLinksAndCodeAsync（![[image]] の標準画像記法化・profile.imageScale 適用）
- *   5. detectDuplicateLabels（crossref ラベル重複検出）
- * 今後 lint / draft を追加し、最終的に GUI と共有パイプラインへ。
- * ※ ステップ順序は GUI の normalizeMarkdown（src/services/normalizeMarkdown.ts）と同期する
- *   前提。いずれかを編集する際は両者の順序不変条件を維持すること。
- *
- * draft 要求（resolveDraftRequest）は CLI に pandocExtraArgs / header 反映経路が無く
- * 設計判断が要るため未統合（別スライス）。
- */
-export async function normalizeForCli(
-  rawContent: string,
-  vault: VaultLike,
-  profile: ProfileLike,
-  sourcePath: string,
-): Promise<NormalizeForCliResult> {
-  let content = stripObsidianComments(rawContent);
-  content = await expandTransclusions(content, vault, sourcePath, new Map());
-  content = unwrapValidWikiLinks(content, vault, sourcePath);
-  content = await replaceWikiLinksAndCodeAsync(content, vault, profile, sourcePath);
-  const duplicateLabels = detectDuplicateLabels(content);
-  return { content, duplicateLabels };
-}
-
-/**
  * ファイルベースの CLI 正規化入り口。convert / packTest の共通フロー（vaultRoot 解決 →
- * fsVault 構築 → sourcePath（vault 相対）→ ProfileLike 組み立て → normalizeForCli）を集約し、
- * 両呼び出し元の重複を除去する。normalizeForCli（純粋）の I/O つなぎ合わせ版。
+ * fsVault 構築 → sourcePath（vault 相対）→ 共有 normalizeMarkdown 呼び出し）を集約する。
+ *
+ * CLI は lint / mermaid / draft を扱わないため、normalizeMarkdown の対応する依存を省略する。
+ * これらのステップが不要な場合は normalizeMarkdown 側で自動的にスキップされ、GUI と同じ
+ * 「stripComments → expandTransclusions → unwrapValidWikiLinks → replaceWikiLinksAndCodeAsync →
+ * detectDuplicateLabels」の順序で走る（lint/mermaid/draft は CLI では no-op）。
  */
 export interface NormalizeForCliFileOptions {
   rawContent: string;
@@ -65,6 +40,15 @@ export async function normalizeFileForCli(opts: NormalizeForCliFileOptions): Pro
   const vaultRoot = opts.vaultRoot ? path.resolve(opts.vaultRoot) : path.dirname(opts.filePath);
   const vault = await makeFsVault(vaultRoot);
   const sourcePath = path.relative(vaultRoot, opts.filePath) || path.basename(opts.filePath);
-  const profile: ProfileLike = opts.imageScale ? { imageScale: opts.imageScale } : {};
-  return normalizeForCli(opts.rawContent, vault, profile, sourcePath);
+
+  const result: NormalizeResult = await normalizeMarkdown({
+    content: opts.rawContent,
+    vault,
+    sourcePath,
+    // CLI は画像スケールのみ profile として渡す。pandocExtraArgs / rasterizeMermaid / lint は
+    // 渡さない = draft / mermaid / lint ステップが自動的にスキップされる（boolean フラグ不要）。
+    profile: opts.imageScale ? { imageScale: opts.imageScale } : {},
+  });
+
+  return { content: result.content, duplicateLabels: result.duplicateLabels };
 }

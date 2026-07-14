@@ -61,30 +61,20 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
 
   args.push("-o", normalizeFsPath(options.outputPath));
 
-  if (options.format === "pdf") {
-    // builtin 方式では MdTex プロファイルが PDF エンジンを所有する。
-    // defaults 方式では defaults.yaml の `pdf-engine` / `pdf-engine-opts` に委譲する。
-    // コマンドライン `--pdf-engine` は defaults file より優先されるため、defaults 方式でここに出すと
-    // テンプレートパック（例: pLaTeX 学会論文の latexmk + -latex=platex + -pdfdvi）を壊す。
-    if (!isDefaults) {
-      // latexEngine にフルパスが入力されても basename に正規化する（年度更新耐性）。
-      // Pandoc は basename を PATH から探す（buildTexAwareEnv で TeX bin が PATH に追加済み）。
-      const engineBare = normalizeLatexEngine(profile.latexEngine) || "lualatex";
-      args.push(`--pdf-engine=${engineBare}`);
-      // ADR-009: latexmk 等の PDF エンジンに追加オプションを渡す。各トークンを
-      // --pdf-engine-opt=<token> に展開する（latexmk のサブエンジン指定 -lualatex 等に使用）。
-      for (const opt of tokenizePdfEngineOpts(profile.pdfEngineOpts)) {
-        args.push(`--pdf-engine-opt=${opt}`);
-      }
-    }
-    // defaults 方式では beamer ターゲット（`-t beamer`）も defaults file の `to:` で管理するため、
-    // documentClass 由来の `-t beamer` 生成をスキップする。builtin 方式は現状どおり。
-    if (!isDefaults && profile.documentClass === "beamer") args.push("-t", "beamer");
-  } else if (options.format === "latex") {
+  // writer（-t）は方式非依存。pdf はデフォルト writer、latex/docx は明示。
+  // beamer（-t beamer）は builtin 方式でのみ documentClass から生成するため builtin 専用ヘルパへ回す。
+  if (options.format === "latex") {
     args.push("-t", "latex");
-    if (!isDefaults && profile.documentClass === "beamer") args.push("-t", "beamer");
   } else if (options.format === "docx") {
     args.push("-t", "docx");
+  }
+
+  // builtin 方式専用の引数（PDF エンジン / beamer / -V 群 / standalone）を1つのヘルパに集約し、
+  // 本体の !isDefaults 分岐を5箇所→1箇所に縮める（thermo-nuclear review 第3ラウンド #3）。
+  // defaults 方式ではこれら全てを defaults file 側（pdf-engine / variables / standalone）へ委譲するため、
+  // コマンドラインには出さない（precedence でコマンドラインが defaults file を上書きする衝突を回避）。
+  if (!isDefaults) {
+    appendBuiltinOwnedArgs(args, profile, options.format);
   }
 
   if (options.luaFilters?.length) {
@@ -109,15 +99,6 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   // されてしまい文書ごとの上書きが効かなくなるため、metadata-file に一本化する。
   // YAML の生成は buildLabelMetadataYaml、ファイル化は pandocInvocation.buildPandocExecutionPlan が担う。
 
-  // builtin 方式のみ: documentclass / geometry / fontsize 等の `-V` を GUI 設定値から生成する。
-  // defaults 方式は defaults file 側で `variables:` を管理するため、これらの `-V` 生成をスキップ
-  // する（Pandoc の precedence でコマンドライン `-V` が defaults file を上書きする衝突を回避）。
-  // このブロックは「builtin → GUI が所有する -V 群」という ADR-007 の同一事実を表す（候補 C3）。
-  // mode 相対の -V 所有権を 1 つのヘッパーへ集約し、`!isDefaults` の重複を縮める。
-  if (!isDefaults) {
-    appendBuiltinOwnedVariables(args, profile);
-  }
-
   args.push("--highlight-style=tango");
 
   // ADR-009: citation モードで Markdown の @key / [@key] を LaTeX の引用コマンドへ変換する。
@@ -133,11 +114,6 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   const extraArgs = filterPandocExtrasForFormat(options.extraArgs || [], options.format);
   if (extraArgs.length) args.push(...extraArgs);
 
-  // defaults 方式では standalone 制御も defaults file（`standalone:`）で管理する。これにより
-  // `standalone: false` で本文フラグメントを出力するユースケース（CONTEXT.md）が実現できる。
-  // builtin 方式は現状どおり GUI の useStandalone で `--standalone` を制御する。
-  if (!isDefaults && profile.useStandalone) args.push("--standalone");
-
   // pandocPath は trim のみ（basename 正規化しない）。TeX と違い pandoc は年度更新でパスが
   // 消滅しないため、ユーザーがフルパス（= 自動検出ドロップダウンで選んだ binPath、または
   // 手入力した特定バージョン）を入れたらそのまま尊重する。空なら PATH の `pandoc`。
@@ -146,25 +122,42 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
 }
 
 /**
- * builtin 方式でのみ GUI が所有する `-V` 変数群を生成する（ADR-007 / 候補 C3）。
+ * builtin 方式でのみ GUI が所有する引数群（PDF エンジン / beamer / -V 変数 / standalone）を生成する
+ * （ADR-007 / ADR-009）。defaults 方式ではこれら全てを defaults file 側で管理するため呼び出し側で
+ * skip する（コマンドラインが defaults file を上書きする precedence 衝突を回避）。
  *
- * documentclass / classoption / fontsize / geometry(margin) / pagestyle / graphics は、builtin 方式
- * では MdTex の GUI 設定値から生成され、defaults 方式では defaults file 側の `variables:` が所有する。
- * 「builtin → GUI が所有する -V」という同一事実を 1 つのヘッパーに集約し、呼び出し側の
- * `!isDefaults` 分岐とインライン -V 生成の重複を縮めた。defaults 方式では呼び出し側で skip する。
+ * これまで buildPandocCommand 本体に !isDefaults が5箇所（pdf-engine / beamer×2 / -V 群 / standalone）
+ * に散らばっていたのを1ヘルパに集約し、beamer の pdf/latex 重複も解消した
+ * （thermo-nuclear review 第3ラウンド #3）。pandoc のフラグは順序非依存のため、生成順序を1箇所に
+ * まとめても意味は変わらない（テストも toContain で順序非依存）。
  */
-function appendBuiltinOwnedVariables(args: string[], profile: ProfileSettings): void {
-  if (profile.useMarginSize) args.push("-V", `geometry:margin=${profile.marginSize}`);
-  if (!profile.usePageNumber) args.push("-V", "pagestyle=empty");
-
-  if (profile.imageScale?.trim()) {
-    args.push("-V", `graphics=${profile.imageScale}`);
+function appendBuiltinOwnedArgs(args: string[], profile: ProfileSettings, format: OutputFormat): void {
+  // PDF エンジン（pdf 出力のみ）。latexEngine は basename に正規化して年度更新に強くする。
+  if (format === "pdf") {
+    const engineBare = normalizeLatexEngine(profile.latexEngine) || "lualatex";
+    args.push(`--pdf-engine=${engineBare}`);
+    // latexmk 等のサブエンジン指定（-lualatex 等）を --pdf-engine-opt へ展開（ADR-009）。
+    for (const opt of tokenizePdfEngineOpts(profile.pdfEngineOpts)) {
+      args.push(`--pdf-engine-opt=${opt}`);
+    }
   }
 
+  // beamer ターゲット（pdf/latex のみ。docx は対象外）。
+  if ((format === "pdf" || format === "latex") && profile.documentClass === "beamer") {
+    args.push("-t", "beamer");
+  }
+
+  // -V 変数群（documentclass / geometry / fontsize / pagestyle / graphics）。
+  if (profile.useMarginSize) args.push("-V", `geometry:margin=${profile.marginSize}`);
+  if (!profile.usePageNumber) args.push("-V", "pagestyle=empty");
+  if (profile.imageScale?.trim()) args.push("-V", `graphics=${profile.imageScale}`);
   args.push("-V", `fontsize=${profile.fontSize}`);
   args.push("-V", `documentclass=${profile.documentClass}`);
   if (profile.documentClassOptions?.trim())
     args.push("-V", `classoption=${profile.documentClassOptions}`);
+
+  // standalone（本文フラグメント出力は defaults 方式の defaults file で行うため builtin のみ）。
+  if (profile.useStandalone) args.push("--standalone");
 }
 
 /**

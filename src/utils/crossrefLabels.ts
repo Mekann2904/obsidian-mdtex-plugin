@@ -8,7 +8,13 @@
 // Related: src/utils/transclusion.ts, src/suggest/labelParser.ts, src/suggest/LabelReferenceSuggest.ts,
 //   src/services/convertService.ts, docs/design-decisions.md (ADR-005), CONTEXT.md
 
+// インラインコード区間検出・フェンス行判定は markdownScan の共有ヘルパを使う
+// （thermo-nuclear review #2 / #5: 本ファイル内の重複ループと markdownTransforms との
+// フェンス正規表現重複を解消）。
+import { findInlineCodeRanges, makeInlineCodeGuard, isFenceLine } from "./markdownScan";
+
 // crossref が扱う接頭辞。ユーザー明示の {#prefix:id} のみ対象（自動採番は含まない）。
+// UI（latexGhostText / LabelEditorSuggest）の候補リストは全てここから派生させる（真理源を1箇所に）。
 export const CROSSREF_PREFIXES = ["fig", "tbl", "lst", "eq", "sec"] as const;
 export type CrossrefPrefix = (typeof CROSSREF_PREFIXES)[number];
 
@@ -72,12 +78,9 @@ export function extractRawLabels(markdown: string): ExtractedLabel[] {
   const results: ExtractedLabel[] = [];
   const lines = markdown.split(/\r?\n/);
   let inFence = false;
-  // フェンス開始/閉じ行: 0個以上の空白 + (``` または ~~~) 3本以上。
-  const fenceLineRegex = /^\s*(`{3,}|~{3,})/;
 
   for (const line of lines) {
-    const isFenceLine = fenceLineRegex.test(line);
-    if (isFenceLine) {
+    if (isFenceLine(line)) {
       // フェンス開始行に付与された {#lst:...} は抽出対象（コードブロックのラベル）。
       // 但し「フェンスの内部」に入った後は除外。
       if (!inFence) {
@@ -94,38 +97,9 @@ export function extractRawLabels(markdown: string): ExtractedLabel[] {
 }
 
 // 1行からインラインコードを保護しつつ {#prefix:id} を抽出して results へ push する。
+// インラインコード区間の検出は markdownScan の共有ヘルパを使う。
 function pushLabelsFromLine(line: string, results: ExtractedLabel[]): void {
-  const inlineCodeRanges: Array<[number, number]> = [];
-  let i = 0;
-  while (i < line.length) {
-    if (line[i] !== "`") {
-      i += 1;
-      continue;
-    }
-    let j = i;
-    while (j < line.length && line[j] === "`") j += 1;
-    const openLen = j - i;
-    let k = j;
-    let closed = false;
-    while (k < line.length) {
-      if (line[k] !== "`") {
-        k += 1;
-        continue;
-      }
-      let l = k;
-      while (l < line.length && line[l] === "`") l += 1;
-      if (l - k === openLen) {
-        inlineCodeRanges.push([i, l]);
-        i = l;
-        closed = true;
-        break;
-      }
-      k = l;
-    }
-    if (!closed) i = j;
-  }
-  const isProtected = (pos: number) =>
-    inlineCodeRanges.some(([s, e]) => pos >= s && pos < e);
+  const isProtected = makeInlineCodeGuard(findInlineCodeRanges(line));
 
   let m: RegExpExecArray | null;
   const global = new RegExp(LABEL_ATTR_REGEX.source, "g");
@@ -228,12 +202,11 @@ export function detectDuplicateLabels(markdown: string): DuplicateLabel[] {
 export function stripLabelDefinitions(content: string): string {
   const lines = content.split(/\r?\n/);
   let inFence = false;
-  const fenceLineRegex = /^\s*(`{3,}|~{3,})/;
 
   const out = lines.map(line => {
     // フェンス内はスキップ（ただしフェンス開始行の {#lst:...} は除去対象: コードブロックの
     // ラベルも crossref 重複の元になるため）。フェンス内部行のみ保護。
-    if (fenceLineRegex.test(line)) {
+    if (isFenceLine(line)) {
       inFence = !inFence;
       // フェンス開始行自体もラベル除去対象にする（コードブロックの lst ラベル）
       return stripLabelsFromLine(line);
@@ -245,38 +218,9 @@ export function stripLabelDefinitions(content: string): string {
 }
 
 // 1行からインラインコードを保護しつつ {#prefix:id ...} 属性を除去する。
+// インラインコード区間の検出は markdownScan の共有ヘルパを使う。
 function stripLabelsFromLine(line: string): string {
-  const inlineCodeRanges: Array<[number, number]> = [];
-  let i = 0;
-  while (i < line.length) {
-    if (line[i] !== "`") {
-      i += 1;
-      continue;
-    }
-    let j = i;
-    while (j < line.length && line[j] === "`") j += 1;
-    const openLen = j - i;
-    let k = j;
-    let closed = false;
-    while (k < line.length) {
-      if (line[k] !== "`") {
-        k += 1;
-        continue;
-      }
-      let l = k;
-      while (l < line.length && line[l] === "`") l += 1;
-      if (l - k === openLen) {
-        inlineCodeRanges.push([i, l]);
-        i = l;
-        closed = true;
-        break;
-      }
-      k = l;
-    }
-    if (!closed) i = j;
-  }
-  const isProtected = (pos: number) =>
-    inlineCodeRanges.some(([s, e]) => pos >= s && pos < e);
+  const isProtected = makeInlineCodeGuard(findInlineCodeRanges(line));
 
   // ラベル定義の識別子部分 #prefix:id のみ除去する（選択肢γ）。
   // width= / caption= 等の付随属性は保持する（2回目の画像も適切な幅で表示するため）。

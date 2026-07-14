@@ -9,7 +9,7 @@
 // 本 module は markdownlint 固有の意味（--fix の frontmatter 分離・temp body 再結合・終了時の
 // Notice 判定）だけを残し、OS 毎の挙動や stdio 収集を自前で持たない。
 
-import { Notice, MarkdownView, FileSystemAdapter } from "obsidian";
+import { Notice, FileSystemAdapter } from "obsidian";
 import * as path from "path";
 import * as fs from "fs/promises";
 import { PandocPluginSettings } from "../MdTexPluginSettings";
@@ -22,6 +22,7 @@ import {
 } from "../utils/binDiscover";
 import { augmentPathString } from "../utils/texPath";
 import { runCommand } from "../utils/processRunner";
+import { saveActiveMarkdownViewIfMatching } from "./activeView";
 
 /**
  * markdownlint-cli2 の実行バイナリを解決する。
@@ -75,13 +76,7 @@ export async function lintCurrentNote(ctx: PluginContext) {
     return;
   }
 
-  const leaf = ctx.app.workspace.activeLeaf;
-  if (leaf && leaf.view instanceof MarkdownView) {
-    const markdownView = leaf.view as MarkdownView;
-    if (markdownView.file && markdownView.file.path === activeFile.path) {
-      await markdownView.save();
-    }
-  }
+  await saveActiveMarkdownViewIfMatching(ctx.app, activeFile);
 
   const cli = resolveMarkdownlintBin(ctx.settings);
   if (!cli) {

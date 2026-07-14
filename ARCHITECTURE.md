@@ -190,6 +190,7 @@ export async function convertCurrentPage(
 - Obsidian 記法 → Pandoc 受理可能 Markdown への本文正規化パイプライン
 - 8 step の順序不変条件（コメント除去 → draft 解決 → トランスクルージョン → Mermaid → lint → WikiLink 除去 → WikiLink/画像置換 → 重複ラベル検出）を内蔵
 - lint 中間ファイル（`.temp.md`）の生成・読み戻し・片付けを所有
+- **GUI と CLI の唯一の正規化経路**: Obsidian App に依存せず `VaultLike` + injectable な mermaid/lint 通知を受け取るため、GUI（`convertService`）と CLI（`cli/normalize.ts`）が同じパイプラインを呼ぶ。順序不変条件はこの module 1箇所に集約され、CLI は draft/lint/mermaid の依存を省略して該当 step をスキップする。
 
 ### ConversionPaths
 
@@ -313,11 +314,28 @@ export async function killProcess(pid: number): Promise<void>
 - Obsidian固有のコメントの削除
 - ドラフトモード変換の適用
 
-**主要な関数**:
+**主要な関数**（シグネチャは概要です。最新・完全な定義はソースを参照）:
 
 ```typescript
-export async function expandTransclusions(app: App, content: string, basePath: string): Promise<string>
-export function replaceWikiLinks(content: string): string
+// トランスクルージョン展開。Obsidian App 依存を VaultLike 抽象で切り離し、GUI と CLI で共用。
+export async function expandTransclusions(
+  markdown: string,
+  vault: VaultLike,
+  sourcePath: string,
+  cache: Map<string, string>,
+  visited?: Set<string>,
+  expanded?: Set<string>,
+): Promise<string>
+// WikiLink / 埋め込み画像を標準 Markdown 記法へ。VaultLike + ProfileLike 経由で GUI/CLI 共用。
+export async function replaceWikiLinksAndCodeAsync(
+  markdown: string,
+  vault: VaultLike,
+  profile: ProfileLike,
+  sourcePath: string,
+): Promise<string>
+// 有効な WikiLink のみブラケットを除去。
+export function unwrapValidWikiLinks(markdown: string, vault: VaultLike, sourcePath: string): string
+// Obsidian コメント (%% %%) を除去。
 export function stripObsidianComments(content: string): string
 ```
 
@@ -464,54 +482,25 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension
 
 ### 設定構造
 
-**場所**: `src/MdTexPluginSettings.ts`
-
-**型定義**:
+**場所**: `src/MdTexPluginSettings.ts`（以下の型定義は概要です。フィールドの完全・最新の定義は常にソースを参照してください。概要と実装が食い違う場合は実装が正です）。
 
 ```typescript
 export interface PandocPluginSettings {
-  activeProfile: string;
   profiles: Record<string, ProfileSettings>;
-  enableLatexPalette: boolean;
-  enableLatexGhost: boolean;
-  latexCommandsYaml: string;
-  enableMarkdownlintFix: boolean;
-  markdownlintPath: string;
-  hideDevLogs: boolean;
-  enableMermaidExperimental: boolean;
-}
-
-export interface ProfileSettings {
-  outputFormat: OutputFormat;
-  pandocPath: string;
-  outputDir: string;
-  latexEngine: string;
-  documentClass: string;
-  documentClassOptions: string;
-  fontSize: string;
-  useMarginSize: boolean;
-  marginSize: string;
-  showPageNumbers: boolean;
-  imageScale: string;
-  latexPreamble: string;
-  usePandocCrossref: boolean;
-  pandocCrossrefPath: string;
-  advancedLatexCommands: boolean;
-  luaFilterPath: string;
-  extraArgs: string;
-  standalone: boolean;
-  searchDirectory: string;
-  removeTempFiles: boolean;
-  figureLabel: string;
-  figPrefix: string;
-  tableLabel: string;
-  tblPrefix: string;
-  codeLabel: string;
-  lstPrefix: string;
-  equationLabel: string;
-  eqnPrefix: string;
+  activeProfile: string;
+  suppressDeveloperLogs: boolean;
+  enableMarkdownlintFix: boolean;     // markdownlint-cli2 --fix をPandoc実行前に適用
+  markdownlintCli2Path: string;       // markdownlint-cli2実行ファイルパス（空は自動解決）
+  enableExperimentalMermaid: boolean; // Mermaid DOM rasterization を使うか（実験的）
+  latexCommandsYaml: string;          // LaTeX コマンドパレット用のユーザ定義 YAML
+  enableLatexPalette: boolean;        // LaTeXコマンドパレット/補完の有効・無効
+  enableLatexGhost: boolean;          // ゴーストテキスト補完の有効・無効
+  sampleTemplatesScaffolded: boolean; // 初回サンプルテンプレートパック展開済みか（ADR-008）
+  collapsedSections: Record<string, boolean>; // 設定タブの折りたたみセクション開閉状態
 }
 ```
+
+`ProfileSettings` は1プロファイル分の設定で、基本項目（pandoc/latex エンジン・出力先・フォント・マージン・crossref ラベル語等）に加え、文書テンプレート方式（ADR-007/008: `documentTemplateMode` / `defaultsFilePath` / `selectedTemplatePack` / `defaultsSelection` / `templateFolder`）と citation モード（ADR-009: `citationMode` / `pdfEngineOpts`）のフィールドを持ちます。フィールド一覧は `src/MdTexPluginSettings.ts` の `ProfileSettings` interface および `DEFAULT_PROFILE` を参照してください（ドキュメントへの再掲は意図的に省略します — 実装とドキュメントのズレを防ぐため）。
 
 ### 永続化
 

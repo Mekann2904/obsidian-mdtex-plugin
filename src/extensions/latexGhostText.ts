@@ -7,6 +7,8 @@ import { Extension, StateField, EditorState } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, keymap, WidgetType } from "@codemirror/view";
 import MdTexPlugin from "../MdTexPlugin";
 import { buildLatexCommands } from "../data/latexCommands";
+// crossref 接头辞の真理源は crossrefLabels.CROSSREF_PREFIXES（thermo-nuclear review #7: 手書きリストのズレ防止）。
+import { CROSSREF_PREFIXES } from "../utils/crossrefLabels";
 
 interface GhostState {
   pos: number;
@@ -41,7 +43,7 @@ class GhostTextWidget extends WidgetType {
 
 export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension {
   let suppressUntilPos: number | null = null;
-  const labelSuggestions = ["fig:", "tbl:", "eq:", "sec:", "lst:"];
+  const labelSuggestions = CROSSREF_PREFIXES.map(p => `${p}:`);
   let cachedYaml = "";
   let cachedCommands: { cmd: string; desc: string; cursorOffset?: number }[] = [];
 
@@ -272,39 +274,24 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension {
     provide: f => EditorView.decorations.from(f),
   });
 
+  const acceptGhost = (view: EditorView): boolean => {
+    const ghost = calculateGhostState(view);
+    if (!ghost) return false;
+
+    view.dispatch({
+      changes: { from: ghost.replaceFrom, to: ghost.replaceTo, insert: ghost.insertText },
+      selection: { anchor: ghost.targetPos, head: ghost.targetPos },
+      scrollIntoView: true,
+    });
+
+    suppressUntilPos = ghost.targetPos;
+    return true;
+  };
+
+  // Tab と ArrowRight は「ゴーストを確定して targetPos へ移動」という同一の振る舞い（thermo-nuclear review #3）。
   const ghostKeymap = keymap.of([
-    {
-      key: "Tab",
-      run: view => {
-        const ghost = calculateGhostState(view);
-        if (!ghost) return false;
-
-        view.dispatch({
-          changes: { from: ghost.replaceFrom, to: ghost.replaceTo, insert: ghost.insertText },
-          selection: { anchor: ghost.targetPos, head: ghost.targetPos },
-          scrollIntoView: true,
-        });
-
-        suppressUntilPos = ghost.targetPos;
-        return true;
-      },
-    },
-    {
-      key: "ArrowRight",
-      run: view => {
-        const ghost = calculateGhostState(view);
-        if (!ghost) return false;
-
-        view.dispatch({
-          changes: { from: ghost.replaceFrom, to: ghost.replaceTo, insert: ghost.insertText },
-          selection: { anchor: ghost.targetPos, head: ghost.targetPos },
-          scrollIntoView: true,
-        });
-
-        suppressUntilPos = ghost.targetPos;
-        return true;
-      },
-    },
+    { key: "Tab", run: acceptGhost },
+    { key: "ArrowRight", run: acceptGhost },
   ]);
 
   return [unifiedGhostField, ghostKeymap];
