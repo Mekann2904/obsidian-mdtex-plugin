@@ -8,6 +8,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import { DEFAULTS_FILE_NAME } from "../services/templatePackMeta";
+import { makeFsVault } from "./fsVault";
 import { normalizeForCli } from "./normalize";
 import type { DuplicateLabel } from "../utils/crossrefLabels";
 import { runPandocConvert, type PandocRunResult } from "./pandocRun";
@@ -27,6 +28,8 @@ export interface ConvertCliOptions {
   pack?: string;
   /** Pandoc バイナリ。 */
   pandoc?: string;
+  /** vault ルート（![[link]] 展開の探索範囲）。未指定時は入力 md のディレクトリ。 */
+  vaultRoot?: string;
   /** コマンドを表示するのみで実行しない。 */
   dryRun?: boolean;
 }
@@ -67,8 +70,12 @@ export async function convertMarkdownCli(options: ConvertCliOptions): Promise<Co
     : defaultOutputPath(inputPath, options.format ?? "pdf");
 
   // 本文を読み、正規化（GUI と同じパイプラインの CLI 版）して pandoc へ stdin で渡す。
+  // vaultRoot（既定は入力 md のディレクトリ）を ![[link]] 展開の探索範囲とする。
   const rawContent = await fs.readFile(inputPath, "utf8");
-  const normalized = normalizeForCli(rawContent);
+  const vaultRoot = options.vaultRoot ? path.resolve(options.vaultRoot) : path.dirname(inputPath);
+  const vault = await makeFsVault(vaultRoot);
+  const sourcePath = path.relative(vaultRoot, inputPath) || path.basename(inputPath);
+  const normalized = await normalizeForCli(rawContent, vault, sourcePath);
   const content = normalized.content;
 
   const run = await runPandocConvert({

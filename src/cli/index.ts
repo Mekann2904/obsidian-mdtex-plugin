@@ -99,6 +99,7 @@ function dispatchPack(
       sample: flagString(flags, "sample"),
       output: flagString(flags, "output"),
       pandoc: flagString(flags, "pandoc"),
+      vaultRoot: flagString(flags, "vault-root"),
       keepArtifacts: flags["keep-artifacts"] === true,
       dryRun: flags["dry-run"] === true,
     }, opts.asJson);

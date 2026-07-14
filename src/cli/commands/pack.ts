@@ -13,6 +13,7 @@ export interface PackTestCliOptions {
   sample?: string;
   output?: string;
   pandoc?: string;
+  vaultRoot?: string;
   keepArtifacts: boolean;
   dryRun: boolean;
 }

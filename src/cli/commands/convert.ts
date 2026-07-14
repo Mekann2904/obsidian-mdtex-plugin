@@ -45,6 +45,7 @@ export async function cmdConvert(
     folder,
     pack: flagString(flags, "pack"),
     pandoc: flagString(flags, "pandoc"),
+    vaultRoot: flagString(flags, "vault-root"),
     dryRun: flags["dry-run"] === true,
   });
 

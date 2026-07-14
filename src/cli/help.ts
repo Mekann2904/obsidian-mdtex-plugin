@@ -67,6 +67,7 @@ Options:
   --folder <path>     テンプレートフォルダ（--pack 使用時、既定: MdTex Templates）
   --pack <name>       テンプレートパック名（<folder>/<pack>/defaults.yaml を使用）
   --pandoc <path>     Pandoc バイナリ（既定: pandoc）
+  --vault-root <path> ![[link]] 展開の探索範囲（既定: 入力 md のディレクトリ）
   --dry-run           コマンドを表示するのみ（実行しない）
   --json              構造化出力
 

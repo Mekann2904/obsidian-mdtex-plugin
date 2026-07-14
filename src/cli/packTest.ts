@@ -10,6 +10,7 @@ import * as os from "os";
 import * as path from "path";
 import { runCommand } from "../utils/processRunner";
 import { DEFAULTS_FILE_NAME } from "../services/templatePackMeta";
+import { makeFsVault } from "./fsVault";
 import { normalizeForCli } from "./normalize";
 import type { DuplicateLabel } from "../utils/crossrefLabels";
 import { runPandocConvert, type PandocRunResult } from "./pandocRun";
@@ -27,6 +28,8 @@ export interface PackTestOptions {
   output?: string;
   /** Pandoc バイナリ（指定無ければ PATH の pandoc）。 */
   pandoc?: string;
+  /** vault ルート（![[link]] 展開の探索範囲）。未指定時は sample.md のディレクトリ。 */
+  vaultRoot?: string;
   /** 中間 .tex をも保存する。 */
   keepArtifacts?: boolean;
   /** コマンドを表示するのみ（実行しない）。 */
@@ -77,8 +80,12 @@ export async function testPack(
   const outputPath = options.output ? path.resolve(options.output) : path.join(workDir, `${pack}.pdf`);
 
   // sample を読み、正規化（GUI と同じパイプラインの CLI 版）して pandoc へ stdin で渡す。
+  // vaultRoot（既定は sample.md のディレクトリ）を ![[link]] 展開の探索範囲とする。
   const rawSample = await access.readText(samplePath);
-  const normalized = normalizeForCli(rawSample ?? "");
+  const vaultRoot = options.vaultRoot ? path.resolve(options.vaultRoot) : path.dirname(samplePath);
+  const vault = await makeFsVault(vaultRoot);
+  const sourcePath = path.relative(vaultRoot, samplePath) || path.basename(samplePath);
+  const normalized = await normalizeForCli(rawSample ?? "", vault, sourcePath);
   const content = normalized.content;
 
   const run = await runPandocConvert({
