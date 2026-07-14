@@ -72,7 +72,7 @@ CLI バンドル（`dist/cli.js`）は obsidian / sampleTemplatePacks に一切�
 
 ### 検証状況
 
-- テスト: **457 passed**（純粋関数 + fs 統合テスト・doctor 診断・crossref 重複・CLI トランスクルージョン展開）
+- テスト: **458 passed**（純粋関数 + fs 統合テスト・doctor 診断・crossref 重複・CLI Obsidian 記法正規化）
 - lint / tsc / build:cli / build（プラグイン）: 全てクリーン
 - main.js 影響なし（依存ゼロ増・js-yaml 非使用で `_mdtex:` パーサは最小自前）
 
@@ -128,7 +128,8 @@ pandoc sample.md -d defaults.yaml -o out.pdf
     - ✅ crossref ラベル重複検出（`03e1cc9`）— normalizeForCli の戻り値を拡張し detectDuplicateLabels を統合。convert / pack test の結果に duplicateLabels を伝播
     - ✅ expandTransclusions の VaultLike 化（フェーズ2 step2-1・`749c450`）— app 依存を VaultLike（resolveLink / read）に抽象化し、transclusion.ts を GUI/CLI 共有の純粋モジュール化
     - ✅ fsVault（CLI 版）+ normalizeForCli 統合（フェーズ2 step2-2・`fb040e5`）— CLI で ![[link]] 展開が動く。--vault-root フラグ（既定=入力mdのディレクトリ）。方式W（ラベルプレフィックス）も CLI で動作
-    - 🟠 WikiLink 系（unwrapValidWikiLinks / replaceWikiLinksAndCodeAsync）— profile 依存（imageScale / searchDirectory）で VaultLike だけでは足りず ProfileLike 抽象が必要（別検証）
+    - ✅ WikiLink 系の VaultLike + ProfileLike 化（フェーズ2 step3a・`e6b1231`）— markdownTransforms.ts を obsidian 非依存に純粋化。getLinkTargetFile（linkUtils.ts）は統合し削除
+    - ✅ CLI で WikiLink アンラップ + 画像変換（フェーズ2 step3b・`5366942`）— normalizeForCli に unwrapValidWikiLinks + replaceWikiLinksAndCodeAsync を統合。--image-scale フラグ
     - 🟠 resolveDraftRequest（draft）— CLI に pandocExtraArgs / header 反映経路が無く別判断
 
 ### P3 以降（拡張）
