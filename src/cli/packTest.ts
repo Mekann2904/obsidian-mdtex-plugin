@@ -46,6 +46,8 @@ export interface PackTestResult extends PandocRunResult {
   texArtifact?: string;
   /** crossref ラベルの重複（normalizeForCli が検出）。観測情報。 */
   duplicateLabels?: DuplicateLabel[];
+  /** dry-run 時の正規化後本文。agent が正規化結果を観測する用。 */
+  normalizedContent?: string;
 }
 
 /**
@@ -80,13 +82,14 @@ export async function testPack(
   const workDir = path.join(os.tmpdir(), `mdtex-test-${pack}-${Date.now()}`);
   const outputPath = options.output ? path.resolve(options.output) : path.join(workDir, `${pack}.pdf`);
 
+  // vaultRoot は本文正規化とリソース解決で共有する。
+  const vaultRoot = options.vaultRoot ? path.resolve(options.vaultRoot) : path.dirname(samplePath);
   // sample を読み、正規化（GUI と同じパイプラインの CLI 版）して pandoc へ stdin で渡す。
-  // vaultRoot（既定は sample.md のディレクトリ）を ![[link]] 展開の探索範囲とする。
   const rawSample = await access.readText(samplePath);
   const normalized = await normalizeFileForCli({
     rawContent: rawSample ?? "",
     filePath: samplePath,
-    vaultRoot: options.vaultRoot,
+    vaultRoot,
     imageScale: options.imageScale,
   });
   const content = normalized.content;
@@ -96,6 +99,8 @@ export async function testPack(
     inputContent: content,
     defaultsPath,
     output: outputPath,
+    // 画像を workDir（隔離済み cwd）ではなく vaultRoot から解決する。
+    resourcePath: vaultRoot,
     pandoc: options.pandoc,
     dryRun: options.dryRun,
     cwd: workDir,
@@ -107,6 +112,7 @@ export async function testPack(
     sampleUsed: samplePath,
     ...run,
     duplicateLabels: normalized.duplicateLabels,
+    ...(options.dryRun ? { normalizedContent: content } : {}),
   };
 
   // keepArtifacts の .tex 生成も stdin で本文を渡す（共通コアと同じ本文経路）。

@@ -6,6 +6,7 @@
 // Related: src/cli/commands/convert.ts, src/cli/packTest.ts, src/cli/pandocRun.ts
 
 import * as fs from "fs/promises";
+import * as os from "os";
 import * as path from "path";
 import { DEFAULTS_FILE_NAME } from "../services/templatePackMeta";
 import { normalizeFileForCli } from "./normalize";
@@ -31,6 +32,9 @@ export interface ConvertCliOptions {
   vaultRoot?: string;
   /** 画像のスケール属性（例: width=0.8\\textwidth）。未指定時は属性省略。 */
   imageScale?: string;
+  /** 中間ファイル（.aux/.log 等）を隔離する作業ディレクトリ。未指定時は OS temp 直下の専用 dir。
+   *  未指定でも入力 md のディレクトリは汚さず、画像は --vault-root から解決する。 */
+  workDir?: string;
   /** コマンドを表示するのみで実行しない。 */
   dryRun?: boolean;
 }
@@ -44,6 +48,8 @@ export interface ConvertCliResult extends PandocRunResult {
   defaultsUsed?: string;
   /** crossref ラベルの重複（normalizeForCli が検出）。pandoc 実行可否に影響しない観測情報。 */
   duplicateLabels?: DuplicateLabel[];
+  /** dry-run 時の正規化後本文。agent が transclusion/WikiLink 等の正規化結果を観測する用。 */
+  normalizedContent?: string;
 }
 
 /**
@@ -70,32 +76,44 @@ export async function convertMarkdownCli(options: ConvertCliOptions): Promise<Co
     ? path.resolve(options.output)
     : defaultOutputPath(inputPath, options.format ?? "pdf");
 
+  // vaultRoot は本文正規化とリソース解決で共有する（二重で同じ値を解決させない）。
+  const vaultRoot = options.vaultRoot ? path.resolve(options.vaultRoot) : path.dirname(inputPath);
   // 本文を読み、正規化（GUI と同じパイプラインの CLI 版）して pandoc へ stdin で渡す。
-  // vaultRoot（既定は入力 md のディレクトリ）を ![[link]] 展開の探索範囲とする。
   const rawContent = await fs.readFile(inputPath, "utf8");
   const normalized = await normalizeFileForCli({
     rawContent,
     filePath: inputPath,
-    vaultRoot: options.vaultRoot,
+    vaultRoot,
     imageScale: options.imageScale,
   });
   const content = normalized.content;
 
+  // 中間ファイルを入力 md のディレクトリ（= vault）で汚さないよう、cwd を専用 workDir に隔離する。
+  // 画像は --resource-path 経由で vaultRoot から解決する（cwd に依存しない）。
+  const workDir = options.workDir ?? path.join(os.tmpdir(), `mdtex-convert-${Date.now()}`);
   const run = await runPandocConvert({
     input: inputPath,
     inputContent: content,
     defaultsPath,
     output: outputPath,
+    // --format 明示時は -t で defaults の to: を上書き（未指定時は defaults に任せる）。
+    writerFormat: options.format,
+    resourcePath: vaultRoot,
     pandoc: options.pandoc,
     dryRun: options.dryRun,
-    cwd: path.dirname(inputPath),
-    ensureDir: path.dirname(outputPath),
+    cwd: workDir,
+    ensureDir: workDir,
   });
 
   const base = defaultsPath
     ? { ...run, input: inputPath, defaultsUsed: defaultsPath }
     : { ...run, input: inputPath };
-  return { ...base, duplicateLabels: normalized.duplicateLabels };
+  // normalizedContent は dry-run 時のみ（agent が正規化結果を観測する用途。実行結果には含めない）。
+  return {
+    ...base,
+    duplicateLabels: normalized.duplicateLabels,
+    ...(options.dryRun ? { normalizedContent: content } : {}),
+  };
 }
 
 function resolveDefaultsPath(options: ConvertCliOptions): string | undefined {

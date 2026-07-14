@@ -76,7 +76,7 @@ describe("testPack", () => {
     expect(result.pack).toBe("Paper");
     expect(result.sampleUsed).toBe(sample);
     expect(result.output).toBe(path.join(vault, "out.pdf"));
-    expect(result.command).toBe(`pandoc -d ${defaults} -o ${path.join(vault, "out.pdf")} < ${sample}`);
+    expect(result.command).toBe(`pandoc -d ${defaults} --resource-path ${path.dirname(sample)} -o ${path.join(vault, "out.pdf")} < ${sample}`);
     expect(mockedRunCommand).not.toHaveBeenCalled();
   });
 
@@ -122,7 +122,7 @@ describe("testPack", () => {
     expect(mockedRunCommand).toHaveBeenCalledTimes(1);
     expect(mockedRunCommand).toHaveBeenCalledWith(
       "pandoc",
-      ["-d", defaults, "-o", path.join(vault, "out.pdf")],
+      ["-d", defaults, "--resource-path", path.join(vault, "Paper"), "-o", path.join(vault, "out.pdf")],
       expect.objectContaining({ cwd: expect.stringContaining("mdtex-test-Paper"), input: "# Hello\n" }),
     );
   });

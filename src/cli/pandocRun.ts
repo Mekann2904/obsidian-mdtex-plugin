@@ -32,6 +32,11 @@ export interface PandocRunParams {
   defaultsPath?: string;
   /** 出力ファイル。 */
   output: string;
+  /** 出力 writer 形式（pdf/latex/docx）。指定時は -t で defaults の to: を上書きする。 */
+  writerFormat?: string;
+  /** 画像等のリソース探索パス（通常 vaultRoot）。指定時は --resource-path を追加する。
+   *  cwd を作業用 temp に隔離しても、画像を vault から解決できるようにする。 */
+  resourcePath?: string;
   /** Pandoc バイナリ（既定: pandoc）。 */
   pandoc?: string;
   /** コマンドを表示するのみで実行しない。 */
@@ -50,8 +55,12 @@ export interface PandocRunParams {
 export async function runPandocConvert(params: PandocRunParams): Promise<PandocRunResult> {
   const pandocBin = params.pandoc ?? "pandoc";
   const baseArgs = params.defaultsPath ? ["-d", params.defaultsPath] : [];
+  // -t は -d の後に置き、defaults file の to: を上書きする（pandoc は CLI 引数を defaults より優先）。
+  const formatArgs = params.writerFormat ? ["-t", params.writerFormat] : [];
+  // 画像リソースを cwd に依存せず vaultRoot から解決する。cwd を作業 temp に隔離しても壊れない。
+  const resourceArgs = params.resourcePath ? ["--resource-path", params.resourcePath] : [];
   // 本文は常に stdin で渡す（input 引数は使わない）。GUI と同じ本文経路。
-  const args = [...baseArgs, "-o", params.output];
+  const args = [...baseArgs, ...formatArgs, ...resourceArgs, "-o", params.output];
   // dry-run 表示は stdin 実行と等価な shell 表現（< input）で、agent がコピペ実行可能にする。
   const command = `${[pandocBin, ...args].join(" ")} < ${params.input}`;
 

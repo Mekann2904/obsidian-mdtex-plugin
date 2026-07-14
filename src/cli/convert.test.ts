@@ -42,7 +42,7 @@ describe("convertMarkdownCli", () => {
     const result = await convertMarkdownCli({ input, defaults, output, dryRun: true });
 
     expect(result.status).toBe("dry-run");
-    expect(result.command).toBe(`pandoc -d ${defaults} -o ${output} < ${input}`);
+    expect(result.command).toBe(`pandoc -d ${defaults} --resource-path ${dir} -o ${output} < ${input}`);
     expect(result.output).toBe(output);
     expect(mockedRunCommand).not.toHaveBeenCalled();
   });
@@ -60,7 +60,7 @@ describe("convertMarkdownCli", () => {
     expect(result.status).toBe("dry-run");
     expect(result.defaultsUsed).toBe(defaults);
     expect(result.output).toBe(path.join(dir, "input.pdf"));
-    expect(result.command).toBe(`pandoc -d ${defaults} -o ${path.join(dir, "input.pdf")} < ${input}`);
+    expect(result.command).toBe(`pandoc -d ${defaults} --resource-path ${dir} -o ${path.join(dir, "input.pdf")} < ${input}`);
   });
 
   it("入力ファイルが無ければ error で pandoc を実行しない", async () => {
@@ -80,8 +80,8 @@ describe("convertMarkdownCli", () => {
     const result = await convertMarkdownCli({ input, output, pandoc: "pandoc-custom" });
 
     expect(result.status).toBe("ok");
-    expect(mockedRunCommand).toHaveBeenCalledWith("pandoc-custom", ["-o", output], {
-      cwd: dir,
+    expect(mockedRunCommand).toHaveBeenCalledWith("pandoc-custom", ["--resource-path", dir, "-o", output], {
+      cwd: expect.any(String),
       input: "# Hello\n",
     });
   });
@@ -123,8 +123,8 @@ describe("convertMarkdownCli", () => {
 
     await convertMarkdownCli({ input, output });
 
-    expect(mockedRunCommand).toHaveBeenCalledWith("pandoc", ["-o", output], {
-      cwd: dir,
+    expect(mockedRunCommand).toHaveBeenCalledWith("pandoc", ["--resource-path", dir, "-o", output], {
+      cwd: expect.any(String),
       input: "before  after\n",
     });
   });
@@ -149,5 +149,46 @@ describe("convertMarkdownCli", () => {
     const result = await convertMarkdownCli({ input, output });
 
     expect(result.duplicateLabels).toEqual([]);
+  });
+
+  it("dry-run は normalize 後本文を result.normalizedContent に含む", async () => {
+    const input = path.join(dir, "input.md");
+    const output = path.join(dir, "out.pdf");
+    await fs.writeFile(input, "before %% hidden %% after\n");
+
+    const result = await convertMarkdownCli({ input, output, dryRun: true });
+
+    expect(result.status).toBe("dry-run");
+    expect(result.normalizedContent).toBe("before  after\n");
+  });
+
+  it("--format 指定は -t で defaults の to: を上書きする", async () => {
+    const input = path.join(dir, "input.md");
+    const output = path.join(dir, "out.tex");
+    await fs.writeFile(input, "# Hello\n");
+    mockedRunCommand.mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+
+    await convertMarkdownCli({ input, output, format: "latex" });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith(
+      "pandoc",
+      ["-t", "latex", "--resource-path", dir, "-o", output],
+      expect.objectContaining({ input: "# Hello\n" }),
+    );
+  });
+
+  it("--workdir 指定は cwd を workDir に隔離する", async () => {
+    const input = path.join(dir, "input.md");
+    const output = path.join(dir, "out.pdf");
+    const workDir = path.join(dir, "work");
+    await fs.writeFile(input, "# Hello\n");
+    mockedRunCommand.mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+
+    await convertMarkdownCli({ input, output, workDir });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith("pandoc", ["--resource-path", dir, "-o", output], {
+      cwd: workDir,
+      input: "# Hello\n",
+    });
   });
 });

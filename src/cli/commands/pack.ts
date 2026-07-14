@@ -110,6 +110,10 @@ export async function cmdPackTest(
     process.stdout.write(JSON.stringify(result, null, 2) + "\n");
   } else if (result.status === "dry-run") {
     process.stdout.write(`(dry-run) ${result.command}\n`);
+    if (result.normalizedContent !== undefined) {
+      process.stdout.write(`--- normalized content (${result.normalizedContent.length} bytes) ---\n`);
+      process.stdout.write(result.normalizedContent + "\n");
+    }
   } else {
     process.stdout.write(`パック: ${pack}\n`);
     process.stdout.write(`サンプル: ${result.sampleUsed}\n`);

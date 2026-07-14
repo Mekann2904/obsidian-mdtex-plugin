@@ -47,6 +47,7 @@ export async function cmdConvert(
     pandoc: flagString(flags, "pandoc"),
     vaultRoot: flagString(flags, "vault-root"),
     imageScale: flagString(flags, "image-scale"),
+    workDir: flagString(flags, "workdir"),
     dryRun: flags["dry-run"] === true,
   });
 
@@ -55,6 +56,10 @@ export async function cmdConvert(
   } else {
     if (result.status === "dry-run") {
       process.stdout.write(`(dry-run) ${result.command}\n`);
+      if (result.normalizedContent !== undefined) {
+        process.stdout.write(`--- normalized content (${result.normalizedContent.length} bytes) ---\n`);
+        process.stdout.write(result.normalizedContent + "\n");
+      }
     } else if (result.status === "ok") {
       process.stdout.write(`✓ 変換成功: ${result.output}\n`);
     } else {
