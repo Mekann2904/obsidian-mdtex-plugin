@@ -285,7 +285,7 @@ mdtex pack --help
 mdtex pack validate --help
 ```
 
-各コマンドの詳細は `mdtex <command> --help` を参照。CLI の設計方針とロードマップは [plan.md](./plan.md) を参照。
+各コマンドの詳細は `mdtex <command> --help` を参照。
 
 ---
 
