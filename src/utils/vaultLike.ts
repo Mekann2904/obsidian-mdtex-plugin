@@ -22,3 +22,15 @@ export interface VaultLike {
   resolveLink(linkPath: string, sourcePath: string): { path: string; extension: string } | null;
   read(filePath: string): Promise<string | null>;
 }
+
+/**
+ * 画像変換（replaceWikiLinksAndCodeAsync）が profile 経由で参照する設定の抽象。
+ * ProfileSettings（GUI）は構造的型付けでこれを満たす。CLI は最小オブジェクトを渡す。
+ *
+ * - imageScale: 画像の width 属性（例: "width=0.8\\textwidth"）。空なら属性省略。
+ * - searchDirectory: リンク解決の検索範囲をこのディレクトリ配下に制限。未指定は全 vault。
+ */
+export interface ProfileLike {
+  imageScale?: string;
+  searchDirectory?: string;
+}

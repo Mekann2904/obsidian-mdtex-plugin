@@ -80,6 +80,7 @@ export interface NormalizeResult {
  */
 export async function normalizeMarkdown(req: NormalizeRequest): Promise<NormalizeResult> {
   const { app, sourcePath, profile, paths } = req;
+  const vault = makeObsidianVault(app);
   const cache = new Map<string, string>();
   const cleanupDirs: string[] = [];
 
@@ -98,7 +99,7 @@ export async function normalizeMarkdown(req: NormalizeRequest): Promise<Normaliz
   );
 
   // 3. トランスクルージョン (![[...]]) を先に展開（キャッシュを後段と共有）。
-  content = await expandTransclusions(content, makeObsidianVault(app), sourcePath, cache);
+  content = await expandTransclusions(content, vault, sourcePath, cache);
 
   // 4. Mermaid コードブロックを一時 PNG 化し、PDF でも確実に図が描かれるようにする
   //    （実験的機能が有効な場合のみ）。
@@ -141,10 +142,10 @@ export async function normalizeMarkdown(req: NormalizeRequest): Promise<Normaliz
   }
 
   // 6. 有効な WikiLink のみ [[ ]] を外してテキストにする。
-  content = unwrapValidWikiLinks(content, app, sourcePath);
+  content = unwrapValidWikiLinks(content, vault, sourcePath);
 
   // 7. WikiLink / 埋め込み画像を標準 Markdown 記法へ。
-  content = await replaceWikiLinksAndCodeAsync(content, app, profile, sourcePath);
+  content = await replaceWikiLinksAndCodeAsync(content, vault, profile, sourcePath);
 
   // 8. crossref ラベルの重複検出（方式W）。メイン文書内のユーザーミス、および同一ファイル
   //    複数回埋め込みによる crossref 制約衝突を、Pandoc 実行前に検出する（ADR-005 関連）。

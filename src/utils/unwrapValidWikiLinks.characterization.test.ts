@@ -6,33 +6,39 @@
 // Related: src/utils/markdownTransforms.ts, docs/design-decisions.md (ADR-005/006), CONTEXT.md
 
 import { describe, it, expect } from "vitest";
-import { App, TFile } from "obsidian";
+import type { VaultLike } from "./vaultLike";
 import { unwrapValidWikiLinks } from "./markdownTransforms";
 
-// テスト用スタブ App: 指定したファイルパス群を「実在」として解決する。
+// テスト用スタブ VaultLike: 指定したファイルパス群を「実在」として解決する。
 // Obsidian 本物の getFirstLinkpathDest は拡張子なしのベース名（"note"）でも
 // "note.md" を解決するため、スタブも同様に「ベース名が先頭から一致するファイル」を許容する。
-function makeStubApp(existingPaths: string[]): App {
+// 変数名 app は呼び出し側の互換のため残す（実体は VaultLike）。
+function makeStubApp(existingPaths: string[]): VaultLike {
   const lower = existingPaths.map(p => p.toLowerCase());
-  const app = new App();
-  (app.metadataCache as unknown as { getFirstLinkpathDest: unknown }).getFirstLinkpathDest = (
-    linktext: string,
-  ) => {
-    const pathPart = linktext.split("|")[0].split("#")[0].split("^")[0].trim();
-    if (!pathPart) return null;
-    const lp = pathPart.toLowerCase();
-    // 完全パス優先
-    if (lower.includes(lp)) return new TFile(pathPart);
-    // ベース名先頭一致: "note" が "note.md" にマッチするように
-    const basename = lp.split("/").pop()!;
-    const hit = lower.find(p => {
-      const fileBase = p.split("/").pop()!;
-      return fileBase === basename || fileBase.startsWith(basename + ".");
-    });
-    if (hit) return new TFile(hit);
-    return null;
+  const extOf = (p: string) => {
+    const dot = p.lastIndexOf(".");
+    return dot >= 0 ? p.slice(dot + 1) : "";
   };
-  return app;
+  return {
+    resolveLink(linktext: string) {
+      const pathPart = linktext.split("|")[0].split("#")[0].split("^")[0].trim();
+      if (!pathPart) return null;
+      const lp = pathPart.toLowerCase();
+      // 完全パス優先
+      if (lower.includes(lp)) return { path: pathPart, extension: extOf(pathPart) };
+      // ベース名先頭一致: "note" が "note.md" にマッチするように
+      const basename = lp.split("/").pop()!;
+      const hit = lower.find(p => {
+        const fileBase = p.split("/").pop()!;
+        return fileBase === basename || fileBase.startsWith(basename + ".");
+      });
+      if (hit) return { path: hit, extension: extOf(hit) };
+      return null;
+    },
+    async read() {
+      return null;
+    },
+  };
 }
 
 describe("unwrapValidWikiLinks: characterization（現状振る舞いの録音）", () => {

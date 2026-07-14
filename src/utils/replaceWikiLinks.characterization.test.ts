@@ -7,7 +7,7 @@
 // Related: src/utils/markdownTransforms.ts, docs/design-decisions.md (ADR-005/006), CONTEXT.md
 
 import { describe, it, expect } from "vitest";
-import { App, TFile, FileSystemAdapter } from "obsidian";
+import type { VaultLike } from "./vaultLike";
 import { DEFAULT_PROFILE } from "../MdTexPluginSettings";
 import { replaceWikiLinksAndCodeAsync } from "./markdownTransforms";
 import type { ProfileSettings } from "../MdTexPluginSettings";
@@ -18,71 +18,35 @@ interface StubFile {
   content?: string;   // .md の場合の中身
 }
 
-// vaultBase を固定し、ファイル解決・読み込みをスタブ化する。
-// adapter.getFullPath で vaultBase + path を返し、resolveLinkFile の3段階解決
-// （getFirstLinkpathDest → getAbstractFileByPath → basename マッチ）を模倣する。
-function makeStubApp(files: StubFile[], vaultBase = "/vault"): App {
+// expandTransclusions と同じく、replaceWikiLinksAndCodeAsync は obsidian 非依存（VaultLike 注入）。
+// stub は VaultLike を返す。変数名 app は呼び出し側の互換のため残す（実体は VaultLike）。
+function makeStubApp(files: StubFile[], _vaultBase = "/vault"): VaultLike {
   const byPath = new Map(files.map(f => [f.path, f]));
   const byBasenameLower = new Map<string, StubFile>();
   for (const f of files) {
     byBasenameLower.set(f.path.split("/").pop()!.toLowerCase(), f);
   }
-
-  const app = new App();
-
-  // resolveLinkFile の第1段階: getFirstLinkpathDest
-  (app.metadataCache as unknown as { getFirstLinkpathDest: unknown }).getFirstLinkpathDest = (
-    linktext: string,
-  ) => {
-    const bare = linktext.split("|")[0].split("#")[0].split("^")[0].trim();
-    const lp = bare.toLowerCase();
-    // 完全パス優先、次に basename（拡張子なし許容: "img" が "img.png" にマッチ）
-    const hit =
-      byPath.get(bare) ??
-      (() => {
-        const basename = lp.split("/").pop()!;
-        return [...byBasenameLower.values()].find(f => {
-          const fb = f.path.split("/").pop()!.toLowerCase();
-          return fb === basename || fb.startsWith(basename + ".");
-        });
-      })();
-    if (!hit) return null;
-    const tf = new TFile(hit.path);
-    (tf as unknown as { extension: string }).extension = hit.extension;
-    return tf;
+  return {
+    resolveLink(linktext: string) {
+      const bare = linktext.split("|")[0].split("#")[0].split("^")[0].trim();
+      const lp = bare.toLowerCase();
+      // 完全パス優先、次に basename（拡張子なし許容: "img" が "img.png" にマッチ）
+      const hit =
+        byPath.get(bare) ??
+        (() => {
+          const basename = lp.split("/").pop()!;
+          return [...byBasenameLower.values()].find(f => {
+            const fb = f.path.split("/").pop()!.toLowerCase();
+            return fb === basename || fb.startsWith(basename + ".");
+          });
+        })();
+      if (!hit) return null;
+      return { path: hit.path, extension: hit.extension };
+    },
+    async read() {
+      return null;
+    },
   };
-
-  // resolveLinkFile の第2段階: getAbstractFileByPath（完全パス）
-  (app.vault as unknown as { getAbstractFileByPath: unknown }).getAbstractFileByPath = (
-    p: string,
-  ) => {
-    const hit = byPath.get(p);
-    if (!hit) return null;
-    const tf = new TFile(hit.path);
-    (tf as unknown as { extension: string }).extension = hit.extension;
-    return tf;
-  };
-
-  // resolveLinkFile の第3段階: getFiles（basename マッチ）
-  (app.vault as unknown as { getFiles: unknown }).getFiles = () => {
-    return files.map(f => {
-      const tf = new TFile(f.path);
-      (tf as unknown as { extension: string }).extension = f.extension;
-      return tf;
-    });
-  };
-
-  // readFileCached: vault.read
-  (app.vault as unknown as { read: unknown }).read = async (file: TFile) => {
-    const stub = byPath.get(file.path);
-    if (!stub || stub.content === undefined) throw new Error(`stub miss: ${file.path}`);
-    return stub.content;
-  };
-
-  // adapter: FileSystemAdapter（getBasePath / getFullPath）
-  (app.vault as unknown as { adapter: unknown }).adapter = new FileSystemAdapter(vaultBase);
-
-  return app;
 }
 
 function profile(overrides: Partial<ProfileSettings> = {}): ProfileSettings {
