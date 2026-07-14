@@ -66,6 +66,7 @@ export async function cmdConvert(
     } else {
       process.stderr.write(`✗ ${result.error}\n`);
       if (result.stderrTail) process.stderr.write(`--- pandoc stderr ---\n${result.stderrTail}\n`);
+      process.stderr.write(`💡 詳細調査: \`--format latex --output <out.tex>\` で .tex を取得し、stderr の行番号(l.NN)を精査してください\n`);
     }
     // 重複ラベル警告は status 行の後に（観測情報・pandoc 実行可否とは独立）。
     for (const d of result.duplicateLabels ?? []) {

@@ -124,6 +124,7 @@ export async function cmdPackTest(
     } else {
       process.stderr.write(`✗ ${result.error}\n`);
       if (result.stderrTail) process.stderr.write(`--- pandoc stderr ---\n${result.stderrTail}\n`);
+      process.stderr.write(`💡 詳細調査: \`mdtex convert <file> --pack <P> --format latex --output <out.tex>\` で .tex を取得し、行番号(l.NN)を精査してください\n`);
     }
     // 重複ラベル警告（観測情報）。
     for (const d of result.duplicateLabels ?? []) {

@@ -79,7 +79,7 @@ export async function runPandocConvert(params: PandocRunParams): Promise<PandocR
         command,
         output: params.output,
         error: `pandoc が終了コード ${res.exitCode} で失敗しました`,
-        stderrTail: res.stderr.slice(-2000),
+        stderrTail: res.stderr.slice(-4000),
       };
     }
     return { status: "ok", command, output: params.output };
