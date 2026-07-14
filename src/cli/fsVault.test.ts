@@ -72,4 +72,36 @@ describe("makeFsVault", () => {
     const vault = await makeFsVault(dir);
     expect(vault.resolveLink("sub.md", "main.md")?.path).toBe("sub.md");
   });
+
+  // --- sourcePath 相対解決（Obsidian の getFirstLinkpathDest 挙動の近似）---
+
+  it("sourcePath 相対で同階層のノートを優先する（大域 shortest-path より優先）", async () => {
+    // root の sub.md（depth 1）より、埋め込み元と同階層の folder/sub.md を優先
+    await write("sub.md", "shallow but unrelated");
+    await write("folder/main.md", "main");
+    await write("folder/sub.md", "sibling");
+    const vault = await makeFsVault(dir);
+    expect(vault.resolveLink("sub", "folder/main.md")?.path).toBe("folder/sub.md");
+  });
+
+  it("./ 明示的相対リンクを解決する", async () => {
+    await write("folder/main.md", "m");
+    await write("folder/sub.md", "s");
+    const vault = await makeFsVault(dir);
+    expect(vault.resolveLink("./sub", "folder/main.md")?.path).toBe("folder/sub.md");
+  });
+
+  it(".. 親ディレクトリへの相対リンクを解決する", async () => {
+    await write("parent.md", "p");
+    await write("folder/main.md", "m");
+    const vault = await makeFsVault(dir);
+    expect(vault.resolveLink("../parent", "folder/main.md")?.path).toBe("parent.md");
+  });
+
+  it("vault ルートより上への .. は解決せずフォールバック", async () => {
+    // sourcePath がルート直下なら ../x は vault 外 → null → 大域マッチも無ければ null
+    await write("main.md", "m");
+    const vault = await makeFsVault(dir);
+    expect(vault.resolveLink("../outside", "main.md")).toBeNull();
+  });
 });

@@ -6,11 +6,13 @@
 // Related: src/utils/stripObsidianComments.ts, src/utils/crossrefLabels.ts,
 //          src/services/normalizeMarkdown.ts, src/cli/convert.ts, src/cli/packTest.ts
 
+import * as path from "path";
 import { stripObsidianComments } from "../utils/stripObsidianComments";
 import { detectDuplicateLabels, type DuplicateLabel } from "../utils/crossrefLabels";
 import { expandTransclusions } from "../utils/transclusion";
 import { unwrapValidWikiLinks, replaceWikiLinksAndCodeAsync } from "../utils/markdownTransforms";
 import type { VaultLike, ProfileLike } from "../utils/vaultLike";
+import { makeFsVault } from "./fsVault";
 
 /** CLI 正規化の結果。content は pandoc へ渡す本文、duplicateLabels は crossref 重複。 */
 export interface NormalizeForCliResult {
@@ -43,4 +45,24 @@ export async function normalizeForCli(
   content = await replaceWikiLinksAndCodeAsync(content, vault, profile, sourcePath);
   const duplicateLabels = detectDuplicateLabels(content);
   return { content, duplicateLabels };
+}
+
+/**
+ * ファイルベースの CLI 正規化入り口。convert / packTest の共通フロー（vaultRoot 解決 →
+ * fsVault 構築 → sourcePath（vault 相対）→ ProfileLike 組み立て → normalizeForCli）を集約し、
+ * 両呼び出し元の重複を除去する。normalizeForCli（純粋）の I/O つなぎ合わせ版。
+ */
+export interface NormalizeForCliFileOptions {
+  rawContent: string;
+  filePath: string;
+  vaultRoot?: string;
+  imageScale?: string;
+}
+
+export async function normalizeFileForCli(opts: NormalizeForCliFileOptions): Promise<NormalizeForCliResult> {
+  const vaultRoot = opts.vaultRoot ? path.resolve(opts.vaultRoot) : path.dirname(opts.filePath);
+  const vault = await makeFsVault(vaultRoot);
+  const sourcePath = path.relative(vaultRoot, opts.filePath) || path.basename(opts.filePath);
+  const profile: ProfileLike = opts.imageScale ? { imageScale: opts.imageScale } : {};
+  return normalizeForCli(opts.rawContent, vault, profile, sourcePath);
 }

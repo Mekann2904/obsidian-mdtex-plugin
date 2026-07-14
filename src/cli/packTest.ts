@@ -10,10 +10,8 @@ import * as os from "os";
 import * as path from "path";
 import { runCommand } from "../utils/processRunner";
 import { DEFAULTS_FILE_NAME } from "../services/templatePackMeta";
-import { makeFsVault } from "./fsVault";
-import { normalizeForCli } from "./normalize";
+import { normalizeFileForCli } from "./normalize";
 import type { DuplicateLabel } from "../utils/crossrefLabels";
-import type { ProfileLike } from "../utils/vaultLike";
 import { runPandocConvert, type PandocRunResult } from "./pandocRun";
 import type { PackFileAccess } from "../services/packAccess";
 
@@ -85,11 +83,12 @@ export async function testPack(
   // sample を読み、正規化（GUI と同じパイプラインの CLI 版）して pandoc へ stdin で渡す。
   // vaultRoot（既定は sample.md のディレクトリ）を ![[link]] 展開の探索範囲とする。
   const rawSample = await access.readText(samplePath);
-  const vaultRoot = options.vaultRoot ? path.resolve(options.vaultRoot) : path.dirname(samplePath);
-  const vault = await makeFsVault(vaultRoot);
-  const sourcePath = path.relative(vaultRoot, samplePath) || path.basename(samplePath);
-  const profile: ProfileLike = options.imageScale ? { imageScale: options.imageScale } : {};
-  const normalized = await normalizeForCli(rawSample ?? "", vault, profile, sourcePath);
+  const normalized = await normalizeFileForCli({
+    rawContent: rawSample ?? "",
+    filePath: samplePath,
+    vaultRoot: options.vaultRoot,
+    imageScale: options.imageScale,
+  });
   const content = normalized.content;
 
   const run = await runPandocConvert({

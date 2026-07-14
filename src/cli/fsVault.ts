@@ -1,7 +1,7 @@
 // File: src/cli/fsVault.ts
 // Purpose: VaultLike の CLI（fs）実装。フォルダを再帰スキャンしてファイル index を構築し、
-//          resolveLink（拡張子省略・shortest-path）と read で Obsidian の vault アクセスを
-//          エミュレートする。expandTransclusions を CLI から使うための adapter。
+//          resolveLink（sourcePath 相対・拡張子省略・shortest-path）と read で Obsidian の
+//          vault アクセスをエミュレートする。expandTransclusions を CLI から使うための adapter。
 // Reason: Step1（749c450）で expandTransclusions は VaultLike で obsidian 非依存になった。
 //          CLI で ![[link]] 展開を動かすには、VaultLike の fs 実装が必要。プロトタイプ
 //          （src/cli/prototype/NOTES.md）で検証した resolveLink の境界（拡張子省略・
@@ -16,8 +16,9 @@ import type { VaultLike } from "../utils/vaultLike";
  * rootDir を vault ルートとする fs 版 VaultLike を構築する。
  *
  * 起動時に rootDir を再帰スキャンしてファイル一覧（vault 相対・/ 区切り）を index 化する。
- * resolveLink はこの index から拡張子省略・shortest-path で候補を探す（Obsidian の
- * getFirstLinkpathDest の簡易再現）。read は index の相対パスを rootDir 付きで読む。
+ * resolveLink は埋め込み元 sourcePath のディレクトリを基準に相対解決を試みてから、
+ * 大域の拡張子省略 + shortest-path で候補を探す（Obsidian の getFirstLinkpathDest の近似）。
+ * read は index の相対パスを rootDir 付きで読む。
  *
  * 注意: ファイル追加・削除後は index が更新されない（構築時スナップショット）。CLI の
  * 1回実行（convert / pack test）では問題ない。常駐プロセスで使う場合は再構築が必要。
@@ -27,8 +28,12 @@ export async function makeFsVault(rootDir: string): Promise<VaultLike> {
   const fileSet = new Set(files);
 
   return {
-    resolveLink(linkPath, _sourcePath) {
-      // sourcePath からの相対解決は将来拡張。現状は basename + shortest-path。
+    resolveLink(linkPath, sourcePath) {
+      // 1. 埋め込み元ファイルのディレクトリを基準に相対解決（Obsidian の
+      //    getFirstLinkpathDest 挙動に近づける）。同階層のノートを大域 shortest-path より優先。
+      const relative = resolveRelative(linkPath, sourcePath, fileSet);
+      if (relative) return { path: relative, extension: extensionOf(relative) };
+      // 2. 大域 basename + shortest-path（フォールバック）。
       const candidates = files.filter(p => matchesLink(p, linkPath));
       if (candidates.length === 0) return null;
       // shortest-path 一意性: パス階層が浅い順 → 同階層は辞書順で安定。
@@ -47,6 +52,23 @@ export async function makeFsVault(rootDir: string): Promise<VaultLike> {
       }
     },
   };
+}
+
+/**
+ * 埋め込み元 sourcePath のディレクトリを基準に linkPath を解決する（Obsidian の相対解決の近似）。
+ * linkPath と linkPath+".md" を sourcePath の親ディレクトリに結合し ./ と .. を正規化して実在確認。
+ * vault ルートより上（.. で脱出）や sourcePath 無しは null（大域フォールバックへ）。
+ */
+function resolveRelative(linkPath: string, sourcePath: string, fileSet: Set<string>): string | null {
+  if (!sourcePath) return null;
+  const slash = sourcePath.lastIndexOf("/");
+  const dir = slash >= 0 ? sourcePath.slice(0, slash) : "";
+  for (const candidate of [linkPath, linkPath + ".md"]) {
+    const joined = dir ? dir + "/" + candidate : candidate;
+    const norm = path.posix.normalize(joined);
+    if (norm && !norm.startsWith("..") && fileSet.has(norm)) return norm;
+  }
+  return null;
 }
 
 /** ファイルパス（vault 相対）が linkPath（拡張子省略可）に一致するか。 */
