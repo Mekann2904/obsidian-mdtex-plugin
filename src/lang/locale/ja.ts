@@ -226,6 +226,12 @@ const ja: Record<TranslationKeys, string> = {
   modal_note: "LaTeX のみ入力してください。YAML は自動付与されます。",
   modal_cancel: "キャンセル",
   modal_save: "保存",
+
+  heading_cli: "mdtex CLI（コマンドライン）",
+  setting_cli_setup_name: "CLI をセットアップ",
+  setting_cli_setup_desc:
+    "プラグイン同梱の cli.js を ~/.local/bin/mdtex にリンクし、`mdtex` コマンドを PATH に登録します（LLM エージェント・CI・スクリプトから GUI なしで MdTex を実行する経路）。セットアップ後、新しいターミナルで有効になります。",
+  setting_cli_setup_button: "セットアップ",
 };
 
 export default ja;

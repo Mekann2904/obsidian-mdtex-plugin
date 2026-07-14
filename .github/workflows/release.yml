@@ -38,6 +38,10 @@ jobs:
           cp main.js ./obsidian-mdtex-plugin/
           cp manifest.json ./obsidian-mdtex-plugin/
           cp styles.css ./obsidian-mdtex-plugin/
+          # CLI（dist/cli.js）を同梱し、プラグイン設定タブのワンクリックセットアップで
+          # ~/.local/bin/mdtex にリンクできるようにする（cli-for-agents 配布）。
+          cp dist/cli.js ./obsidian-mdtex-plugin/cli.js
+          chmod +x ./obsidian-mdtex-plugin/cli.js
           zip -r obsidian-mdtex-plugin.zip obsidian-mdtex-plugin/
 
       - name: Create release

@@ -223,6 +223,12 @@ const en = {
   modal_note: "Enter pure LaTeX only. YAML will be injected automatically.",
   modal_cancel: "Cancel",
   modal_save: "Save",
+
+  heading_cli: "mdtex CLI (Command Line)",
+  setting_cli_setup_name: "Set up CLI",
+  setting_cli_setup_desc:
+    "Create a `mdtex` command on your PATH (symlink to ~/.local/bin/mdtex). Enables LLM agents / CI / scripts to run MdTex without the GUI. Requires a new terminal after setup.",
+  setting_cli_setup_button: "Set up",
 } as const;
 
 export type TranslationKeys = keyof typeof en;

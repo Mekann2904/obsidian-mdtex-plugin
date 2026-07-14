@@ -27,6 +27,7 @@ import {
   type DiscoveredBinary,
 } from "./utils/binDiscover";
 import { renderTemplatePackInfoPanel } from "./settings/templatePackPanel";
+import { setupCli } from "./services/cliSetup";
 import { PreambleModal } from "./settings/PreambleModal";
 
 /**
@@ -593,6 +594,21 @@ export class PandocPluginSettingTab extends PluginSettingTab {
       .setDesc(t("setting_enable_mermaid_desc"))
       .addToggle(toggle =>
         toggle.setValue(settings.enableExperimentalMermaid).onChange(this.bindField(settings, "enableExperimentalMermaid")),
+      );
+
+    // =================================================================
+    // mdtex CLI（コマンドライン・エージェント経路）
+    // =================================================================
+    new Setting(containerEl).setName(t("heading_cli")).setHeading();
+    new Setting(containerEl)
+      .setName(t("setting_cli_setup_name"))
+      .setDesc(t("setting_cli_setup_desc"))
+      .addButton(button =>
+        button.setButtonText(t("setting_cli_setup_button")).onClick(async () => {
+          const cliPath = `${this.plugin.manifest.dir}/cli.js`;
+          const result = await setupCli(cliPath);
+          new Notice(result.message, result.ok ? 8000 : 12000);
+        }),
       );
   }
 
