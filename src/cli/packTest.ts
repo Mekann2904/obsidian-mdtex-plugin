@@ -13,6 +13,7 @@ import { DEFAULTS_FILE_NAME } from "../services/templatePackMeta";
 import { makeFsVault } from "./fsVault";
 import { normalizeForCli } from "./normalize";
 import type { DuplicateLabel } from "../utils/crossrefLabels";
+import type { ProfileLike } from "../utils/vaultLike";
 import { runPandocConvert, type PandocRunResult } from "./pandocRun";
 import type { PackFileAccess } from "../services/packAccess";
 
@@ -30,6 +31,8 @@ export interface PackTestOptions {
   pandoc?: string;
   /** vault ルート（![[link]] 展開の探索範囲）。未指定時は sample.md のディレクトリ。 */
   vaultRoot?: string;
+  /** 画像のスケール属性（例: width=0.8\\textwidth）。未指定時は属性省略。 */
+  imageScale?: string;
   /** 中間 .tex をも保存する。 */
   keepArtifacts?: boolean;
   /** コマンドを表示するのみ（実行しない）。 */
@@ -85,7 +88,8 @@ export async function testPack(
   const vaultRoot = options.vaultRoot ? path.resolve(options.vaultRoot) : path.dirname(samplePath);
   const vault = await makeFsVault(vaultRoot);
   const sourcePath = path.relative(vaultRoot, samplePath) || path.basename(samplePath);
-  const normalized = await normalizeForCli(rawSample ?? "", vault, sourcePath);
+  const profile: ProfileLike = options.imageScale ? { imageScale: options.imageScale } : {};
+  const normalized = await normalizeForCli(rawSample ?? "", vault, profile, sourcePath);
   const content = normalized.content;
 
   const run = await runPandocConvert({

@@ -46,6 +46,7 @@ export async function cmdConvert(
     pack: flagString(flags, "pack"),
     pandoc: flagString(flags, "pandoc"),
     vaultRoot: flagString(flags, "vault-root"),
+    imageScale: flagString(flags, "image-scale"),
     dryRun: flags["dry-run"] === true,
   });
 

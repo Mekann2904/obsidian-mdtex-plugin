@@ -11,6 +11,7 @@ import { DEFAULTS_FILE_NAME } from "../services/templatePackMeta";
 import { makeFsVault } from "./fsVault";
 import { normalizeForCli } from "./normalize";
 import type { DuplicateLabel } from "../utils/crossrefLabels";
+import type { ProfileLike } from "../utils/vaultLike";
 import { runPandocConvert, type PandocRunResult } from "./pandocRun";
 
 export interface ConvertCliOptions {
@@ -30,6 +31,8 @@ export interface ConvertCliOptions {
   pandoc?: string;
   /** vault ルート（![[link]] 展開の探索範囲）。未指定時は入力 md のディレクトリ。 */
   vaultRoot?: string;
+  /** 画像のスケール属性（例: width=0.8\\textwidth）。未指定時は属性省略。 */
+  imageScale?: string;
   /** コマンドを表示するのみで実行しない。 */
   dryRun?: boolean;
 }
@@ -75,7 +78,8 @@ export async function convertMarkdownCli(options: ConvertCliOptions): Promise<Co
   const vaultRoot = options.vaultRoot ? path.resolve(options.vaultRoot) : path.dirname(inputPath);
   const vault = await makeFsVault(vaultRoot);
   const sourcePath = path.relative(vaultRoot, inputPath) || path.basename(inputPath);
-  const normalized = await normalizeForCli(rawContent, vault, sourcePath);
+  const profile: ProfileLike = options.imageScale ? { imageScale: options.imageScale } : {};
+  const normalized = await normalizeForCli(rawContent, vault, profile, sourcePath);
   const content = normalized.content;
 
   const run = await runPandocConvert({

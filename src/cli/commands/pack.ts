@@ -14,6 +14,7 @@ export interface PackTestCliOptions {
   output?: string;
   pandoc?: string;
   vaultRoot?: string;
+  imageScale?: string;
   keepArtifacts: boolean;
   dryRun: boolean;
 }
