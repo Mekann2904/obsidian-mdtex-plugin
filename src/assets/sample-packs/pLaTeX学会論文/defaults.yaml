@@ -1,0 +1,61 @@
+# pLaTeX 専用クラス（ipsj 等）用テンプレートパック
+# LuaLaTeX で動くクラス（ltjsarticle / ltjtarticle / 情報系論文風）ではなく、
+# pLaTeX/upLaTeX 専用のクラス（情報処理学会 ipsj / jeconomy / その他 .cls 配布クラス）を
+# 使いたい場合の土台。Pandoc のデフォルトラテンプレートがロードする unicode-math 等
+# （pTeX 非互換）を自前テンプレートで全除外し、pLaTeX + dvipdfmx で組版する。
+#
+# 【必須】使うクラスの .cls をこのフォルダに配置:
+#   情報処理学会 ipsj の場合: https://www.ipsj.or.jp/journal/submit/style.html
+#     から ipsj.cls をダウンロードしてこのフォルダへ（参考文献を出すなら bst も）。
+#   MdTex は defaults 方式でこのフォルダを TEXINPUTS / BIBINPUTS / BSTINPUTS に
+#   自動追加する（ADR-009）ので、同じフォルダに置けば LaTeX/bibtex が発見する。
+#
+# 【必須】PDF エンジン設定:
+#   この defaults.yaml の `pdf-engine: latexmk` と `pdf-engine-opts:` が使われる。
+#   MdTex は defaults 方式では `--pdf-engine` / `--pdf-engine-opt` をコマンドラインで
+#   上書きしないため、テンプレートパック側の指定がそのまま有効になる。
+#   upLaTeX 専用クラスなら下の `-latex=platex` を `-latex=uplatex` に変更する。
+
+# --- MdTex パックメタ（Pandoc は未知キーを無視・MdTex だけが読む）---
+# 設定画面のパック選択時に表示される説明・前提・推奨設定。書き方は SKILL.md 参照。
+from: markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes
+to: pdf
+
+# pLaTeX 専用クラスは dvi 経由 PDF が必要。LuaLaTeX では Pandoc 既定の unicode-math /
+# fontspec と衝突する（! Package unicode-math Error: Cannot be run with uptex!）。
+pdf-engine: latexmk
+pdf-engine-opts:
+  - -latex=platex
+  - -pdfdvi
+
+standalone: true
+template: ${.}/template.tex
+include-in-header: ${.}/preamble.tex
+
+# twocolumn クラスでは Pandoc 標準の longtable が停止する（! longtable not in 1-column mode）。
+# simple-table.lua が表を table + tabular に変換する。
+#
+# sanitize-images.lua は画像ファイル名のスペース/特殊文字を sanitize する。pLaTeX +
+# dvipdfmx 経路では graphicx 起動の extractbb がスペース入りファイル名で失敗する
+# （no BoundingBox）。Obsidian の「Pasted image …」対策。
+#
+# code-blocks.lua はキャプション付きコードブロックの2重キャプション（codelisting +
+# lstlisting[caption]）を解消し、twocolumn でのキャプション縦割れを防ぐ。
+filters:
+  - ${.}/sanitize-images.lua
+  - ${.}/simple-table.lua
+  - ${.}/code-blocks.lua
+
+resource-path:
+  - ${.}
+
+variables:
+  # ipsj を想定。他の pLaTeX 専用クラスに変える場合は documentclass と classoption を変更。
+  documentclass: ipsj
+  # ipsj の classoption（投稿先に合わせて切り替え）:
+  #   論文誌（和文）投稿:        submit
+  #   論文誌（英文）投稿:        submit,english
+  #   研究報告（予稿）:          submit,techrep
+  # 掲載用（最終版）は submit を外す。
+  # ※ 他クラス（jeconomy 等）を使う場合はそのクラスのオプションに合わせる。
+  classoption: submit

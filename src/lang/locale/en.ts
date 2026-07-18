@@ -38,7 +38,11 @@ const en = {
   notice_pandoc_more_logs: "Pandoc: additional logs are available in the console.",
   notice_generated: "Successfully generated: {0}",
   notice_pandoc_exit_code: "Error: Pandoc process exited with code {0}",
+  notice_duplicate_labels:
+    "Conversion aborted: duplicate cross-reference labels detected: {0}. Please make labels unique (fig:, tbl:, lst:, eq:, sec:).",
   notice_pandoc_launch_error: "Error launching Pandoc: {0}",
+  notice_defaults_file_required:
+    "Document template mode is 'Defaults file', but no defaults file path is set. Set the path in the profile settings.",
 
   notice_markdownlint_missing: "markdownlint-cli2 not found. Specify the path in settings.",
   notice_lint_ok: "Lint completed: no issues.",
@@ -79,6 +83,9 @@ const en = {
   option_latex: "LaTeX Source (.tex)",
   setting_pandoc_path_name: "Pandoc Path",
   setting_pandoc_path_desc: "Absolute path to the pandoc executable (e.g. /usr/local/bin/pandoc).",
+  setting_pandoc_path_not_found_dropdown: "(no pandoc found — enter path below)",
+  setting_pandoc_path_custom: "Custom (enter path)",
+  setting_pandoc_path_placeholder: "pandoc, or full path",
   setting_output_dir_name: "Output Directory",
   setting_output_dir_desc:
     "Directory where generated files will be saved. Leave empty for Vault root.",
@@ -90,7 +97,14 @@ const en = {
 
   heading_latex_engine: "LaTeX / PDF Engine Settings",
   setting_latex_engine_name: "LaTeX Engine",
-  setting_latex_engine_desc: "Engine used for PDF generation (e.g. lualatex, xelatex, pdflatex).",
+  setting_latex_engine_desc:
+    "Engine used for PDF generation. TeX engines are auto-discovered when you open this settings tab — pick from the dropdown, or type an engine name (lualatex) or a full path manually. Full paths are normalized to the basename and resolved via PATH, so they survive TeX Live upgrades.",
+  setting_latex_engine_custom: "Custom (enter path)",
+  setting_latex_engine_not_found_dropdown: "(no TeX engine found — enter path below)",
+  setting_latex_engine_placeholder: "lualatex, latexmk, or full path",
+  setting_pdf_engine_opts_name: "PDF Engine Extra Options",
+  setting_pdf_engine_opts_desc:
+    "Extra options passed to the PDF engine via --pdf-engine-opt (space-separated). Use for a latexmk sub-engine (e.g. -lualatex) and latexmk-specific options (e.g. -interaction=nonstopmode). Enables bibtex/biber round-trips for references. Effective for PDF output only.",
   setting_document_class_name: "Document Class",
   setting_document_class_desc: "LaTeX document class (e.g. ltjarticle, article, book).",
   setting_document_class_opts_name: "Document Class Options",
@@ -106,7 +120,48 @@ const en = {
   setting_image_scale_name: "Image Scale",
   setting_image_scale_desc: "Default image scaling (e.g. width=0.8\\textwidth).",
 
+  setting_template_mode_name: "Document Template Mode",
+  setting_template_mode_desc:
+    "Choose how the document frame is built. 'Built-in' injects the GUI settings as Pandoc variables; 'Defaults file' delegates the frame (document class, font size, preamble, etc.) to a Pandoc defaults file (-d).",
+  option_template_builtin: "Built-in (GUI settings)",
+  option_template_defaults: "Defaults file (advanced)",
+  setting_defaults_file_path_name: "Defaults File Path",
+  setting_defaults_file_path_desc:
+    "Path to the Pandoc defaults YAML file passed with -d. Required when the mode is 'Defaults file'. Use ${.} inside the file to reference its own directory, so a template bundle can live in one folder.",
+  placeholder_defaults_file_path: "/path/to/defaults.yaml",
+
+  setting_defaults_selection_name: "Defaults File Source",
+  setting_defaults_selection_desc:
+    "Choose from template packs in the template folder, or specify a path directly. To add a new template, place a folder containing defaults.yaml in the template folder and click 'Rescan'.",
+  option_defaults_selection_pack: "Select from template packs",
+  option_defaults_selection_custom: "Specify path directly",
+  setting_template_pack_name: "Template Pack",
+  setting_template_pack_desc:
+    "Choose from folders with defaults.yaml found in the template folder. After adding a folder, click 'Rescan' to refresh.",
+  setting_template_pack_empty:
+    "(No template packs found. Place a folder containing defaults.yaml in the template folder)",
+  setting_template_folder_name: "Template Folder",
+  setting_template_folder_desc:
+    "Vault folder that stores template packs. Default is 'MdTex Templates'. Place each template pack (a folder with defaults.yaml) directly under it. Synced via Obsidian Sync / Git and preserved across plugin updates.",
+  button_rescan_packs: "Rescan",
+  notice_packs_rescanned: "Found {0} template packs",
+  notice_packs_empty: "No template packs found. Check the template folder",
+  notice_sample_packs_installed: "Installed sample templates: {0}",
+  button_install_samples: "Reinstall samples",
+
+  setting_pack_info_engine: "Expected engine: {0}",
+  pack_requires_missing:
+    "This pack requires the following files in its folder: {0}",
+  pack_requires_hint: "See SKILL.md for placement instructions.",
+  button_open_skill_doc: "Open SKILL.md",
+  notice_skill_not_found: "SKILL.md not found in the template folder.",
+  button_apply_recommended: "Apply recommended settings",
+  notice_recommended_applied: "Applied recommended settings.",
+  notice_recommended_uptodate: "Recommended settings already match this profile.",
+
   heading_preamble: "LaTeX Preamble",
+  heading_document_frame: "Document layout (class, fonts, margins)",
+  heading_pdf_engine_advanced: "Advanced: PDF engine options",
   preamble_desc:
     "Enter pure LaTeX code only. YAML delimiters (---) and 'header-includes:' are injected automatically. This field supports full-width editing.",
   placeholder_preamble: "\\usepackage{...}",
@@ -133,19 +188,32 @@ const en = {
   setting_use_crossref_desc: "Enable pandoc-crossref filter.",
   setting_crossref_path_name: "Pandoc Crossref Path",
   setting_crossref_path_desc: "Path to pandoc-crossref executable.",
+  setting_crossref_path_not_found_dropdown: "(no pandoc-crossref found — enter path below)",
+  setting_crossref_path_custom: "Custom (enter path)",
+  setting_crossref_path_placeholder: "pandoc-crossref, or full path",
   setting_enable_advtex_name: "Enable Advanced LaTeX Commands",
-  setting_enable_advtex_desc: "Convert LaTeX commands (e.g. \\textbf, \\footnote) in DOCX output via AST.",
+  setting_enable_advtex_desc:
+    "Convert LaTeX commands (e.g. \\textbf, \\footnote) in DOCX output via AST.",
   setting_pandoc_extra_args_name: "Pandoc Extra Arguments",
   setting_pandoc_extra_args_desc: "Any other arguments to pass to pandoc.",
   placeholder_pandoc_extra_args: "--toc --number-sections",
   setting_use_standalone_name: "Use Standalone",
   setting_use_standalone_desc: "Pass --standalone flag (produces full document with header).",
+  setting_citation_mode_name: "Citation Mode",
+  setting_citation_mode_desc:
+    "Convert @key / [@key] into LaTeX citation commands. natbib cooperates with natbib built into academic class files (acl.sty, acmart, etc.); it requires a template pack that resolves the bibliography-style conflict (ADR-009). Shown only in defaults file mode.",
+  option_citation_none: "None",
+  option_citation_natbib: "natbib (--natbib)",
+  option_citation_citeproc: "citeproc (--citeproc)",
 
   heading_global: "Global Settings",
   setting_enable_lint_fix_name: "Enable Markdownlint Fix",
   setting_enable_lint_fix_desc: "Run 'markdownlint-cli2 --fix' before conversion.",
   setting_markdownlint_path_name: "Markdownlint-cli2 Path",
   setting_markdownlint_path_desc: "Path to markdownlint-cli2 executable.",
+  setting_markdownlint_path_not_found_dropdown: "(no markdownlint-cli2 found — enter path below)",
+  setting_markdownlint_path_custom: "Custom (enter path)",
+  setting_markdownlint_path_placeholder: "markdownlint-cli2, or full path",
   setting_suppress_logs_name: "Suppress Developer Logs",
   setting_suppress_logs_desc: "Hide detailed logs in the developer console.",
   setting_enable_mermaid_name: "Enable Experimental Mermaid",
@@ -155,6 +223,12 @@ const en = {
   modal_note: "Enter pure LaTeX only. YAML will be injected automatically.",
   modal_cancel: "Cancel",
   modal_save: "Save",
+
+  heading_cli: "mdtex CLI (Command Line)",
+  setting_cli_setup_name: "Set up CLI",
+  setting_cli_setup_desc:
+    "Create a `mdtex` command on your PATH (symlink to ~/.local/bin/mdtex). Enables LLM agents / CI / scripts to run MdTex without the GUI. Requires a new terminal after setup.",
+  setting_cli_setup_button: "Set up",
 } as const;
 
 export type TranslationKeys = keyof typeof en;

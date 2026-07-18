@@ -30,4 +30,4 @@ When a skill mentions a role (e.g. "apply the agent-ready triage label"), use th
 | `ready-for-agent` | `#0e8a16`（緑） | エージェント実行可能 |
 | `ready-for-human` | `#1d76db`（青） | 人間作業 |
 
-語彙を追加・変更したい場合はこの表の右列を編集し、対応する GitHub ラベルを作成・リネームすること。
+語彙を追加、変更したい場合はこの表の右列を編集し、対応する GitHub ラベルを作成、リネームすること。

@@ -3,8 +3,10 @@
 // Reason: コマンド生成をテストしやすくし、プロセス実行から分離するため。
 // Related: src/services/convertService.ts, src/utils/processRunner.ts, src/MdTexPluginSettings.ts, vitest.config.ts
 
-import { ProfileSettings } from "../MdTexPluginSettings";
+import { isDefaultsTemplateMode, ProfileSettings } from "../MdTexPluginSettings";
 import { normalizeFsPath, normalizeResourcePathList } from "../utils/pathHelpers";
+import { normalizeLatexEngine } from "../utils/binDiscover";
+import * as path from "path";
 
 export type OutputFormat = "pdf" | "latex" | "docx";
 
@@ -13,7 +15,6 @@ export interface PandocCommandOptions {
   format: OutputFormat;
   outputPath: string;
   workingDir: string;
-  inputPath?: string;
   headerPath?: string;
   // プロファイル既定値のラベル／接頭辞を Pandoc メタデータとして渡す一時 YAML のパス。
   // `-M` ではなく `--metadata-file` 経由にすることで、文書の frontmatter が
@@ -22,7 +23,6 @@ export interface PandocCommandOptions {
   extraArgs?: string[];
   luaFilters?: string[];
   resourcePath?: string;
-  useStdin?: boolean;
 }
 
 export interface PandocCommandResult {
@@ -34,11 +34,22 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   const profile = options.profile;
   const args: string[] = [];
 
-  if (!options.useStdin && options.inputPath) {
-    args.push(normalizeFsPath(options.inputPath));
-  }
+  args.push(...INPUT_FORMAT_ARGS);
 
-  args.push(...getInputFormatArgs(options.format));
+  // 文書テンプレート方式（ADR-007 / ADR-008）: defaults 方式は defaults file（`-d`）に文書の「枠」を委譲する。
+  // コマンドライン `-V` は defaults file より優先されてしまうため、documentclass 系の `-V` は
+  // 後段で生成せず、枠の構築を完全に defaults file 側へ渡す。`-d` は他のコマンドライン引数より
+  // 早い位置に置き、以降の明示引数（フォーマット・エンジン等）が defaults file を上書きする
+  // 方向（MdTex が所有する項目が勝つ）にする。
+  //
+  // profile.defaultsFilePath には、呼び出し側（convertService）が ADR-008 のパス解決
+  // （pack: vault 相対→絶対、custom: そのまま）を済ませた最終パスが入っている前提。
+  // 純粋関数を保つため、vault I/O を伴う解決はここでは行わない。
+  const isDefaults = isDefaultsTemplateMode(profile);
+  if (isDefaults) {
+    const defaultsPath = profile.defaultsFilePath?.trim();
+    if (defaultsPath) args.push("-d", normalizeFsPath(defaultsPath));
+  }
 
   if (options.metadataFile) {
     args.push("--metadata-file", normalizeFsPath(options.metadataFile));
@@ -50,14 +61,20 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
 
   args.push("-o", normalizeFsPath(options.outputPath));
 
-  if (options.format === "pdf") {
-    args.push(`--pdf-engine=${profile.latexEngine}`);
-    if (profile.documentClass === "beamer") args.push("-t", "beamer");
-  } else if (options.format === "latex") {
+  // writer（-t）は方式非依存。pdf はデフォルト writer、latex/docx は明示。
+  // beamer（-t beamer）は builtin 方式でのみ documentClass から生成するため builtin 専用ヘルパへ回す。
+  if (options.format === "latex") {
     args.push("-t", "latex");
-    if (profile.documentClass === "beamer") args.push("-t", "beamer");
   } else if (options.format === "docx") {
     args.push("-t", "docx");
+  }
+
+  // builtin 方式専用の引数（PDF エンジン / beamer / -V 群 / standalone）を1つのヘルパに集約し、
+  // 本体の !isDefaults 分岐を5箇所→1箇所に縮める（thermo-nuclear review 第3ラウンド #3）。
+  // defaults 方式ではこれら全てを defaults file 側（pdf-engine / variables / standalone）へ委譲するため、
+  // コマンドラインには出さない（precedence でコマンドラインが defaults file を上書きする衝突を回避）。
+  if (!isDefaults) {
+    appendBuiltinOwnedArgs(args, profile, options.format);
   }
 
   if (options.luaFilters?.length) {
@@ -80,29 +97,67 @@ export function buildPandocCommand(options: PandocCommandOptions): PandocCommand
   // 図・表・コード・数式のキャプション語／参照接頭辞は `--metadata-file` 経由で
   // プロファイル既定値を渡す。コマンドライン `-M` で渡すと frontmatter より優先
   // されてしまい文書ごとの上書きが効かなくなるため、metadata-file に一本化する。
-  // YAML の生成は buildLabelMetadataYaml、ファイル化は buildPandocExecutionPlan が担う。
+  // YAML の生成は buildLabelMetadataYaml、ファイル化は pandocInvocation.buildPandocExecutionPlan が担う。
 
-  if (profile.useMarginSize) args.push("-V", `geometry:margin=${profile.marginSize}`);
-  if (!profile.usePageNumber) args.push("-V", "pagestyle=empty");
+  args.push("--highlight-style=tango");
 
-  if (profile.imageScale?.trim()) {
-    args.push("-V", `graphics=${profile.imageScale}`);
+  // ADR-009: citation モードで Markdown の @key / [@key] を LaTeX の引用コマンドへ変換する。
+  // --natbib は defaults file で指定できない（実証: Unknown option "natbib"）ためコマンドライン必須。
+  // natbib モードは学会公式クラス（acl.sty / acmart 等）が \RequirePackage{natbib} で内蔵する
+  // natbib と協調する。bibstyle 衝突の回避は defaults file 側のテンプレート（template:）で行う。
+  if (profile.citationMode === "natbib") {
+    args.push("--natbib");
+  } else if (profile.citationMode === "citeproc") {
+    args.push("--citeproc");
   }
 
+  const extraArgs = filterPandocExtrasForFormat(options.extraArgs || [], options.format);
+  if (extraArgs.length) args.push(...extraArgs);
+
+  // pandocPath は trim のみ（basename 正規化しない）。TeX と違い pandoc は年度更新でパスが
+  // 消滅しないため、ユーザーがフルパス（= 自動検出ドロップダウンで選んだ binPath、または
+  // 手入力した特定バージョン）を入れたらそのまま尊重する。空なら PATH の `pandoc`。
+  const pandocPath = profile.pandocPath.trim() || "pandoc";
+  return { command: pandocPath, args };
+}
+
+/**
+ * builtin 方式でのみ GUI が所有する引数群（PDF エンジン / beamer / -V 変数 / standalone）を生成する
+ * （ADR-007 / ADR-009）。defaults 方式ではこれら全てを defaults file 側で管理するため呼び出し側で
+ * skip する（コマンドラインが defaults file を上書きする precedence 衝突を回避）。
+ *
+ * これまで buildPandocCommand 本体に !isDefaults が5箇所（pdf-engine / beamer×2 / -V 群 / standalone）
+ * に散らばっていたのを1ヘルパに集約し、beamer の pdf/latex 重複も解消した
+ * （thermo-nuclear review 第3ラウンド #3）。pandoc のフラグは順序非依存のため、生成順序を1箇所に
+ * まとめても意味は変わらない（テストも toContain で順序非依存）。
+ */
+function appendBuiltinOwnedArgs(args: string[], profile: ProfileSettings, format: OutputFormat): void {
+  // PDF エンジン（pdf 出力のみ）。latexEngine は basename に正規化して年度更新に強くする。
+  if (format === "pdf") {
+    const engineBare = normalizeLatexEngine(profile.latexEngine) || "lualatex";
+    args.push(`--pdf-engine=${engineBare}`);
+    // latexmk 等のサブエンジン指定（-lualatex 等）を --pdf-engine-opt へ展開（ADR-009）。
+    for (const opt of tokenizePdfEngineOpts(profile.pdfEngineOpts)) {
+      args.push(`--pdf-engine-opt=${opt}`);
+    }
+  }
+
+  // beamer ターゲット（pdf/latex のみ。docx は対象外）。
+  if ((format === "pdf" || format === "latex") && profile.documentClass === "beamer") {
+    args.push("-t", "beamer");
+  }
+
+  // -V 変数群（documentclass / geometry / fontsize / pagestyle / graphics）。
+  if (profile.useMarginSize) args.push("-V", `geometry:margin=${profile.marginSize}`);
+  if (!profile.usePageNumber) args.push("-V", "pagestyle=empty");
+  if (profile.imageScale?.trim()) args.push("-V", `graphics=${profile.imageScale}`);
   args.push("-V", `fontsize=${profile.fontSize}`);
   args.push("-V", `documentclass=${profile.documentClass}`);
   if (profile.documentClassOptions?.trim())
     args.push("-V", `classoption=${profile.documentClassOptions}`);
 
-  args.push("--highlight-style=tango");
-
-  const extraArgs = filterPandocExtrasForFormat(options.extraArgs || [], options.format);
-  if (extraArgs.length) args.push(...extraArgs);
-
+  // standalone（本文フラグメント出力は defaults 方式の defaults file で行うため builtin のみ）。
   if (profile.useStandalone) args.push("--standalone");
-
-  const pandocPath = profile.pandocPath.trim() || "pandoc";
-  return { command: pandocPath, args };
 }
 
 /**
@@ -143,7 +198,7 @@ export function buildLabelMetadataYaml(profile: ProfileSettings): string {
 }
 
 /**
- * Pandoc の入力フォーマット引数（`-f`）を返す。
+ * Pandoc の入力フォーマット引数（`-f`）。
  *
  * 全出力形式（pdf/latex/docx）で共通の Markdown 拡張セットを明示する。
  * Pandoc 3.x のデフォルト `markdown` は `+raw_tex +raw_html +fenced_divs
@@ -152,14 +207,11 @@ export function buildLabelMetadataYaml(profile: ProfileSettings): string {
  * （生 LaTeX / `:::` fenced div / `{=latex}` `{=openxml}` raw block /
  * `{#lst:...}` コード属性）を Pandoc のバージョン差や設定ドリフトに
  * 依存せず安定して有効化するため明示する。
- *
- * `format` は歴史的に出力形式ごとの分岐に使われていた引数だが、現状は
- * すべて同じ結果を返す。呼び出し側（`buildPandocCommand`）の意図と API
- * 安定性を保つため受け取り続け、分岐は行わない。
  */
-export function getInputFormatArgs(format: string): string[] {
-  return ["-f", "markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes"];
-}
+const INPUT_FORMAT_ARGS: readonly string[] = [
+  "-f",
+  "markdown+raw_tex+raw_html+fenced_divs+raw_attribute+fenced_code_attributes",
+];
 
 export function filterPandocExtrasForFormat(extras: string[], format: string): string[] {
   if (!extras.length) return [];
@@ -167,4 +219,66 @@ export function filterPandocExtrasForFormat(extras: string[], format: string): s
     if (format !== "docx" && arg.startsWith("--reference-doc")) return false;
     return true;
   });
+}
+
+/**
+ * pdfEngineOpts（スペース区切り文字列）をトークン配列に分割する（ADR-009）。
+ *
+ * 空白・空トークンを除外する。latexmk のサブエンジン指定（`-lualatex`）や latexmk 固有
+ * オプション（`-interaction=nonstopmode`）など、トークン内に空白を含まない単純なフラグ・値を
+ * 想定する。各トークンは `--pdf-engine-opt=<token>` として Pandoc に渡される。
+ *
+ * citationPipeline.resolveLatexInvocation でも latexmk 引数の構築に再利用する（重複実装回避）。
+ */
+export function tokenizePdfEngineOpts(opts: string): string[] {
+  return (opts ?? "")
+    .split(/\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+/**
+ * defaults 方式で選択中テンプレートパックのフォルダを LaTeX の検索パスに注入する（ADR-009）。
+ *
+ * 学会公式クラス（`acl.sty` / `acmart` 等）や `.bst` / `.bib` をパック内に配置した際、LaTeX
+ * （および bibtex）がこれらを発見できるように `TEXINPUTS` / `BIBINPUTS` / `BSTINPUTS` にパック
+ * フォルダを追記する。TeX の検索パスは**末尾セパレータで「標準パスも併せて検索」を意味する**
+ * ため、必ず末尾にセパレータを付ける（付けないと kpsewhich の標準パスが見えなくなる）。
+ *
+ * 純粋関数: 既存の環境変数は `existingEnv` で注入可能（既定は `process.env`）。`platform` も
+ * 外から渡せ、POSIX は `:`・Windows は `;` をセパレータに使う。defaults 方式でない、または
+ * `defaultsFilePath` が空のときは空オブジェクトを返す（呼び出し側で空なら上書きしない）。
+ *
+ * `defaultsFilePath` は呼び出し側（convertService）が ADR-008 のパス解決を済ませた
+ * **解決済み絶対パス**が入っている前提。純粋関数を保つため、vault I/O を伴う解決は行わない。
+ */
+export function buildLatexSearchEnv(
+  profile: ProfileSettings,
+  platform: NodeJS.Platform,
+  existingEnv: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  if (!isDefaultsTemplateMode(profile)) return {};
+  const defaultsPath = profile.defaultsFilePath?.trim();
+  if (!defaultsPath) return {};
+
+  // platform に応じて posix / win32 の path API を使い分ける。Node の既定の path は実行 OS
+  // 依存で、darwin 上で Windows パスを dirname すると `.` になる（純粋関数テストで顕在化）。
+  // 区切り文字（delimiter）も OS 依存（POSIX は ':'、Windows は ';'）。
+  const pathApi = platform === "win32" ? path.win32 : path.posix;
+  const packDir = pathApi.dirname(defaultsPath);
+  const sep = pathApi.delimiter;
+  return {
+    TEXINPUTS: appendSearchPath(existingEnv.TEXINPUTS, packDir, sep),
+    BIBINPUTS: appendSearchPath(existingEnv.BIBINPUTS, packDir, sep),
+    BSTINPUTS: appendSearchPath(existingEnv.BSTINPUTS, packDir, sep),
+  };
+}
+
+/**
+ * TeX の検索パス変数の既存値の末尾に `dir` を追加し、さらにセパレータで終える。
+ * `existing` が undefined / 空文字のときは `dir` 単独＋末尾セパレータを返す。
+ */
+function appendSearchPath(existing: string | undefined, dir: string, sep: string): string {
+  const base = existing && existing.length > 0 ? existing + sep : "";
+  return `${base}${dir}${sep}`;
 }

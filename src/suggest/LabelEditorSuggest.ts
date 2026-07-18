@@ -4,6 +4,8 @@
 // Related: src/suggest/LabelReferenceSuggest.ts, src/suggest/labelParser.ts, src/MdTexPlugin.ts
 
 import { EditorSuggest, EditorPosition, EditorSuggestContext, Editor, TFile, App } from "obsidian";
+// crossref 接头辞の真理源は crossrefLabels.CROSSREF_PREFIXES（thermo-nuclear review #7: sec: 欠落修正込み）。
+import { CROSSREF_PREFIXES, type CrossrefPrefix } from "../utils/crossrefLabels";
 
 interface PandocPluginLike {
   settings: { suppressDeveloperLogs: boolean };
@@ -13,6 +15,15 @@ export interface MyCompletion {
   label: string;
   detail?: string;
 }
+
+/** crossref 接头辞 → 人間向けの表示名。CROSSREF_PREFIXES に追従する表示メタの唯一源（review #7）。 */
+const LABEL_DETAIL: Record<CrossrefPrefix, string> = {
+  fig: "Figure Label",
+  tbl: "Table Label",
+  lst: "Listing Label",
+  eq: "Equation Label",
+  sec: "Section Label",
+};
 
 export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
   public app: App;
@@ -61,12 +72,13 @@ export class MyLabelEditorSuggest extends EditorSuggest<MyCompletion> {
   }
 
   getSuggestions(context: EditorSuggestContext): MyCompletion[] {
-    const allSuggestions: MyCompletion[] = [
-      { label: "{#fig:}", detail: "Figure Label" },
-      { label: "{#tbl:}", detail: "Table Label" },
-      { label: '{#lst: caption=""}', detail: "Listing Label" },
-      { label: "{#eq:}", detail: "Equation Label" },
-    ];
+    // CROSSREF_PREFIXES から候補を生成し、lst だけは Pandoc キャプション付きコードブロックの
+    // 入力を助けるため caption="" を補う（review #7: かつて手書きで sec: が欠落していた）。
+    const allSuggestions: MyCompletion[] = CROSSREF_PREFIXES.map(prefix => {
+      const detail = LABEL_DETAIL[prefix] ?? `${prefix} Label`;
+      const label = prefix === "lst" ? '{#lst: caption=""}' : `{#${prefix}:}`;
+      return { label, detail };
+    });
 
     const queryWithoutCurly = context.query.replace(/\}$/, "");
     return allSuggestions.filter(item => item.label.startsWith(queryWithoutCurly));

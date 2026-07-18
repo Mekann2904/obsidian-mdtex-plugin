@@ -13,7 +13,7 @@ related: [docs/latex-palette.md, docs/API.md]
 
 ## 概要
 
-開発者向けに LaTeX コマンドパレットの YAML 仕様と拡張手順をまとめます。
+開発者向けに LaTeX コマンドパレットの YAML 仕様と拡張手順をまとめる。
 
 ---
 

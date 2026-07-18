@@ -13,7 +13,7 @@ related: [../ARCHITECTURE.md, docs/development.md]
 
 ## 概要
 
-このドキュメントでは、MdTexプラグインの包括的なAPIドキュメントを提供します。パブリックインターフェース、サービス、ユーティリティ関数を含みます。
+このドキュメントでは、MdTeXプラグインのAPIドキュメントを提供する。パブリックインターフェース、サービス、ユーティリティ関数を含む。
 
 ---
 
@@ -49,12 +49,12 @@ export interface ProfileSettings {
 
 ## プラグインAPI
 
-### MdTexPlugin
+### MdTeXPlugin
 
 メインプラグインクラス。
 
 ```typescript
-export default class MdTexPlugin extends Plugin {
+export default class MdTeXPlugin extends Plugin {
   settings: PandocPluginSettings;
   
   onload(): Promise<void>;
@@ -139,7 +139,7 @@ const message = t("setting_output_format_name");
 
 ```typescript
 export function createLatexGhostTextExtension(
-  plugin: MdTexPlugin
+  plugin: MdTeXPlugin
 ): Extension
 ```
 

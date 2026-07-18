@@ -1,7 +1,7 @@
 // File: src/utils/pathHelpers.ts
 // Purpose: パス操作を集約し、OS間で一貫した区切り文字を提供する。
 // Reason: Windows と Unix でのセパレータ差異による不具合を避けるため。
-// Related: src/services/convertService.ts, src/Mermaid-PDF.ts, src/utils/mermaidRasterizer.ts
+// Related: src/services/convertService.ts, src/utils/mermaidRasterizer.ts
 
 import * as path from "path";
 

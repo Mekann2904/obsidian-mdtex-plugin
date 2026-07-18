@@ -1,0 +1,8 @@
+# MdTex パック自己記述メタ。defaults.yaml とは分離（Pandoc はこのファイルを読まない）。
+title: "縦書き二段組（小説・文芸）"
+description: "青空文庫風ルビ・章扉・表題ページ。A5縦組二段。LuaLaTeX 必要。"
+engine: lualatex
+requires: []
+recommendedProfile:
+  citationMode: none
+  latexEngine: lualatex

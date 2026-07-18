@@ -1,9 +1,18 @@
+---
+title: 変更履歴
+category: プロジェクトドキュメント
+audience: 全読者
+last_updated: 2026-07-14
+tags: [changelog, リリース]
+related: [../README.md]
+---
+
 # 変更履歴
 
-MdTex Obsidianプラグインのすべての重要な変更をこのファイルに記録します。
+MdTeX Obsidianプラグインのすべての重要な変更をこのファイルに記録する。
 
 形式は[Keep a Changelog](https://keepachangelog.com/ja/1.0.0/)に基づいており、
-このプロジェクトは[Semantic Versioning](https://semver.org/spec/v2.0.0.html)に従います。
+このプロジェクトは[Semantic Versioning](https://semver.org/spec/v2.0.0.html)に従う。
 
 ## [未リリース]
 
@@ -12,9 +21,14 @@ MdTex Obsidianプラグインのすべての重要な変更をこのファイル
 - LaTeXコマンドのインラインゴーストテキスト補完
 - エラーハンドリング用診断サービス
 - コアサービスのユニットテストカバレッジ
+- pLaTeX 専用クラス（情報処理学会 ipsj 等）用サンプルテンプレートパック `pLaTeX学会論文`（partial 全除外の自前テンプレ＋pLaTeX 固有問題対応の Lua フィルタ 3 種）
+- テンプレートフォルダ直下のガイド文書（SKILL.md / README.md）の初回自動展開（`scaffoldTemplateDocs`）
+- mdtex CLI（`convert` / `doctor` / `pack list、validate、test、new`）。`--json` / `--dry-run` / `--format png` / `--workdir` 隔離など、CI、スクリプト、LLM エージェント向け（cli-for-agents 準拠）
+- GUI と CLI の本文正規化経路を統合。`normalizeMarkdown` を Obsidian App 非依存（`VaultLike` + injectable）に純粋化し、順序不変条件を 1 箇所に集約
+- pandoc / LaTeX エラーの調査性を向上（stderrTail 拡張、アクションヒント、normalize 可視化）
 
 ### ドキュメント
-- 包括的なアーキテクチャドキュメントの追加（ARCHITECTURE.md）
+- アーキテクチャドキュメントの追加（ARCHITECTURE.md）
 - 開発ガイドの追加（docs/development.md）
 - テストガイドの追加（docs/testing.md）
 - APIリファレンスの追加（docs/API.md）
@@ -22,11 +36,17 @@ MdTex Obsidianプラグインのすべての重要な変更をこのファイル
 - 設計決定ドキュメントの追加（docs/design-decisions.md）
 - リリースガイドドキュメントの追加（docs/release-guide.md）
 - README.mdの開発者ドキュメントリンクの更新
+- テンプレートパック作成ガイド（SKILL.md）に pLaTeX 専用クラスのセクション追加（LuaLaTeX/pLaTeX 決定木、partial 取捨選択ガイド、マクロ補完セット、デバッグ手順）
+- CLI リファレンス（docs/cli.md）の追加
 
 ### 変更
 - Markdown lint統合の改善
 - LaTeXプリアンブル処理の強化
 - デフォルトのNotoフォント設定の更新
+- 一時ファイル生成（Luaフィルタ／メタデータ）とcleanupを `tempFiles.ts` に統一し、重複パターンを解消（内部リファクタ、挙動変更なし）
+- 変換パイプラインの内部構造を整理（architecture review）：本文正規化（Obsidian 記法→Pandoc 受理 Markdown の 8 step）を `normalizeMarkdown` へ、作業パスの命名規則を `conversionPaths` へ、設定 UI の重複 closure を `bindField` へ集約
+- ヘッダファイル（`<base>.preamble.tex`）の出力先を出力ディレクトリから OS 一時領域へ移動し、`invokePandoc` の他の一時フィルタと同じ cleanup seam で片付けるようにした（`.preamble.tex` が vault 内に残留しなくなる）
+- 変換パイプラインのモジュール深化（thermo-nuclear review 対応）。`markdownTransforms` / `transclusion` を `VaultLike` + `ProfileLike` で純粋化し、`vaultLinking` / `fsVault` / `fsTemplatePack` / `tempFiles` で I/O と純粋関数の境界を整理（挙動変更なし）
 
 ### 修正
 - 特定の環境での日本語フォント描画の問題

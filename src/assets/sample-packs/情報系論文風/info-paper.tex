@@ -1,0 +1,62 @@
+% info-paper.tex — 情報系論文風 Pandoc LaTeX template
+% 実在学会公式テンプレートではなく、和文情報系論文の雰囲気を再現する汎用テンプレート。
+
+$passoptions.latex()$
+\documentclass[
+$if(fontsize)$
+  $fontsize$,
+$endif$
+$for(classoption)$
+  $classoption$$sep$,
+$endfor$
+]{$documentclass$}
+
+\usepackage{xcolor}
+$if(geometry)$
+\usepackage[$for(geometry)$$geometry$$sep$,$endfor$]{geometry}
+$endif$
+
+$fonts.latex()$
+$font-settings.latex()$
+$common.latex()$
+$for(header-includes)$
+$header-includes$
+$endfor$
+$after-header-includes.latex()$
+
+\makeatletter
+\newcommand{\paperTitle}{ $if(title)$$title$$endif$ }
+\newcommand{\paperSubtitle}{ $if(subtitle)$$subtitle$$endif$ }
+\newcommand{\paperAuthors}{ $for(author)$$author$$sep$ \quad $endfor$ }
+\newcommand{\paperAffiliation}{ $if(affiliation)$$affiliation$$endif$ }
+\newcommand{\paperAbstract}{ $if(abstract)$$abstract$$endif$ }
+\newcommand{\paperKeywords}{ $if(keywords)$$for(keywords)$$keywords$$sep$, $endfor$$endif$ }
+
+\newcommand{\makepapertitle}{%
+  \twocolumn[{
+    \begin{center}
+      {\LARGE\bfseries \paperTitle\par}
+      \ifx\paperSubtitle\@empty\else
+        \vspace{0.4em}{\large \paperSubtitle\par}
+      \fi
+      \vspace{0.8em}
+      {\normalsize \paperAuthors\par}
+      \ifx\paperAffiliation\@empty\else
+        \vspace{0.3em}{\small \paperAffiliation\par}
+      \fi
+    \end{center}
+    \vspace{0.8em}
+    \noindent\textbf{概要}\quad \paperAbstract\par
+    \vspace{0.5em}
+    \noindent\textbf{キーワード}\quad \paperKeywords\par
+    \vspace{1.2em}
+  }]
+}
+\makeatother
+
+\begin{document}
+\makepapertitle
+
+$body$
+
+\end{document}

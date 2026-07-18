@@ -16,11 +16,13 @@ import { MyLabelEditorSuggest } from "./suggest/LabelEditorSuggest";
 import { MyLabelSuggest } from "./suggest/LabelReferenceSuggest";
 import { LatexEditorSuggest } from "./suggest/LatexEditorSuggest";
 import { convertCurrentPage } from "./services/convertService";
-import { lintCurrentNote, runMarkdownlintFix, PluginContext } from "./services/lintService";
+import { lintCurrentNote, runMarkdownlintFix } from "./services/lintService";
+import { PluginContext } from "./services/pluginContext";
 import {
   loadSettings as loadSettingsService,
   saveSettings as saveSettingsService,
 } from "./services/settingsService";
+import { scaffoldSampleTemplatePacks, scaffoldTemplateDocs } from "./services/templatePackService";
 import { t } from "./lang/helpers";
 import { LatexCommandModal } from "./modal/LatexCommandModal";
 import { buildLatexCommands } from "./data/latexCommands";
@@ -49,6 +51,12 @@ export default class MdTexPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
     this.debugLog("MdTexPlugin loaded");
+
+    // ADR-008: 初回起動時にサンプルテンプレートパックを vault のテンプレートフォルダへ
+    // 展開する。「存在しない場合だけ作る」を徹底し、ユーザーが編集・削除したものは
+    // 上書きしない。一度でも scaffold を試みたら sampleTemplatesScaffolded を true にし、
+    // 以降の起動で再展開しない（ユーザーが削除しても戻さない）。
+    await this.maybeScaffoldSamplePacks();
 
     this.statusBarItem = this.addStatusBarItem();
     this.updateStatus(t("status_ready"));
@@ -120,6 +128,31 @@ export default class MdTexPlugin extends Plugin {
       settings: this.settings,
       getActiveProfileSettings: () => this.getActiveProfileSettings(),
     };
+  }
+
+  /**
+   * 初回起動時のみサンプルテンプレートパックを展開する（ADR-008）。
+   * アクティブプロファイルの templateFolder を基準にし、一度試みたら
+   * sampleTemplatesScaffolded を立てて再実行しない。
+   */
+  private async maybeScaffoldSamplePacks(): Promise<void> {
+    const folder = this.getActiveProfileSettings().templateFolder || "MdTex Templates";
+    // ガイド文書（SKILL.md / README.md）は sampleTemplatesScaffolded フラグとは独立して毎回
+    // 試みる。createIfMissing が「存在しない場合だけ作る」なので安全で、バージョンアップで
+    // ガイドが追加されても既存ユーザーに届く（ユーザー編集分は上書きしない）。
+    try {
+      await scaffoldTemplateDocs(this.app, folder);
+    } catch (e) {
+      this.debugLog(`MdTexPlugin: template docs scaffold failed: ${e}`);
+    }
+    if (this.settings.sampleTemplatesScaffolded) return;
+    try {
+      await scaffoldSampleTemplatePacks(this.app, folder);
+    } catch (e) {
+      this.debugLog(`MdTexPlugin: sample scaffold failed: ${e}`);
+    }
+    this.settings.sampleTemplatesScaffolded = true;
+    await this.saveSettings();
   }
 
   async loadSettings() {

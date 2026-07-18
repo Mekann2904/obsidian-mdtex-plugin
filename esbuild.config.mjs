@@ -39,6 +39,17 @@ const context = await esbuild.context({
 	treeShaking: true,
 	outfile: "main.js",
 	minify: prod,
+	loader: {
+		// サンプルテンプレートパックの補助ファイルを文字列として埋め込む（ADR-008）。
+		// .tex / .lua は内容に $ や \ が含まれテンプレートリテラルでの手動エスケープが
+		// 壊れやすいため、ファイル全体をそのまま文字列として取り込む。
+		".tex": "text",
+		".lua": "text",
+		".yaml": "text",
+		// テンプレートフォルダ直下のガイド（SKILL.md / README.md）とパックの sample.md
+		// も文字列として埋め込み、初回 scaffold で vault へ展開する。
+		".md": "text",
+	},
 });
 
 if (prod) {

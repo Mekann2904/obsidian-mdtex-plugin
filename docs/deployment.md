@@ -13,7 +13,7 @@ related: [docs/release-guide.md, docs/testing.md, ../CONTRIBUTING.md]
 
 ## 概要
 
-このガイドでは、MdTex プラグインのデプロイとリリースプロセスについて説明します。MdTex は複数のチャンネルを通じて配布されます:
+このガイドでは、MdTeX プラグインのデプロイとリリースプロセスについて説明する。MdTeX は複数のチャンネルを通じて配布される:
 
 1. **GitHub リリース**: バージョン管理されたアーティファクトを持つ公式リリース
 2. **BRAT プラグイン**: Obsidian の BRAT プラグイン経由のベータリリース

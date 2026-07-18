@@ -32,6 +32,36 @@ export interface ProfileSettings {
   lstPrefix: string;
   equationLabel: string; // `DEFAULT_SETTINGS` に存在しなかったため追加
   eqnPrefix: string;
+  /**
+   * 文書テンプレート方式（ADR-007）。
+   * - "builtin": GUI 設定値から `-V` を生成し、Pandoc の組み込みデフォルトテンプレに
+   *   documentclass / fontsize / geometry 等を注入する（既定・後方互換）。
+   * - "defaults": defaults file（`-d`）に文書の「枠」の構築を委譲する。documentclass 系の
+   *   `-V` 生成をスキップし、Pandoc の precedence 衝突（コマンドライン `-V` が defaults file
+   *   を上書きする）を回避する。MdTex 固有レイヤ（Obsidian 記法処理・Lua フィルタ・
+   *   `--pdf-engine`・`--resource-path`）は方式に関わらず継続する。
+   */
+  documentTemplateMode: "builtin" | "defaults";
+  /** defaults 方式で読み込む Pandoc defaults file（`-d`）のパス。defaults 方式時は必須。 */
+  defaultsFilePath: string;
+  /**
+   * 選択中のテンプレートパック名（ADR-008）。`defaultsSelection` が `"pack"` の場合、
+   * テンプレートフォルダ（`templateFolder`）直下の同名サブフォルダ内の `defaults.yaml` を
+   * defaults file として解決する。空文字列は「何も選択されていない」。
+   */
+  selectedTemplatePack: string;
+  /**
+   * defaults 方式の defaults file 解決経路（ADR-008）。
+   * - "pack": テンプレートフォルダ内のテンプレートパック（`selectedTemplatePack`）から解決。
+   * - "custom": 従来の絶対パス（`defaultsFilePath`）をそのまま使用（後方互換）。
+   */
+  defaultsSelection: "pack" | "custom";
+  /**
+   * テンプレートパックを格納する vault 内フォルダパス（ADR-008）。既定は `MdTex Templates/`。
+   * 直下の各サブフォルダが 1 テンプレートパック。Obsidian Sync / Git で同期され、
+   * プラグイン更新で消えない。
+   */
+  templateFolder: string;
   documentClass: string;
   documentClassOptions: string;
   useStandalone: boolean;
@@ -42,6 +72,37 @@ export interface ProfileSettings {
    * 後方互換性のためフィールド自体は残しますが、実行時には使用されません。
    */
   luaFilterPath: string;
+  /**
+   * citation モード（ADR-009）。Markdown の `@key` / `[@key]` を LaTeX の `\citep` / `\citet`
+   * 等へ変換する Pandoc の出力モード。defaults 方式でのみ GUI で公開する（builtin は対象外）。
+   *
+   * - "none"（既定）: 変換しない。
+   * - "natbib": `--natbib`。学会公式クラス（acl.sty / acmart 等）が `\RequirePackage{natbib}`
+   *   で内蔵する natbib と協調する。`--natbib` は defaults file で指定できない（実証済み）ため、
+   *   MdTex 側でコマンドラインに明示的に出す必要がある。
+   * - "citeproc": `--citeproc`。CSL ベースの引用処理。
+   */
+  citationMode: "none" | "natbib" | "citeproc";
+  /**
+   * PDF エンジン（latexmk 等）に渡す追加オプション（ADR-009）。スペース区切りで複数指定可能。
+   * 各トークンが Pandoc の `--pdf-engine-opt=<token>` になる。latexmk のサブエンジン指定
+   * （例: `-lualatex`）や latexmk 固有オプション（例: `-interaction=nonstopmode`）に使う。
+   * bibtex / biber のラウンドトリップ制御は latexmk に一任する（MdTex はラウンドを自前管理しない）。
+   * `format` が `pdf` のときのみ意味を持つ。
+   */
+  pdfEngineOpts: string;
+}
+
+/**
+ * 文書テンプレート方式が `defaults`（defaults file 委譲）かを判定する（ADR-007）。
+ *
+ * `documentTemplateMode` は型上は非 optional だが、旧版の `data.json` から読み込んだ
+ * 直後はフィールドが欠損し得る（`migrateSettings` の `cloneProfile` が DEFAULT_PROFILE で
+ * 補完するまで）。この `?? "builtin"` フォールバックを単一ヘルパーに集約し、各消費側で
+ * 正規化ロジックを重複させない。純粋関数なのでユニットテストも容易。
+ */
+export function isDefaultsTemplateMode(profile: ProfileSettings): boolean {
+  return (profile.documentTemplateMode ?? "builtin") === "defaults";
 }
 
 /**
@@ -58,6 +119,19 @@ export interface PandocPluginSettings {
   latexCommandsYaml: string; // LaTeX コマンドパレット用のユーザ定義 YAML
   enableLatexPalette: boolean; // LaTeXコマンドパレット/補完の有効・無効
   enableLatexGhost: boolean; // ゴーストテキスト補完の有効・無効
+  /**
+   * 初回サンプルテンプレートパックの展開（scaffold）を完了したか（ADR-008）。
+   * true の間は起動時に vault へのサンプル展開を試みない。ユーザーが削除しても再展開しない。
+   */
+  sampleTemplatesScaffolded: boolean;
+  /**
+   * 設定タブの折りたたみセクションの開閉状態（設定UI改善）。
+   * キーはセクションの安定ID（`preamble`, `latex-palette`, `localization`,
+   * `extensions`, `advanced`）。値が `true` なら「折りたたまれている（閉）」、
+   * `false` なら「展開されている（開）」。未定義のキューはコード側のデフォルト
+   * （`COLLAPSIBLE_SECTIONS_DEFAULT_OPEN`）に従う。開閉するたびに保存される。
+   */
+  collapsedSections: Record<string, boolean>;
 }
 
 /**
@@ -176,7 +250,7 @@ export const DEFAULT_LATEX_PREAMBLE = `\\providecommand{\\passthrough}[1]{#1}
 }
 
 % codelisting 浮動体環境（Pandoc 3.8+ の --listings 互換）
-% Pandoc 3.8 以降はキャプション付きコードブロックを \begin{codelisting}...\end{codelisting}
+% Pandoc 3.8 以降はキャプション付きコードブロックを \\begin{codelisting}...\\end{codelisting}
 % として出力するが、codelisting 環境は listings パッケージに含まれず newfloat で別途
 % 定義が必要。これがないと「! LaTeX Error: Environment codelisting undefined.」で
 % PDF 生成が停止する。pandoc-crossref の Listing 参照や cleveref とも整合する。
@@ -260,12 +334,19 @@ export const DEFAULT_PROFILE: ProfileSettings = {
   lstPrefix: "Listing",
   equationLabel: "Equation",
   eqnPrefix: "Eq.",
+  documentTemplateMode: "builtin",
+  defaultsFilePath: "",
+  selectedTemplatePack: "",
+  defaultsSelection: "pack",
+  templateFolder: "MdTex Templates",
   documentClass: "ltjarticle",
   documentClassOptions: "",
   useStandalone: true,
   enableAdvancedTexCommands: true,
   // @deprecated（使用されません。後方互換性のため既定値を維持）
   luaFilterPath: "tex-to-docx.lua",
+  citationMode: "none",
+  pdfEngineOpts: "",
 };
 
 /**
@@ -283,4 +364,6 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
   latexCommandsYaml: DEFAULT_LATEX_COMMANDS_YAML,
   enableLatexPalette: true,
   enableLatexGhost: true,
+  sampleTemplatesScaffolded: false,
+  collapsedSections: {},
 };

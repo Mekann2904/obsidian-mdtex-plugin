@@ -2,20 +2,20 @@
 title: アーキテクチャ
 category: 開発者ドキュメント
 audience: 開発者, メンテナー
-last_updated: 2026-02-12
+last_updated: 2026-07-14
 tags: [アーキテクチャ, 設計, コンポーネント]
 related: [./CONTRIBUTING.md, docs/development.md, docs/design-decisions.md]
 ---
 
-# MdTexプラグインのアーキテクチャ
+# MdTeXプラグインのアーキテクチャ
 
 [ドキュメントインデックス](docs/index.md) > ARCHITECTURE.md
 
 ## 概要
 
-このドキュメントでは、MdTexプラグインのアーキテクチャについて包括的に説明します。コンポーネント、データフロー、設計原則を含みます。
+このドキュメントでは、MdTeXプラグインのアーキテクチャについて説明する。コンポーネント、データフロー、設計原則を含む。
 
-MdTexは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、DOCX形式に変換するObsidianプラグインです。責任の分離、テスト容易性、拡張性を考慮して設計されています。
+MdTeXは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、DOCX形式に変換するObsidianプラグインである。責任の分離、テスト容易性、拡張性を考慮して設計されている。
 
 ### コアの責任
 
@@ -31,9 +31,9 @@ MdTexは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、
 
 ### 1. 責任の分離
 
-各コンポーネントは明確で単一の責任を持っています：
+各コンポーネントは明確で単一の責任を持つ：
 
-- **MdTexPlugin.ts**: プラグインライフサイクルとコマンド登録
+- **MdTeXPlugin.ts**: プラグインライフサイクルとコマンド登録
 - **convertService.ts**: 変換ロジックの調整
 - **pandocCommandBuilder.ts**: Pandocコマンド構築（純粋関数）
 - **lintService.ts**: Lint操作
@@ -41,7 +41,7 @@ MdTexは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、
 
 ### 2. テスト容易性
 
-ビジネスロジックはObsidian API依存から分離されています：
+ビジネスロジックは Obsidian API 依存から分離されている：
 
 - 可能な限り純粋関数（例: `buildPandocCommand`）
 - サービスの依存性注入（例: `ConvertDeps`）
@@ -68,7 +68,7 @@ MdTexは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      MdTexPlugin                             │
+│                      MdTeXPlugin                             │
 │  (エントリポイント - ライフサイクルとコマンド登録)           │
 └────────────────┬────────────────────────────────────────────┘
                  │
@@ -103,27 +103,31 @@ MdTexは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、
 ユーザーアクション（コマンド）
     │
     ▼
-MdTexPlugin.runConversion()
+MdTeXPlugin.runConversion()
     │
     ▼
-ConvertCurrentPage()
+convertCurrentPage()
+    ├───► conversionPaths.buildConversionPaths()
+    │       └──► 入力/出力/中間体のパス構築（純粋関数）
     │
-    ├───► markdownTransforms
-    │       ├──► expandTransclusions()
-    │       ├──► replaceWikiLinks()
-    │       └──► stripObsidianComments()
+    ├───► normalizeMarkdown()
+    │       ├──► stripObsidianComments
+    │       ├──► resolveDraftRequest（--draft / frontmatter）
+    │       ├──► expandTransclusions
+    │       ├──► rasterizeMermaidBlocks（有効時）
+    │       ├──► markdownlint --fix（lint 中間ファイル lifecycle 内蔵）
+    │       ├──► unwrapValidWikiLinks
+    │       ├──► replaceWikiLinksAndCodeAsync
+    │       └──► detectDuplicateLabels
     │
-    ├───► mermaidRasterizer (有効な場合)
-    │       └──► DOM → PNG変換
+    ├───► headerBuilder.buildHeader()
+    │       └──► --include-in-header の LaTeX ヘッダ構築（純粋関数）
     │
-    ├───► lintService.runMarkdownlintFix()
-    │       └──► markdownlint-cli2 --fix
-    │
-    ├───► pandocCommandBuilder.buildPandocCommand()
-    │       └──► 引数配列の構築
-    │
-    └───► processRunner.runCommand()
-            └──► pandoc → lualatexの実行
+    └───► pandocInvocation.invokePandoc()
+            ├──► buildPandocCommand（引数構築、純粋関数）
+            ├──► header / Lua / YAML フィルタの一時ファイル化（tempFiles 経由）
+            ├──► processRunner.runCommand() → pandoc → lualatex
+            └──► cleanupTemporaryFiles（一時ファイルを全て片付け）
 ```
 
 ### Lintフロー
@@ -154,11 +158,9 @@ LintCurrentNote()
 
 **責任**:
 
-- 変換ワークフローの調整
-- Markdownコンテンツの変換（トランスクルージョン、WikiLinks）
-- Mermaid図のラスター化処理
-- 変換前のLint実行
-- processRunner経由のPandoc呼び出し
+- 変換ワークフローの調整（オーケストレーション層）
+- defaults file のパス解決（pack / custom）と出力先の検証
+- 本文正規化を `normalizeMarkdown` へ、Pandoc 起動を `invokePandoc` へ委譲
 
 **主要な関数**:
 
@@ -166,7 +168,7 @@ LintCurrentNote()
 export async function convertCurrentPage(
   ctx: PluginContext,
   deps: ConvertDeps,
-  format: OutputFormat
+  format: OutputFormat,
 ): Promise<void>
 ```
 
@@ -174,8 +176,30 @@ export async function convertCurrentPage(
 
 - `PluginContext` - アプリ状態と設定
 - `ConvertDeps` - 注入された依存関係（Lintサービス）
-- `pandocCommandBuilder` - コマンド構築
-- `processRunner` - 外部プロセス実行
+- `normalizeMarkdown` - Obsidian 記法の本文正規化（8 step の順序と lint 中間ファイル lifecycle を内蔵）
+- `conversionPaths` - 変換実行の作業パス群（入力、出力、中間体）
+- `invokePandoc` - Pandoc 起動と一時フィルタ、header の lifecycle
+- `headerBuilder` - `--include-in-header` の LaTeX ヘッダ構築（純粋関数）
+
+### NormalizeMarkdown
+
+**場所**: `src/services/normalizeMarkdown.ts`
+
+**責任**:
+
+- Obsidian 記法 → Pandoc 受理可能 Markdown への本文正規化パイプライン
+- 8 step の順序不変条件（コメント除去 → draft 解決 → トランスクルージョン → Mermaid → lint → WikiLink 除去 → WikiLink/画像置換 → 重複ラベル検出）を内蔵
+- lint 中間ファイル（`.temp.md`）の生成、読み戻し、片付けを所有
+- **GUI と CLI の唯一の正規化経路**: Obsidian App に依存せず `VaultLike` + injectable な mermaid/lint 通知を受け取るため、GUI（`convertService`）と CLI（`cli/normalize.ts`）が同じパイプラインを呼ぶ。順序不変条件はこの module 1箇所に集約され、CLI は draft/lint/mermaid の依存を省略して該当 step をスキップする。
+
+### ConversionPaths
+
+**場所**: `src/services/conversionPaths.ts`
+
+**責任**:
+
+- 1 回の変換実行で使う作業パス群（入力、出力、lint 中間体、リソースパス）を純粋関数で構築
+- 命名規則（空白→_ 置換、latex 拡張子、中間体の置き場）を 1 箇所に集約（app 非依存、テスト容易）
 
 ### LintService
 
@@ -260,7 +284,6 @@ export function renameProfile(profiles: Record<string, ProfileSettings>, oldName
 
 ```typescript
 export function buildPandocCommand(options: PandocCommandOptions): PandocCommandResult
-export function getInputFormatArgs(format: OutputFormat): string[]
 ```
 
 ### ProcessRunner
@@ -291,11 +314,28 @@ export async function killProcess(pid: number): Promise<void>
 - Obsidian固有のコメントの削除
 - ドラフトモード変換の適用
 
-**主要な関数**:
+**主要な関数**（シグネチャは概要である。最新、完全な定義はソースを参照）：
 
 ```typescript
-export async function expandTransclusions(app: App, content: string, basePath: string): Promise<string>
-export function replaceWikiLinks(content: string): string
+// トランスクルージョン展開。Obsidian App 依存を VaultLike 抽象で切り離し、GUI と CLI で共用。
+export async function expandTransclusions(
+  markdown: string,
+  vault: VaultLike,
+  sourcePath: string,
+  cache: Map<string, string>,
+  visited?: Set<string>,
+  expanded?: Set<string>,
+): Promise<string>
+// WikiLink / 埋め込み画像を標準 Markdown 記法へ。VaultLike + ProfileLike 経由で GUI/CLI 共用。
+export async function replaceWikiLinksAndCodeAsync(
+  markdown: string,
+  vault: VaultLike,
+  profile: ProfileLike,
+  sourcePath: string,
+): Promise<string>
+// 有効な WikiLink のみブラケットを除去。
+export function unwrapValidWikiLinks(markdown: string, vault: VaultLike, sourcePath: string): string
+// Obsidian コメント (%% %%) を除去。
 export function stripObsidianComments(content: string): string
 ```
 
@@ -375,7 +415,7 @@ export function appendLabelOverrides(preamble: string, profile: ProfileSettings)
 
 ### SettingTab
 
-**場所**: `src/MdTexPluginSettingTab.ts`
+**場所**: `src/MdTeXPluginSettingTab.ts`
 
 **責任**:
 
@@ -420,7 +460,7 @@ class PandocPluginSettingTab extends PluginSettingTab {
 **主要な関数**:
 
 ```typescript
-export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension
+export function createLatexGhostTextExtension(plugin: MdTeXPlugin): Extension
 ```
 
 ### Editor Suggesters
@@ -442,58 +482,29 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension
 
 ### 設定構造
 
-**場所**: `src/MdTexPluginSettings.ts`
-
-**型定義**:
+**場所**: `src/MdTeXPluginSettings.ts`（以下の型定義は概要である。フィールドの完全、最新の定義は常にソースを参照すること。概要と実装が食い違う場合は実装が正である）。
 
 ```typescript
 export interface PandocPluginSettings {
-  activeProfile: string;
   profiles: Record<string, ProfileSettings>;
-  enableLatexPalette: boolean;
-  enableLatexGhost: boolean;
-  latexCommandsYaml: string;
-  enableMarkdownlintFix: boolean;
-  markdownlintPath: string;
-  hideDevLogs: boolean;
-  enableMermaidExperimental: boolean;
-}
-
-export interface ProfileSettings {
-  outputFormat: OutputFormat;
-  pandocPath: string;
-  outputDir: string;
-  latexEngine: string;
-  documentClass: string;
-  documentClassOptions: string;
-  fontSize: string;
-  useMarginSize: boolean;
-  marginSize: string;
-  showPageNumbers: boolean;
-  imageScale: string;
-  latexPreamble: string;
-  usePandocCrossref: boolean;
-  pandocCrossrefPath: string;
-  advancedLatexCommands: boolean;
-  luaFilterPath: string;
-  extraArgs: string;
-  standalone: boolean;
-  searchDirectory: string;
-  removeTempFiles: boolean;
-  figureLabel: string;
-  figPrefix: string;
-  tableLabel: string;
-  tblPrefix: string;
-  codeLabel: string;
-  lstPrefix: string;
-  equationLabel: string;
-  eqnPrefix: string;
+  activeProfile: string;
+  suppressDeveloperLogs: boolean;
+  enableMarkdownlintFix: boolean;     // markdownlint-cli2 --fix をPandoc実行前に適用
+  markdownlintCli2Path: string;       // markdownlint-cli2実行ファイルパス（空は自動解決）
+  enableExperimentalMermaid: boolean; // Mermaid DOM rasterization を使うか（実験的）
+  latexCommandsYaml: string;          // LaTeX コマンドパレット用のユーザ定義 YAML
+  enableLatexPalette: boolean;        // LaTeXコマンドパレット/補完の有効、無効
+  enableLatexGhost: boolean;          // ゴーストテキスト補完の有効、無効
+  sampleTemplatesScaffolded: boolean; // 初回サンプルテンプレートパック展開済みか（ADR-008）
+  collapsedSections: Record<string, boolean>; // 設定タブの折りたたみセクション開閉状態
 }
 ```
 
+`ProfileSettings` は1プロファイル分の設定で、基本項目（pandoc/latex エンジン、出力先、フォント、マージン、crossref ラベル語等）に加え、文書テンプレート方式（ADR-007/008: `documentTemplateMode` / `defaultsFilePath` / `selectedTemplatePack` / `defaultsSelection` / `templateFolder`）と citation モード（ADR-009: `citationMode` / `pdfEngineOpts`）のフィールドを持つ。フィールド一覧は `src/MdTeXPluginSettings.ts` の `ProfileSettings` interface および `DEFAULT_PROFILE` を参照すること（ドキュメントへの再掲は意図的に省略する。実装とドキュメントのズレを防ぐためである）。
+
 ### 永続化
 
-設定はプラグインディレクトリ内の `data.json` に保存されます：
+設定はプラグインディレクトリ内の `data.json` に保存される：
 
 ```
 .obsidian/plugins/obsidian-mdtex-plugin/data.json
@@ -501,7 +512,7 @@ export interface ProfileSettings {
 
 ### 検証
 
-設定はロード時に検証され、デフォルトへのフォールバックされます：
+設定はロード時に検証され、不備があればデフォルトへフォールバックされる：
 
 ```typescript
 export const DEFAULT_SETTINGS: PandocPluginSettings = { ... };
@@ -531,7 +542,7 @@ const message = t("setting_output_format_name");
 
 ### ロケール検出
 
-ロケールはObsidianの `moment.locale()` に基づいて決定されます：
+ロケールは Obsidian の `moment.locale()` に基づいて決定される：
 
 ```typescript
 const locale = moment.locale();
@@ -559,7 +570,7 @@ const lang = locale.startsWith("ja") ? "ja" : "en";
 
 ### モック
 
-Obsidian APIは `vitest` と `jsdom` を使用してモックされます：
+Obsidian API は `vitest` と `jsdom` を使ってモックする：
 
 ```typescript
 import { describe, it, expect, vi } from "vitest";

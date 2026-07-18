@@ -1,0 +1,170 @@
+% tate-twocolumn.tex — Pandoc カスタムテンプレート（縦書き二段組向け）
+%
+% 出典: `pandoc -D latex` を基に、以下を調整した派生テンプレート。
+%   1. `\maketitle` を `\twocolumn[\@maketitle]` 相当の段抜けタイトルへ差し替え
+%      （二段組でタイトルが左段に潰れるのを防ぐ）
+%   2. `\documentclass` のデフォルトを ltjtarticle / twocolumn に寄せるが、
+%      変数スロットは Pandoc 標準をそのまま維持（defaults file / frontmatter で上書き可能）
+%
+% 使用方法（ADR-007 defaults 方式）:
+%   defaults file の template 項に本ファイルを指定する（path は defaults file 自身の
+%   ディレクトリを指す Pandoc の特殊変数を用いて相対指定可能）。
+%   クラス・オプションは defaults file の variables で制御:
+%     variables:
+%       documentclass: ltjtarticle
+%       classoption: "twocolumn, a4paper"
+%
+% 注意: MdTex 固有レイヤ（Obsidian 記法処理・callout/mermaid の Lua フィルタ・
+%   codelisting 環境の補完）は、MdTex 側が常時上乗せするため、本テンプレート側では
+%   重複定義しない。パッケージの追加が必要な場合は preamble.tex（include-in-header）で。
+
+$passoptions.latex()$
+\documentclass[
+$for(babel-otherlangs)$
+  $babel-otherlangs$,
+$endfor$
+$if(babel-lang)$
+  $babel-lang$,
+$endif$
+$if(fontsize)$
+  $fontsize$,
+$endif$
+$if(papersize)$
+  $papersize$paper,
+$endif$
+$for(classoption)$
+  $classoption$$sep$,
+$endfor$
+]{$documentclass$}
+$if(beamerarticle)$
+\usepackage{beamerarticle} % needs to be loaded first
+$endif$
+\usepackage{xcolor}
+$if(geometry)$
+\usepackage[$for(geometry)$$geometry$$sep$,$endfor$]{geometry}
+$endif$
+\usepackage{amsmath,amssymb}
+$--
+$-- section numbering
+$--
+$if(numbersections)$
+\setcounter{secnumdepth}{$if(secnumdepth)$$secnumdepth$$else$5$endif$}
+$else$
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+$endif$
+$fonts.latex()$
+$font-settings.latex()$
+$common.latex()$
+$for(header-includes)$
+$header-includes$
+$endfor$
+$after-header-includes.latex()$
+$hypersetup.latex()$
+
+$if(chapter-bg-image)$
+% --- 装飾背景画像で \chapterbg を上書き（defaults.yaml の metadata: chapter-bg-image）---
+% chapter-bg.lua が画像を絶対パスに解決し、その \renewcommand{\chapterbg}{...} を
+% テンポラリファイル（/tmp/mdtex-chapterbg-include.tex）に書き出す。メタデータには
+% そのテンポラリファイルの短いパスが入り、\input で読み込む。長い絶対パスは
+% テンポラリ内にしか存在せず pandoc の行折り返しの対象にならない（wrap 設定非依存）。
+\input{$chapter-bg-image$}
+$endif$
+
+$if(title)$
+\title{$title$$if(thanks)$\thanks{$thanks$}$endif$}
+$endif$
+$if(subtitle)$
+\usepackage{etoolbox}
+\makeatletter
+\providecommand{\subtitle}[1]{% add subtitle to \maketitle
+  \apptocmd{\@title}{\par {\large #1 \par}}{}{}
+}
+\makeatother
+\subtitle{$subtitle$}
+$endif$
+\author{$for(author)$$author$$sep$ \and $endfor$}
+\date{$date$}
+
+% --- 段抜けタイトルの準備（二段組向けの調整ポイント） ---
+% 二段組クラスオプション（twocolumn）時、\maketitle を段抜きで出す。
+% ltjtarticle は \maketitle 内部で \@maketitle を呼ぶ構造なので、
+% フロントマター相当の位置で \twocolumn[\@maketitle] を呼び出す。
+\makeatletter
+\if@twocolumn
+  \renewcommand{\maketitle}{%
+    \twocolumn[\@maketitle]%
+  }
+\fi
+\makeatother
+
+\begin{document}
+$if(has-frontmatter)$
+\frontmatter
+$endif$
+$if(title)$
+\maketitle
+$if(abstract)$
+\begin{abstract}
+$abstract$
+\end{abstract}
+$endif$
+$endif$
+
+$for(include-before)$
+$include-before$
+
+$endfor$
+$if(toc)$
+$if(toc-title)$
+\renewcommand*\contentsname{$toc-title$}
+$endif$
+{
+$if(colorlinks)$
+\hypersetup{linkcolor=$if(toccolor)$$toccolor$$else$$endif$}
+$endif$
+\setcounter{tocdepth}{$toc-depth$}
+\tableofcontents
+}
+$endif$
+$if(lof)$
+\listoffigures
+$endif$
+$if(lot)$
+\listoftables
+$endif$
+$if(linestretch)$
+\setstretch{$linestretch$}
+$endif$
+$if(has-frontmatter)$
+\mainmatter
+$endif$
+$body$
+
+$if(has-frontmatter)$
+\backmatter
+$endif$
+$if(nocite-ids)$
+\nocite{$for(nocite-ids)$$it$$sep$, $endfor$}
+$endif$
+$if(natbib)$
+$if(bibliography)$
+$if(biblio-title)$
+$if(has-chapters)$
+\renewcommand\bibname{$biblio-title$}
+$else$
+\renewcommand\refname{$biblio-title$}
+$endif$
+$endif$
+\bibliography{$for(bibliography)$$bibliography$$sep$,$endfor$}
+
+$endif$
+$endif$
+$if(biblatex)$
+\printbibliography$if(biblio-title)$[title=$biblio-title$]$endif$
+
+$endif$
+$for(include-after)$
+$include-after$
+
+$endfor$
+\end{document}

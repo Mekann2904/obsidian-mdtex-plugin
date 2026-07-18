@@ -41,7 +41,11 @@ const ja: Record<TranslationKeys, string> = {
   notice_pandoc_more_logs: "Pandoc: 追加のログはコンソールを確認してください。",
   notice_generated: "生成に成功: {0}",
   notice_pandoc_exit_code: "エラー: Pandoc がコード {0} で終了しました",
+  notice_duplicate_labels:
+    "変換を中止しました: 相互参照ラベルが重複しています: {0}。ラベル（fig:, tbl:, lst:, eq:, sec:）を一意にしてください。",
   notice_pandoc_launch_error: "Pandoc の起動に失敗: {0}",
+  notice_defaults_file_required:
+    "文書テンプレート方式が「defaults file」ですが、defaults file のパスが未設定です。プロファイル設定でパスを指定してください。",
 
   notice_markdownlint_missing: "markdownlint-cli2 が見つかりません。設定でパスを指定してください。",
   notice_lint_ok: "Lint 完了: 問題なし",
@@ -81,6 +85,9 @@ const ja: Record<TranslationKeys, string> = {
   option_latex: "LaTeX (.tex)",
   setting_pandoc_path_name: "Pandoc のパス",
   setting_pandoc_path_desc: "pandoc 実行ファイルへの絶対パス（例: /usr/local/bin/pandoc）。",
+  setting_pandoc_path_not_found_dropdown: "（pandoc 未検出 — 下にパスを入力）",
+  setting_pandoc_path_custom: "カスタム（パスを入力）",
+  setting_pandoc_path_placeholder: "pandoc、またはフルパス",
   setting_output_dir_name: "出力ディレクトリ",
   setting_output_dir_desc: "生成物を保存するディレクトリ。空なら Vault ルートを使用。",
   setting_resource_dir_name: "リソース検索ディレクトリ",
@@ -91,7 +98,14 @@ const ja: Record<TranslationKeys, string> = {
 
   heading_latex_engine: "LaTeX / PDF エンジン設定",
   setting_latex_engine_name: "LaTeX エンジン",
-  setting_latex_engine_desc: "PDF 生成に使うエンジン（例: lualatex, xelatex, pdflatex）。",
+  setting_latex_engine_desc:
+    "PDF 生成に使うエンジン。設定タブを開くと自動的に検出し、ドロップダウンから選べます。またはエンジン名（lualatex）やフルパスを手入力してください。フルパスは basename に正規化して PATH で解決するため、TeX Live の年度更新でも壊れません。",
+  setting_latex_engine_custom: "カスタム（パスを入力）",
+  setting_latex_engine_not_found_dropdown: "（TeX エンジン未検出 — 下にパスを入力）",
+  setting_latex_engine_placeholder: "lualatex, latexmk, またはフルパス",
+  setting_pdf_engine_opts_name: "PDF エンジン追加オプション",
+  setting_pdf_engine_opts_desc:
+    "PDF エンジン（latexmk 等）に渡す追加オプションを --pdf-engine-opt で指定します（スペース区切り）。latexmk のサブエンジン（例: -lualatex）や latexmk 固有オプション（例: -interaction=nonstopmode）に使います。参考文献の bibtex/biber ラウンドトリップを有効にします。PDF 出力時のみ有効。",
   setting_document_class_name: "ドキュメントクラス",
   setting_document_class_desc: "LaTeX の documentclass（例: ltjarticle, article, book）。",
   setting_document_class_opts_name: "ドキュメントクラスのオプション",
@@ -107,7 +121,49 @@ const ja: Record<TranslationKeys, string> = {
   setting_image_scale_name: "画像スケール",
   setting_image_scale_desc: "デフォルトの画像スケール（例: width=0.8\\textwidth）。",
 
+  setting_template_mode_name: "文書テンプレート方式",
+  setting_template_mode_desc:
+    "文書の「枠」の構築方法を選びます。「組み込み」は GUI 設定値を Pandoc 変数として注入します。「defaults file」は枠（ドキュメントクラス・フォントサイズ・プリアンブル等）を Pandoc の defaults file（-d）に委譲します。",
+  option_template_builtin: "組み込み（GUI 設定）",
+  option_template_defaults: "defaults file（上級者向け）",
+  setting_defaults_file_path_name: "defaults file のパス",
+  setting_defaults_file_path_desc:
+    "Pandoc の defaults YAML ファイル（-d で渡す）へのパス。方式が「defaults file」のとき必須です。ファイル内で ${.} を使うと自身のディレクトリを参照できるため、テンプレ一式を1つのフォルダで管理できます。",
+  placeholder_defaults_file_path: "/path/to/defaults.yaml",
+
+  setting_defaults_selection_name: "defaults file の指定方法",
+  setting_defaults_selection_desc:
+    "テンプレートフォルダ内のテンプレートパックから選ぶか、パスを直接指定します。新しいテンプレートを追加するには、テンプレートフォルダに defaults.yaml を含むフォルダを置いて「再スキャン」してください。",
+  option_defaults_selection_pack: "テンプレートパックから選択",
+  option_defaults_selection_custom: "パスを直接指定",
+  setting_template_pack_name: "テンプレートパック",
+  setting_template_pack_desc:
+    "テンプレートフォルダ内で見つかった defaults.yaml 付きフォルダから選びます。フォルダを追加したら「再スキャン」で反映します。",
+  setting_template_pack_empty:
+    "（テンプレートパックが見つかりません。テンプレートフォルダに defaults.yaml を含むフォルダを置いてください）",
+  setting_template_folder_name: "テンプレートフォルダ",
+  setting_template_folder_desc:
+    "テンプレートパックを格納する vault 内フォルダ。既定は「MdTex Templates」。このフォルダの直下に各テンプレートパック（defaults.yaml を含むフォルダ）を置きます。Obsidian Sync / Git で同期され、プラグインの更新で消えません。",
+  button_rescan_packs: "再スキャン",
+  notice_packs_rescanned: "{0} 個のテンプレートパックを見つけました",
+  notice_packs_empty:
+    "テンプレートパックが見つかりませんでした。テンプレートフォルダを確認してください",
+  notice_sample_packs_installed: "サンプルテンプレートを展開しました: {0}",
+  button_install_samples: "サンプルを再展開",
+
+  setting_pack_info_engine: "想定エンジン: {0}",
+  pack_requires_missing:
+    "このパックにはフォルダ内への配置が必要なファイルがあります: {0}",
+  pack_requires_hint: "配置手順は SKILL.md を参照してください。",
+  button_open_skill_doc: "SKILL.md を開く",
+  notice_skill_not_found: "テンプレートフォルダに SKILL.md が見つかりません。",
+  button_apply_recommended: "推奨設定を適用",
+  notice_recommended_applied: "推奨設定を適用しました。",
+  notice_recommended_uptodate: "推奨設定は現在のプロファイルと一致しています。",
+
   heading_preamble: "LaTeX プリアンブル",
+  heading_document_frame: "文書の体裁（クラス・フォント・余白）",
+  heading_pdf_engine_advanced: "詳細: PDF エンジンのオプション",
   preamble_desc:
     "LaTeX コードのみ入力してください。YAML の --- と header-includes は自動付与されます。全角入力にも対応します。",
   placeholder_preamble: "\\usepackage{...}",
@@ -134,19 +190,32 @@ const ja: Record<TranslationKeys, string> = {
   setting_use_crossref_desc: "pandoc-crossref フィルタを有効にします。",
   setting_crossref_path_name: "pandoc-crossref のパス",
   setting_crossref_path_desc: "pandoc-crossref 実行ファイルへのパス。",
+  setting_crossref_path_not_found_dropdown: "（pandoc-crossref 未検出 — 下にパスを入力）",
+  setting_crossref_path_custom: "カスタム（パスを入力）",
+  setting_crossref_path_placeholder: "pandoc-crossref、またはフルパス",
   setting_enable_advtex_name: "高度な LaTeX コマンドを有効",
-  setting_enable_advtex_desc: "DOCX 出力の LaTeX コマンド（\\textbf, \\footnote など）を AST ベースで処理します。",
+  setting_enable_advtex_desc:
+    "DOCX 出力の LaTeX コマンド（\\textbf, \\footnote など）を AST ベースで処理します。",
   setting_pandoc_extra_args_name: "Pandoc 追加引数",
   setting_pandoc_extra_args_desc: "pandoc に渡す追加引数。",
   placeholder_pandoc_extra_args: "--toc --number-sections",
   setting_use_standalone_name: "--standalone を付与",
   setting_use_standalone_desc: "--standalone フラグを付けて完全なドキュメントを生成します。",
+  setting_citation_mode_name: "引用モード",
+  setting_citation_mode_desc:
+    "Markdown の @key / [@key] を LaTeX の引用コマンドに変換します。natbib は学会公式クラス（acl.sty / acmart 等）が内蔵する natbib と協調します（bibstyle 衝突の解決にはテンプレートパック側の対応が必要: ADR-009）。defaults file 方式でのみ表示します。",
+  option_citation_none: "なし",
+  option_citation_natbib: "natbib (--natbib)",
+  option_citation_citeproc: "citeproc (--citeproc)",
 
   heading_global: "グローバル設定",
   setting_enable_lint_fix_name: "Markdownlint --fix を実行",
   setting_enable_lint_fix_desc: "変換前に 'markdownlint-cli2 --fix' を実行します。",
   setting_markdownlint_path_name: "markdownlint-cli2 のパス",
   setting_markdownlint_path_desc: "markdownlint-cli2 実行ファイルへのパス。",
+  setting_markdownlint_path_not_found_dropdown: "（markdownlint-cli2 未検出 — 下にパスを入力）",
+  setting_markdownlint_path_custom: "カスタム（パスを入力）",
+  setting_markdownlint_path_placeholder: "markdownlint-cli2、またはフルパス",
   setting_suppress_logs_name: "開発ログを非表示",
   setting_suppress_logs_desc: "デベロッパーコンソールの詳細ログを隠します。",
   setting_enable_mermaid_name: "Mermaid 実験機能を有効",
@@ -157,6 +226,12 @@ const ja: Record<TranslationKeys, string> = {
   modal_note: "LaTeX のみ入力してください。YAML は自動付与されます。",
   modal_cancel: "キャンセル",
   modal_save: "保存",
+
+  heading_cli: "mdtex CLI（コマンドライン）",
+  setting_cli_setup_name: "CLI をセットアップ",
+  setting_cli_setup_desc:
+    "プラグイン同梱の cli.js を ~/.local/bin/mdtex にリンクし、`mdtex` コマンドを PATH に登録します（LLM エージェント・CI・スクリプトから GUI なしで MdTex を実行する経路）。セットアップ後、新しいターミナルで有効になります。",
+  setting_cli_setup_button: "セットアップ",
 };
 
 export default ja;

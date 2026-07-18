@@ -1,0 +1,77 @@
+% pLaTeX 専用クラス（ipsj 等）用最小プリアンブル
+% クラスが本体（紙面・段組・フォント・見出し・キャプション・連番等）を担うため、
+% パッケージ追加は最小限。
+
+% Pandoc が inline code を \passthrough{\lstinline!...!} として出力する（MdTex が
+% --listings を常時付けるため）。\passthrough のみ定義しておけば、listings ロード時にも
+% 冪等に機能する。default.latex 由来の補助マクロだが、本テンプレでは同ファイルを呼ばない
+% （pLaTeX 専用クラスと衝突するため）ので、ここで補う。
+\providecommand{\passthrough}[1]{#1}
+
+% 数式
+\usepackage{amsmath}
+
+% URL（参考文献の \url 等）
+\usepackage{url}
+
+% 画像（Obsidian の ![[img.png]] → \includegraphics を処理）。
+% pLaTeX + dvipdfmx なので [dvipdfmx] 必須（付けないと dvi 出力時に画像が消える）。
+% \pandocbounded が \Gscale@div / \scalebox を使うため、本ブロックより先にロードする。
+\usepackage[dvipdfmx]{graphicx}
+
+% --- Pandoc ライタが本文に出力する \pandocbounded / \tightlist を定義 ---
+% これらは Pandoc の partial ではなく default.latex 本体に直書きされているマクロ。
+% 自前テンプレートは default.latex を使わないため、ここで補う（依存は graphicx のみ）。
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+% 図の既定配置を htbp に（default.latex と同じ）
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % overfull 行の抑制
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+
+% コードブロック。MdTex が --listings を常時付けるため、キャプション付きコードは
+% code-blocks.lua が captionof + lstlisting に変換する（codelisting 浮動体の2重キャプション
+% 回避）。captionof に caption パッケージが必要。listings の色設定と日本語対策もここで。
+\usepackage{listings}
+\usepackage{caption}
+\lstset{
+  basicstyle=\ttfamily\small,
+  columns=flexible,            % fullflexible だと日本語幅が詰まるため flexible
+  keepspaces=true,
+  breaklines=true,
+  extendedchars=true,          % マルチバイト（日本語コメント）を許可
+  inputencoding=utf8,          % upLaTeX/pLaTeX(euc) で UTF-8 ソース
+  frame=single,
+  framesep=3pt,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red},
+  showstringspaces=false,
+  tabsize=4
+}
+
+% 表のフロート [H] と booktabs ルール（simple-table.lua が使用）。
+\usepackage{float}
+\usepackage{booktabs}
+
+% --- hyperref（最後に読むのが鉄則）---
+% Pandoc は数式ラベル・キャプション等で \protect\phantomsection を前置する。\phantomsection
+% は本来 hyperref が提供するが、本テンプレは hypersetup.latex partial を呼ばないため
+% 未定義になり、
+%   ! Undefined control sequence. l.250 \begin{equation}\protect\phantomsection
+% で止まる。pLaTeX 専用クラスと共存確認済み（実証）。pandoc-crossref のリンク付き相互参照にも必要。
+% hyperref は \begin{document} 直前に自動でフックするため、他パッケージの「後に」読む。
+\usepackage[dvipdfmx]{hyperref}
+\hypersetup{hidelinks}  % リンク枠を非表示（商業組版向け）
+\providecommand{\phantomsection}{}  % 安全網（hyperref 未提供環境用）

@@ -1,7 +1,7 @@
 // File: src/utils/mermaidRasterizer.ts
 // Purpose: MermaidコードブロックをObsidian内でレンダリングしPNGへ変換する。
 // Reason: 依存追加なしでPDF出力時に確実なビットマップ化を行うため。
-// Related: src/services/convertService.ts, src/Mermaid-PDF.ts, src/utils/markdownTransforms.ts
+// Related: src/services/convertService.ts, src/utils/markdownTransforms.ts
 
 import { App, Component, MarkdownRenderer } from "obsidian";
 import { promises as fs } from "fs";

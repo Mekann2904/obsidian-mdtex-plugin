@@ -1,0 +1,8 @@
+# MdTex パック自己記述メタ。defaults.yaml とは分離（Pandoc はこのファイルを読まない）。
+title: "情報系論文風（LuaLaTeX）"
+description: "情報処理学会・AI学会風の二段組論文。A4横組。LuaLaTeX 必要。"
+engine: lualatex
+requires: []
+recommendedProfile:
+  citationMode: none
+  latexEngine: lualatex

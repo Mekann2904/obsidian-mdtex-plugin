@@ -132,3 +132,159 @@ body {
 .suggestion-container:has(.mdtex-fzf-item) ::-webkit-scrollbar-thumb {
   background-color: var(--mdtex-fzf-scroll);
 }
+
+/* =================================================================
+   6. 設定タブ：折りたたみセクション（<details>/<summary>）
+      summary 内に Setting#setHeading() を置き、Obsidian 公式の見出しスタイルを
+      そのまま再利用する。矢印は summary::before で出し、開閉で 90° 回転する。
+      ネイティブの三角マーカーは非表示にする（テーマ間で見た目を揃えるため）。
+   ================================================================= */
+.mdtex-nested-settings {
+  margin-top: 0;
+}
+
+.mdtex-nested-settings > summary.mdtex-settings-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: var(--size-4-3) 0;
+  border-top: 1px solid var(--background-modifier-border);
+  border-radius: 0;
+}
+
+.mdtex-nested-settings > summary.mdtex-settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+/* 左側に三角を置くとアウトライン見出しっぽく見えるため、Obsidian の設定画面に
+   馴染むよう右端に控えめな chevron を置く。 */
+.mdtex-nested-settings > summary.mdtex-settings-summary::after {
+  content: "›";
+  margin-left: var(--size-4-3);
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-large);
+  line-height: 1;
+  transition:
+    transform 100ms ease-in-out,
+    color 100ms ease-in-out;
+}
+
+.mdtex-nested-settings[open] > summary.mdtex-settings-summary::after {
+  transform: rotate(90deg);
+}
+
+.mdtex-nested-settings > summary.mdtex-settings-summary:hover::after,
+.mdtex-nested-settings > summary.mdtex-settings-summary:hover .setting-item-name {
+  color: var(--text-accent);
+}
+
+.mdtex-nested-settings > summary.mdtex-settings-summary .setting-item-info {
+  flex: 1 1 auto;
+}
+
+.mdtex-nested-settings > summary.mdtex-settings-summary .setting-item-name {
+  color: var(--text-normal);
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+}
+
+.mdtex-nested-settings > summary.mdtex-settings-summary .setting-item-control {
+  display: none;
+}
+
+/* 折りたたみ内の設定行は、テーマ側のカード背景・角丸を拾うと
+   YAML textarea との一体感が崩れるため、Obsidian 標準のフラットな設定行に寄せる。 */
+.mdtex-nested-settings-body > .setting-item {
+  margin: 0;
+  padding: var(--size-4-3) 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mdtex-nested-settings-body > .setting-item + .setting-item {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.mdtex-nested-settings-body {
+  padding-bottom: var(--size-4-3);
+}
+
+/* =================================================================
+   7. 設定タブ：コード編集領域（Preamble / YAML）の共通スタイル
+      これまで各所にインライン style で書いていたフォント・高さ・折り返し設定を
+      1 クラスに集約し、テーマ変数でダーク/ライト両対応させる。
+   ================================================================= */
+.mdtex-code-area {
+  width: 100%;
+  height: 400px;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  white-space: pre;
+  overflow: auto;
+  resize: vertical;
+  border-radius: 0;
+}
+
+.mdtex-code-area.mdtex-code-area--small {
+  height: 220px;
+}
+
+/* Setting#addTextArea で出力した textarea にモノスペースを適用するための修飾子。
+   Setting の control 領域幅が狭くなるのを防ぐため全幅に広げる。 */
+.mdtex-setting-wide .setting-item-control {
+  flex: 1 1 auto;
+}
+
+.mdtex-setting-wide textarea.mdtex-code-area {
+  width: 100%;
+}
+
+/* =================================================================
+   8. 設定タブ：テンプレートパック情報パネル
+   ================================================================= */
+.mdtex-pack-info {
+  margin-left: 1.5em;
+  padding: 0.6em 0.8em;
+  margin-bottom: 0.75em;
+  border-left: 3px solid var(--text-muted);
+  background: var(--background-secondary);
+  border-radius: 0 4px 4px 0;
+}
+
+.mdtex-pack-info-title {
+  font-weight: 600;
+}
+
+.mdtex-pack-info-description {
+  opacity: 0.85;
+  margin-top: 0.2em;
+  font-size: 0.92em;
+}
+
+.mdtex-pack-info-engine {
+  margin-top: 0.3em;
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+
+.mdtex-pack-warning {
+  margin-top: 0.5em;
+  padding: 0.5em 0.7em;
+  border-radius: 4px;
+  background: rgba(255, 190, 80, 0.12);
+  border: 1px solid rgba(255, 190, 80, 0.45);
+}
+
+.mdtex-pack-warning-hint {
+  font-size: 0.85em;
+  opacity: 0.8;
+  margin-top: 0.2em;
+}
+
+.mdtex-pack-warning-actions,
+.mdtex-pack-recommended-actions {
+  margin-top: 0.5em;
+}

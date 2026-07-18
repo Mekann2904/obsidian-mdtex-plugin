@@ -58,8 +58,8 @@ If your output contradicts an existing ADR, surface it explicitly rather than si
 
 生成前は、以下の既存ドキュメントをドメイン情報源として参照すること:
 
-- **`ARCHITECTURE.md`** — コンポーネント構成・データフロー・設計原則
-- **`docs/design-decisions.md`** — ADR 形式の主要決定（ADR-001 外部ツール採用 / ADR-002 TypeScript / ADR-003 esbuild / ADR-004 Vitest）
-- **各ソースファイル先頭の `// Purpose / Reason / Related` コメント** — 小粒な設計判断。領域を探る際は該当ファイルのヘッダーコメントを必ず読む。
+- **`ARCHITECTURE.md`**：コンポーネント構成、データフロー、設計原則
+- **`docs/design-decisions.md`**：ADR 形式の主要決定（ADR-001 外部ツール採用 / ADR-002 TypeScript / ADR-003 esbuild / ADR-004 Vitest）
+- **各ソースファイル先頭の `// Purpose / Reason / Related` コメント**：小粒な設計判断。領域を探る際は該当ファイルのヘッダーコメントを必ず読む。
 
 `docs/design-decisions.md` は正式な `docs/adr/` ではないが、同様の役割を果たすため、判断衝突の確認時はこれを ADR 群として扱うこと。

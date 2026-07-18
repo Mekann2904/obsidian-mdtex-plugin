@@ -15,6 +15,8 @@ import {
   MarkdownView,
 } from "obsidian";
 import { extractLabels, LabelCompletion } from "./labelParser";
+import { expandTransclusions } from "../utils/transclusion";
+import { makeObsidianVault } from "../services/obsidianVaultLike";
 
 interface PandocPluginLike {
   settings: { suppressDeveloperLogs: boolean };
@@ -138,7 +140,13 @@ export class MyLabelSuggest extends EditorSuggest<LabelCompletion> {
 
     try {
       const content = editor ? editor.getValue() : await this.app.vault.read(file);
-      this.labels = extractLabels(content);
+      // 方式W: トランスクルージョン先のラベルも補完候補に出すため、expandTransclusions
+      // で展開（ファイル名プレフィックス付きリライト込み）してからラベル抽出する。
+      // これにより [@fig:sub-hoge] のようにリライト後の名前で補完できる。
+      // キャッシュは変換時と共有しない（補完は軽量・都度読みで良い）。
+      const cache = new Map<string, string>();
+      const expanded = await expandTransclusions(content, makeObsidianVault(this.app), file.path, cache);
+      this.labels = extractLabels(expanded);
       if (!this.shouldSuppressLogs()) {
         console.log(
           `[MyLabelSuggest:updateLabels] ${file.basename}: ${this.labels.length} labels (Source: ${editor ? "Editor" : "Vault"})`,

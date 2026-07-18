@@ -1,0 +1,10 @@
+# MdTex パック自己記述メタ。defaults.yaml とは分離（Pandoc はこのファイルを読まない）。
+title: "pLaTeX 学会論文（ipsj 等の土台）"
+description: "pLaTeX/upLaTeX 専用クラスの土台。公式 .cls の手動配置が必要。"
+engine: latexmk
+requires:
+  - ipsj.cls
+recommendedProfile:
+  citationMode: natbib
+  latexEngine: latexmk
+  pdfEngineOpts: "-latex=platex -pdfdvi"
