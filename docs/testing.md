@@ -13,7 +13,7 @@ related: [docs/development.md, ../ARCHITECTURE.md, docs/API.md]
 
 ## 概要
 
-このガイドでは、MdTexプラグインのテスト慣習について説明します。ユニットテスト、統合テスト、テスト駆動開発を含みます。
+このガイドでは、MdTeXプラグインのテスト慣習について説明する。ユニットテスト、統合テスト、テスト駆動開発を含む。
 
 ---
 
@@ -153,14 +153,14 @@ it("check file")
 
 ### 1. ユニットテスト
 
-分離された関数とクラスをテストします。
+分離された関数とクラスをテストする。
 
 **例**: `pandocCommandBuilder.test.ts`
 
 ```typescript
 import { describe, it, expect } from "vitest";
 import { buildPandocCommand } from "./pandocCommandBuilder";
-import { DEFAULT_PROFILE } from "../MdTexPluginSettings";
+import { DEFAULT_PROFILE } from "../MdTeXPluginSettings";
 
 describe("buildPandocCommand", () => {
   it("should build correct command for PDF output", () => {
@@ -197,7 +197,7 @@ describe("buildPandocCommand", () => {
 
 ### 2. 統合テスト
 
-コンポーネント間の相互作用をテストします。
+コンポーネント間の相互作用をテストする。
 
 **例**: `convertService.test.ts`
 
@@ -234,14 +234,14 @@ describe("convertCurrentPage", () => {
 
 ### 3. サービステスト
 
-サービス層ロジックをテストします。
+サービス層ロジックをテストする。
 
 **例**: `profileManager.test.ts`
 
 ```typescript
 import { describe, it, expect } from "vitest";
 import { createProfile, deleteProfile, renameProfile } from "./profileManager";
-import { DEFAULT_PROFILE } from "../MdTexPluginSettings";
+import { DEFAULT_PROFILE } from "../MdTeXPluginSettings";
 
 describe("ProfileManager", () => {
   it("should create a new profile", () => {
@@ -286,7 +286,7 @@ describe("ProfileManager", () => {
 
 ### 4. ユーティリティテスト
 
-純粋なユーティリティ関数をテストします。
+純粋なユーティリティ関数をテストする。
 
 **例**: `pathHelpers.test.ts`
 

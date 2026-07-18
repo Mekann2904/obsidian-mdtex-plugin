@@ -1,20 +1,20 @@
 ---
 name: create-mdtex-template-pack
-description: MdTex Obsidian プラグイン用に、新しいテンプレートパック（文書テンプレート一式）を作成・検証する。縦書き小説・学会論文・レポート等の「文書の枠」を defaults.yaml + preamble + Lua フィルタで構築し、Pandoc 経由で実際に PDF 生成まで通す。新しいテンプレートを作る時にこのガイドを見れば一通り完結する。
+description: MdTeX Obsidian プラグイン用に、新しいテンプレートパック（文書テンプレート一式）を作成・検証する。縦書き小説・学会論文・レポート等の「文書の枠」を defaults.yaml + preamble + Lua フィルタで構築し、Pandoc 経由で実際に PDF 生成まで通す。新しいテンプレートを作る時にこのガイドを見れば一通り完結する。
 ---
 
-# MdTex テンプレートパック作成ガイド
+# MdTeX テンプレートパック作成ガイド
 
-このファイルは、MdTex プラグインのテンプレートフォルダ（このフォルダ）に
-**新しいテンプレートパックを自作するためのガイド**です。
-テンプレートパックの使い方（選んで PDF に出す）は [README.md](./README.md) を参照してください。
+このファイルは、MdTeX プラグインのテンプレートフォルダ（このフォルダ）に
+**新しいテンプレートパックを自作するためのガイド**である。
+テンプレートパックの使い方（選んで PDF に出す）は [README.md](./README.md) を参照すること。
 
 ---
 
 ## テンプレートパックの解剖
 
 ```
-MdTex Templates/                    ← このフォルダ
+MdTeX Templates/                    ← このフォルダ
 ├── README.md                       ← 使い方ガイド（ユーザー向け）
 ├── SKILL.md                        ← このファイル（作成ガイド）
 ├── 縦書き二段組/                    ← パック例
@@ -32,7 +32,7 @@ MdTex Templates/                    ← このフォルダ
   README.md / SKILL.md のように直下のファイルはパック扱いされない。
 - 補助ファイルは同じフォルダに置き、`${.}`（defaults.yaml 自身のディレクトリ）で参照する。
   これでパック全体をフォルダ単位でコピー・Git 管理できる。
-- **defaults 方式では MdTex の組み込みプリアンブル（`DEFAULT_LATEX_PREAMBLE`）が入らない。**
+- **defaults 方式では MdTeX の組み込みプリアンブル（`DEFAULT_LATEX_PREAMBLE`）が入らない。**
   これがすべての落とし穴の根本原因。後述の表を必ず確認すること。
 
 ---
@@ -82,18 +82,18 @@ variables:
 
 ### 4. 本文（`.md`）は通常の Markdown で書く
 
-defaults 方式でも MdTex 固有機能（Obsidian 記法・callout・Mermaid・pandoc-crossref）はそのまま使える。
+defaults 方式でも MdTeX 固有機能（Obsidian 記法・callout・Mermaid・pandoc-crossref）はそのまま使える。
 見出しは `#` `##` を使い、テンプレート側（preamble の `titlesec` 等）で見た目を整える。
 
 ### 5. 【必須】PDF 生成まで通して検証する
 
 **パックは「Pandoc が実際に PDF を出すこと」まで確認して完成とする。** LaTeX エラーは
-実行してみないと分からない。MdTex 本体を通さず、Pandoc 直接実行で素早く回す:
+実行してみないと分からない。MdTeX 本体を通さず、Pandoc 直接実行で素早く回す:
 
 ```bash
 cd <vault-root>
 pandoc <本文>.md \
-  -d "MdTex Templates/<パック名>/defaults.yaml" \
+  -d "MdTeX Templates/<パック名>/defaults.yaml" \
   -o /tmp/pack-test.pdf
 ```
 
@@ -102,7 +102,7 @@ pandoc <本文>.md \
 
 ### 6. 設定で選ぶ
 
-1. MdTex 設定 → 対象プロファイルの「文書テンプレート方式」を **defaults file** に
+1. MdTeX 設定 → 対象プロファイルの「文書テンプレート方式」を **defaults file** に
 2. 「defaults file の指定方法」を **テンプレートパックから選択** に
 3. 「テンプレートパック」の横の **再スキャン** を押す
 4. ドロップダウンから自分のパックを選ぶ
@@ -111,13 +111,13 @@ pandoc <本文>.md \
 
 ## パックメタ（自己記述化）
 
-パックフォルダに `_mdtex.yaml` を置くと、パックが**自分自身の説明・前提・推奨設定**を宣言できます。設定画面でパックを選んだとき、MdTex がこのメタを読んで:
+パックフォルダに `_mdtex.yaml` を置くと、パックが**自分自身の説明・前提・推奨設定**を宣言できる。設定画面でパックを選んだとき、MdTeX がこのメタを読んで:
 
 - **title / description** を表示（フォルダ名だけだと分からない用途を明示）
 - **requires** のファイルがパックフォルダに無ければ**警告**（ipsj.cls 未配置等を実行前検知）
 - **recommendedProfile** が現在のプロファイルとズレていれば**「推奨設定を適用」**ボタンを提示
 
-`_mdtex.yaml` は defaults.yaml と**別ファイル**にします（Pandoc が読む defaults.yaml に未知キーを書くと `Unknown option` エラーになるため）。MdTex だけが `_mdtex.yaml` を読みます。書かなくてもパックは動きます（フォルダ名だけで選択できる従来動作を維持）。
+`_mdtex.yaml` は defaults.yaml と**別ファイル**にする（Pandoc が読む defaults.yaml に未知キーを書くと `Unknown option` エラーになるため）。MdTeX だけが `_mdtex.yaml` を読む。書かなくてもパックは動く（フォルダ名だけで選択できる従来動作を維持）。
 
 ### フィールド
 
@@ -134,8 +134,8 @@ recommendedProfile:                       # パックが推奨するプロファ
   pdfEngineOpts: "-latex=platex -pdfdvi"  # スペースを含む場合はクォート
 ```
 
-- 全フィールド省略可能。`_mdtex.yaml` が空でもエラーにはなりません（表示しないだけ）。
-- `requires` はパックフォルダ（defaults.yaml と同じフォルダ）内のファイル名。MdTex が存在確認し、不足を警告する。
+- 全フィールド省略可能。`_mdtex.yaml` が空でもエラーにはならない（表示しないだけ）。
+- `requires` はパックフォルダ（defaults.yaml と同じフォルダ）内のファイル名。MdTeX が存在確認し、不足を警告する。
 - `recommendedProfile` の「適用」は、ズレている項目だけを現在のプロファイルに上書きする。
 
 ### いつ書くべきか
@@ -171,20 +171,20 @@ recommendedProfile:                       # パックが推奨するプロファ
 
 ## 学会論文クラスを使う場合（ACL / acmart / IEEEtran 等）
 
-実在の学会公式クラス（`acl.sty` / `acmart.cls` / `IEEEtran.cls` 等）は、**Markdown ノート前提の MdTex の固定挙動と衝突する**箇所がある。これらは「ノート → PDF」の変換層と「学会論文」の組版要件のズレが原因。以下をテンプレート側で対処すれば、プラグイン本体を変えずに学会論文 PDF が出る。
+実在の学会公式クラス（`acl.sty` / `acmart.cls` / `IEEEtran.cls` 等）は、**Markdown ノート前提の MdTeX の固定挙動と衝突する**箇所がある。これらは「ノート → PDF」の変換層と「学会論文」の組版要件のズレが原因。以下をテンプレート側で対処すれば、プラグイン本体を変えずに学会論文 PDF が出る。
 
 ### 必須のテンプレート側対処
 
 | 衝突する挙動 | 原因 | 対処（パック側） |
 |---|---|---|
 | **表が `longtable` で 2カラム停止** | Pandoc 標準出力。学会クラスは多くが twocolumn | `filters: ${.}/simple-table.lua` で `table`+`tabular` に変換。`情報系論文風` と同じ Lua をパックにコピーする |
-| **inline code が `\passthrough` で停止** | MdTex が常時 `--listings` を付けるため、Pandoc が `\passthrough{\lstinline!...!}` を出すが、defaults 方式では同マクロ未定義 | preamble に `\providecommand{\passthrough}[1]{#1}` |
+| **inline code が `\passthrough` で停止** | MdTeX が常時 `--listings` を付けるため、Pandoc が `\passthrough{\lstinline!...!}` を出すが、defaults 方式では同マクロ未定義 | preamble に `\providecommand{\passthrough}[1]{#1}` |
 | **日本語が文字化け/エラー** | LuaLaTeX はエンジンとしては日本語対応だが、和文フォント指定がないと化ける | preamble に `\usepackage{luatexja-fontspec}` + `\setmainjfont{...}`（`acl.sty` と共存確認済み） |
-| **参考文献スタイルの二重定義** | クラスが内蔵 `\bibliographystyle`（例: `acl_natbib`）と Pandoc の `plainnat` が衝突 | MdTex の citation パイプラインが `.aux` を見て反応型に `plainnat` を除去する（ADR-009）。**パック作成者は対処不要**。`citationMode: natbib` + `latexEngine: latexmk` + `pdfEngineOpts: -lualatex` の設定三点セットが必要 |
+| **参考文献スタイルの二重定義** | クラスが内蔵 `\bibliographystyle`（例: `acl_natbib`）と Pandoc の `plainnat` が衝突 | MdTeX の citation パイプラインが `.aux` を見て反応型に `plainnat` を除去する（ADR-009）。**パック作成者は対処不要**。`citationMode: natbib` + `latexEngine: latexmk` + `pdfEngineOpts: -lualatex` の設定三点セットが必要 |
 
 ### 設定三点セット（学会論文 + 引用）
 
-学会クラスで参考文献を含む PDF を出すには、MdTex 設定で:
+学会クラスで参考文献を含む PDF を出すには、MdTeX 設定で:
 
 | 設定項目 | 値 | 理由 |
 |---|---|---|
@@ -192,7 +192,7 @@ recommendedProfile:                       # パックが推奨するプロファ
 | `pdfEngineOpts` | `-lualatex` | latexmk に LuaLaTeX を使わせる。日本語パッケージ（luatexja）も LuaLaTeX 必要 |
 | `citationMode` | `natbib` | Pandoc の `@key` / `[@key]` を `\citet` / `\citep` に変換。これがないと citation パイプラインが起動しない |
 
-### 学会論文クラスでは無害（対処不要）な MdTex の固定挙動
+### 学会論文クラスでは無害（対処不要）な MdTeX の固定挙動
 
 実証済み（ACL + 各挙動で PDF 生成を確認）:
 
@@ -208,7 +208,7 @@ recommendedProfile:                       # パックが推奨するプロファ
 
 ## pLaTeX 専用クラスを使う場合（ipsj 等）
 
-情報処理学会 `ipsj` 等、**pLaTeX/upLaTeX 専用**のクラスは、MdTex の既定（LuaLaTeX）では動かない。
+情報処理学会 `ipsj` 等、**pLaTeX/upLaTeX 専用**のクラスは、MdTeX の既定（LuaLaTeX）では動かない。
 `pLaTeX学会論文` パックが土台。ここでは「なぜ動かないか」と「どう作るか」を説明する。
 
 ### LuaLaTeX で動くか pLaTeX 専用かの決定木
@@ -222,7 +222,7 @@ recommendedProfile:                       # パックが推奨するプロファ
       ↓
       プロファイル設定: latexEngine=latexmk, pdfEngineOpts=-latex=platex -pdfdvi
       ↓
-      .cls をパックフォルダに配置（MdTex が TEXINPUTS に自動追加）
+      .cls をパックフォルダに配置（MdTeX が TEXINPUTS に自動追加）
 ```
 
 ### なぜ「partial 全除外」が必要か
@@ -260,7 +260,7 @@ partial を除外すると、`default.latex` 本体に直書きされたマク�
 | `pdfEngineOpts` | `-latex=platex -pdfdvi` | latexmk に pLaTeX と dvi 経由 PDF を使わせる。upLaTeX 専用クラスなら `-latex=uplatex` |
 | 文書テンプレート方式 | `defaults file` | builtin では partial が入って動かない |
 
-> ※ MdTex は `--pdf-engine` / `--pdf-engine-opt` を常時生成し defaults 本体を上書きするため、
+> ※ MdTeX は `--pdf-engine` / `--pdf-engine-opt` を常時生成し defaults 本体を上書きするため、
 > defaults.yaml とプロファイル**両方**に同じ値を設定すること。
 
 ### .cls / .bst の配置
@@ -268,20 +268,20 @@ partial を除外すると、`default.latex` 本体に直書きされたマク�
 公式配布の `.cls`（ipsj.cls 等）は著作権でプラグインに同梱できない。パックフォルダに手動で置く:
 
 1. 公式サイトからダウンロード（ipsj: https://www.ipsj.or.jp/journal/submit/style.html ）
-2. パックフォルダ（例: `MdTex Templates/pLaTeX学会論文/`）に `.cls` を置く
-3. MdTex は defaults 方式でパックフォルダを `TEXINPUTS` / `BIBINPUTS` / `BSTINPUTS` に自動追加（ADR-009）
+2. パックフォルダ（例: `MdTeX Templates/pLaTeX学会論文/`）に `.cls` を置く
+3. MdTeX は defaults 方式でパックフォルダを `TEXINPUTS` / `BIBINPUTS` / `BSTINPUTS` に自動追加（ADR-009）
 
 ### デバッグ: 中間 .tex が見えない問題
 
-MdTex 経由だと中間 `.tex` が temp dir（`tex2pdf.*`）に作られて即時削除される。エラーの行番号は
+MdTeX 経由だと中間 `.tex` が temp dir（`tex2pdf.*`）に作られて即時削除される。エラーの行番号は
 見えても中身が分からない。**Pandoc を直接実行して .tex を取り出し、pLaTeX で原因分離**する:
 
 ```bash
 cd <vault-root>
 # 1. .tex を取り出す（-o で .pdf ではなく .tex を指定）
-pandoc <本文>.md -d "MdTex Templates/<パック>/defaults.yaml" -t latex -o /tmp/debug.tex
-# 2. .cls を見つけさせる（MdTex が自動注入する TEXINPUTS を手動で再現）
-TEXINPUTS="MdTex Templates/<パック>:" platex -interaction=nonstopmode -halt-on-error /tmp/debug.tex
+pandoc <本文>.md -d "MdTeX Templates/<パック>/defaults.yaml" -t latex -o /tmp/debug.tex
+# 2. .cls を見つけさせる（MdTeX が自動注入する TEXINPUTS を手動で再現）
+TEXINPUTS="MdTeX Templates/<パック>:" platex -interaction=nonstopmode -halt-on-error /tmp/debug.tex
 ```
 
 エラーが `! Undefined control sequence` なら、上記「失われるマクロ」表を確認。
@@ -320,7 +320,7 @@ TEXINPUTS="MdTex Templates/<パック>:" platex -interaction=nonstopmode -halt-o
     リテラルの `${.}` になるので、変数値経由では絶対パスを渡せない（Lua フィルタで処理）。
 - **学会論文クラスでは simple-table.lua を必ず入れる。** longtable は 2カラムで停止するが、
   Lua フィルタで `table`+`tabular` に変換すれば本体制御不要で解決する（上記「学会論文クラスを使う場合」参照）。
-- **画像・コード・表の LaTeX 変換は Pandoc（+ Lua フィルタ）に委譲する。** MdTex 本体は
+- **画像・コード・表の LaTeX 変換は Pandoc（+ Lua フィルタ）に委譲する。** MdTeX 本体は
   Markdown 前処理（`%%` 除去・`![[画像]]` → `![](path)`・transclusion）しか行わず、LaTeX 化は Pandoc が担う。
   したがって変換結果の調整は defaults.yaml の `filters:` / `template:` / `include-in-header:` で行う。
 - **pLaTeX 専用クラスを使うなら、最初から defaults 方式 + 自前テンプレートで始める。**
@@ -338,12 +338,12 @@ TEXINPUTS="MdTex Templates/<パック>:" platex -interaction=nonstopmode -halt-o
 3. `npm run build` で main.js に埋め込む（esbuild の text loader が `.tex`/`.lua`/`.yaml`/`.md` を処理）
 4. 初回起動時に各ユーザーの vault へ展開される（**存在しない場合だけ**）
 
-個人的に使うだけなら、このステップは不要。パックフォルダを `MdTex Templates/` に置くだけで使える。
+個人的に使うだけなら、このステップは不要。パックフォルダを `MdTeX Templates/` に置くだけで使える。
 
 ---
 
 ## 参照
 
 - 使い方（選んで PDF に出す）: [README.md](./README.md)
-- Pandoc defaults file の全オプション: [Pandoc User's Guide — Defaults files](https://pandoc.org/MANUAL.html#defaults-files)
+- Pandoc defaults file の全オプション: [Pandoc User's Guide: Defaults files](https://pandoc.org/MANUAL.html#defaults-files)
 - `${.}` 変数: defaults file 自身のディレクトリを指す Pandoc の特殊変数。

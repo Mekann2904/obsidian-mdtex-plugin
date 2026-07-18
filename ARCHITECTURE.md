@@ -2,20 +2,20 @@
 title: アーキテクチャ
 category: 開発者ドキュメント
 audience: 開発者, メンテナー
-last_updated: 2026-02-12
+last_updated: 2026-07-14
 tags: [アーキテクチャ, 設計, コンポーネント]
 related: [./CONTRIBUTING.md, docs/development.md, docs/design-decisions.md]
 ---
 
-# MdTexプラグインのアーキテクチャ
+# MdTeXプラグインのアーキテクチャ
 
 [ドキュメントインデックス](docs/index.md) > ARCHITECTURE.md
 
 ## 概要
 
-このドキュメントでは、MdTexプラグインのアーキテクチャについて包括的に説明します。コンポーネント、データフロー、設計原則を含みます。
+このドキュメントでは、MdTeXプラグインのアーキテクチャについて説明する。コンポーネント、データフロー、設計原則を含む。
 
-MdTexは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、DOCX形式に変換するObsidianプラグインです。責任の分離、テスト容易性、拡張性を考慮して設計されています。
+MdTeXは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、DOCX形式に変換するObsidianプラグインである。責任の分離、テスト容易性、拡張性を考慮して設計されている。
 
 ### コアの責任
 
@@ -33,7 +33,7 @@ MdTexは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、
 
 各コンポーネントは明確で単一の責任を持っています：
 
-- **MdTexPlugin.ts**: プラグインライフサイクルとコマンド登録
+- **MdTeXPlugin.ts**: プラグインライフサイクルとコマンド登録
 - **convertService.ts**: 変換ロジックの調整
 - **pandocCommandBuilder.ts**: Pandocコマンド構築（純粋関数）
 - **lintService.ts**: Lint操作
@@ -68,7 +68,7 @@ MdTexは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      MdTexPlugin                             │
+│                      MdTeXPlugin                             │
 │  (エントリポイント - ライフサイクルとコマンド登録)           │
 └────────────────┬────────────────────────────────────────────┘
                  │
@@ -103,7 +103,7 @@ MdTexは、PandocとLuaLaTeXを使用してMarkdownファイルをPDF、LaTeX、
 ユーザーアクション（コマンド）
     │
     ▼
-MdTexPlugin.runConversion()
+MdTeXPlugin.runConversion()
     │
     ▼
 convertCurrentPage()
@@ -314,7 +314,7 @@ export async function killProcess(pid: number): Promise<void>
 - Obsidian固有のコメントの削除
 - ドラフトモード変換の適用
 
-**主要な関数**（シグネチャは概要です。最新・完全な定義はソースを参照）:
+**主要な関数**（シグネチャは概要である。最新・完全な定義はソースを参照）：
 
 ```typescript
 // トランスクルージョン展開。Obsidian App 依存を VaultLike 抽象で切り離し、GUI と CLI で共用。
@@ -415,7 +415,7 @@ export function appendLabelOverrides(preamble: string, profile: ProfileSettings)
 
 ### SettingTab
 
-**場所**: `src/MdTexPluginSettingTab.ts`
+**場所**: `src/MdTeXPluginSettingTab.ts`
 
 **責任**:
 
@@ -460,7 +460,7 @@ class PandocPluginSettingTab extends PluginSettingTab {
 **主要な関数**:
 
 ```typescript
-export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension
+export function createLatexGhostTextExtension(plugin: MdTeXPlugin): Extension
 ```
 
 ### Editor Suggesters
@@ -482,7 +482,7 @@ export function createLatexGhostTextExtension(plugin: MdTexPlugin): Extension
 
 ### 設定構造
 
-**場所**: `src/MdTexPluginSettings.ts`（以下の型定義は概要です。フィールドの完全・最新の定義は常にソースを参照してください。概要と実装が食い違う場合は実装が正です）。
+**場所**: `src/MdTeXPluginSettings.ts`（以下の型定義は概要である。フィールドの完全・最新の定義は常にソースを参照すること。概要と実装が食い違う場合は実装が正である）。
 
 ```typescript
 export interface PandocPluginSettings {
@@ -500,7 +500,7 @@ export interface PandocPluginSettings {
 }
 ```
 
-`ProfileSettings` は1プロファイル分の設定で、基本項目（pandoc/latex エンジン・出力先・フォント・マージン・crossref ラベル語等）に加え、文書テンプレート方式（ADR-007/008: `documentTemplateMode` / `defaultsFilePath` / `selectedTemplatePack` / `defaultsSelection` / `templateFolder`）と citation モード（ADR-009: `citationMode` / `pdfEngineOpts`）のフィールドを持ちます。フィールド一覧は `src/MdTexPluginSettings.ts` の `ProfileSettings` interface および `DEFAULT_PROFILE` を参照してください（ドキュメントへの再掲は意図的に省略します — 実装とドキュメントのズレを防ぐため）。
+`ProfileSettings` は1プロファイル分の設定で、基本項目（pandoc/latex エンジン・出力先・フォント・マージン・crossref ラベル語等）に加え、文書テンプレート方式（ADR-007/008: `documentTemplateMode` / `defaultsFilePath` / `selectedTemplatePack` / `defaultsSelection` / `templateFolder`）と citation モード（ADR-009: `citationMode` / `pdfEngineOpts`）のフィールドを持つ。フィールド一覧は `src/MdTeXPluginSettings.ts` の `ProfileSettings` interface および `DEFAULT_PROFILE` を参照すること（ドキュメントへの再掲は意図的に省略する。実装とドキュメントのズレを防ぐためである）。
 
 ### 永続化
 

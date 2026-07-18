@@ -1,23 +1,23 @@
 ---
-title: MdTexプラグイン
+title: MdTeXプラグイン
 category: ユーザードキュメント
 audience: 新規ユーザー, 既存ユーザー, 開発者
-last_updated: 2026-07-07
+last_updated: 2026-07-14
 tags: [概要, インストール, 機能]
 related: [docs/quickstart.md, docs/features.md, CONTRIBUTING.md]
 ---
 
-# MdTexプラグイン
+# MdTeXプラグイン
 
 [ドキュメントインデックス](docs/index.md) > README
 
 ## 概要
 
-MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-project.org/) を使用してMarkdownをPDFに変換するObsidian用プラグインです。特に日本語テキストの処理を得意としており、多言語ドキュメントを扱うユーザーに適しています。
+MdTeXは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-project.org/) を使用してMarkdownをPDFに変換するObsidian用プラグインである。特に日本語テキストの処理を得意としており、多言語ドキュメントを扱うユーザーに適している。
 
-サンプルPDFを入手できます : [note記事:Obsidian用プラグインMdTexの導入方法、使い方について](https://note.com/mekann/n/nd837b0beaf60?sub_rt=share_pw)
+サンプルPDFを入手できる : [note記事:Obsidian用プラグインMdTeXの導入方法、使い方について](https://note.com/mekann/n/nd837b0beaf60?sub_rt=share_pw)
 
-[MdTexのロードマップ](https://github.com/users/Mekann2904/projects/2)
+[MdTeXのロードマップ](https://github.com/users/Mekann2904/projects/2)
 
 ---
 
@@ -30,7 +30,7 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 - [設定ガイド](#設定ガイド)
 - [依存関係](#依存関係一覧)
 - [トラブルシューティング](#トラブルシューティング)
-- [mdtex CLI（コマンドライン・自動化向け）](#mdtex-cli)
+- [MdTeX CLI（コマンドライン・自動化向け）](#mdtex-cli)
 
 ---
 
@@ -45,12 +45,14 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 - **Lint統合**: markdownlint-cli2による自動整形機能
 - **クロスリファレンス**: pandoc-crossrefによる図・表・数式の自動参照
 - **Beamer対応**: プレゼンテーションPDFの生成に対応
+- **テンプレートパック**: 文書テンプレート（縦書き、学会論文等）をフォルダ単位で管理・選択
+- **MdTeX CLI**: CI、スクリプト、LLM エージェント向けのコマンドラインツール
 
 ---
 
 ## クイックスタート
 
-5分で始めるMdTex：[詳細ガイドはこちら](./docs/quickstart.md)
+5分で始めるMdTeX：[詳細ガイドはこちら](./docs/quickstart.md)
 
 1. **依存関係をインストール**
    ```bash
@@ -65,7 +67,7 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
    ```
 
 2. **プラグインを有効化**
-   - Obsidianの設定 → コミュニティプラグイン → MdTexプラグインを有効化
+   - Obsidianの設定 → コミュニティプラグイン → MdTeXプラグインを有効化
 
 3. **最初の変換**
    - Markdownファイルを開く
@@ -112,7 +114,7 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 
 ### プロファイルの切り替え
 
-複数の設定を使い分けできます：
+複数の設定を使い分けできる：
 - 論文用プロファイル（A4、12pt、余白広め）
 - スライド用プロファイル（Beamer、8pt）
 - レポート用プロファイル（A4、11pt、カラー）
@@ -136,7 +138,7 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 
 ### 高度な設定
 
-詳細な設定オプションについては[設定リファレンス](./docs/configuration.md)を参照してください。
+詳細な設定オプションについては[設定リファレンス](./docs/configuration.md)を参照すること。
 
 主な高度設定：
 - **LaTeXプリアンブル**: カスタムLaTeXヘッダー
@@ -164,7 +166,7 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 
 ### LaTeXパッケージ
 
-以下のパッケージが自動的に使用されます：
+以下のパッケージが自動的に使用される：
 - `luatexja` / `luatexja-fontspec` - 日本語処理
 - `unicode-math` - 数式フォント
 - `graphicx` / `caption` - 図表
@@ -219,33 +221,35 @@ MdTexは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 
 ## 既知の問題
 
-- 複雑なLaTeX設定には追加パッケージが必要になる場合があります
-- DOCX変換は実験的機能です（一部のLaTeXコマンドは変換されません）
-- Mermaid図の実験的機能は処理に時間がかかる場合があります
+- 複雑なLaTeX設定には追加パッケージが必要になる場合がある
+- DOCX変換は実験的機能である（一部のLaTeXコマンドは変換されない）
+- Mermaid図の実験的機能は処理に時間がかかる場合がある
 
 ---
 
 ## 貢献について
 
-貢献は歓迎します！
+貢献を歓迎する。
 
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - 貢献ガイドライン
 - [開発ガイド](./docs/development.md) - 開発者向けガイド
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - アーキテクチャ解説
 - バグ報告や新機能の提案：[GitHub Issues](https://github.com/Mekann2904/obsidian-mdtex-plugin/issues)
-- プルリクエストも受け付けています
+- プルリクエストも受け付ける
 
 ---
 
-## mdtex CLI
+## MdTeX CLI
 
-MdTex は GUI（Obsidian プラグイン）に加え、`mdtex` コマンドラインツールを提供します。スクリプト・CI・LLM コーディングエージェントなど、GUI を介さずに MdTex を観測・実行するために設計された「誠実な道具」です（cli-for-agents 準拠）。
+MdTeX は GUI（Obsidian プラグイン）に加え、`mdtex` コマンドラインツールを提供する。スクリプト・CI・LLM コーディングエージェントなど、GUI を介さずに MdTeX を観測・実行するために設計された「誠実な道具」である（cli-for-agents 準拠）。
 
-> **対象**: スクリプト / CI / LLM エージェント。通常の執筆には Obsidian プラグインを使います。
+> **対象**: スクリプト / CI / LLM エージェント。通常の執筆には Obsidian プラグインを使う。
+
+> コマンド、フラグ、exit code、JSON スキーマの完全な解説は [CLI リファレンス](./docs/cli.md) にある。この節は概要のみ。
 
 ### インストール
 
-リポジトリをクローンしてビルドします。`npm run build` がプラグイン（`main.js`）と CLI（`dist/cli.js`）の両方を生成します。
+リポジトリをクローンしてビルドする。`npm run build` がプラグイン（`main.js`）と CLI（`dist/cli.js`）の両方を生成する。
 
 ```bash
 git clone https://github.com/Mekann2904/obsidian-mdtex-plugin
@@ -267,9 +271,9 @@ mdtex --version
 
 ### エージェント・CI 向けの機能
 
-- **`--json`**: 構造化出力（status / data）。exit code（0=成功 / 1=警告 / 2=エラー）と整合します。
-- **`--dry-run`**: 実行せずにコマンドを表示（`convert` / `pack test`）。計画確認に。
-- **非対話**: 全入力はフラグ。プロンプトで停止しません（エージェントのデッドロック回避）。
+- **`--json`**: 構造化出力（status / data）。exit code（0=成功 / 1=警告 / 2=エラー）と整合する。
+- **`--dry-run`**: 実行せずにコマンドを表示（`convert` / `pack test`）。計画確認用。
+- **非対話**: 全入力はフラグ。プロンプトで停止しない（エージェントのデッドロック回避）。
 - **段階的 `--help`**: 各コマンド・サブコマンドの `--help` に examples を掲載。
 
 ```bash
@@ -313,7 +317,7 @@ mdtex pack validate --help
 
 ## ライセンス
 
-このプラグインは [MITライセンス](LICENSE) の下で公開されています。
+このプラグインは [MITライセンス](LICENSE) の下で公開されている。
 
 ---
 

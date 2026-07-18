@@ -13,13 +13,13 @@ related: [docs/tutorial.md, docs/configuration.md, docs/markdown-guide.md]
 
 ## 概要
 
-このガイドでは、数式、図、表、Mermaid、カスタムプリアンブルなど、MdTexプラグインの高度な機能について詳しく解説します。LaTeXの完全な機能を活用して、より高度なドキュメントを作成する方法を学びます。
+このガイドでは、数式、図、表、Mermaid、カスタムプリアンブルなど、MdTeXプラグインの高度な機能について詳しく解説する。LaTeXの完全な機能を活用して、より高度なドキュメントを作成する方法を学ぶ。
 
 ---
 
 ## 数式の高度な使用法
 
-MdTexはLaTeXの完全な数学機能をサポートしています。LuaLaTeXとunicode-mathパッケージにより、Unicodeの数学記号も使用できます。
+MdTeXはLaTeXの完全な数学機能をサポートしている。LuaLaTeXとunicode-mathパッケージにより、Unicodeの数学記号も使用できる。
 
 ### 基本的な数式記法
 
@@ -84,7 +84,7 @@ $$
 e^{i\pi} + 1 = 0
 $$ {#eq:euler}
 
-オイラーの等式（式[@eq:euler]）は、最も美しい数式の一つとされています。
+オイラーの等式（式[@eq:euler]）は、最も美しい数式の一つとされる。
 ```
 
 ### カスタムコマンドの定義
@@ -134,7 +134,7 @@ pandoc-crossrefを使用する場合：
 ```markdown
 ![画像の説明](image.png){#fig:example}
 
-図[@fig:example]は、システムのアーキテクチャを示しています。
+図[@fig:example]は、システムのアーキテクチャを示している。
 ```
 
 ---
@@ -165,11 +165,11 @@ Table: サンプル表 {#tbl:sample}
 
 ## Mermaid図の使用
 
-Mermaid記法で書かれた図をPNGに変換してPDFに埋め込みます。
+Mermaid記法で書かれた図をPNGに変換してPDFに埋め込む。
 
 ### 有効化
 
-設定画面で「Mermaid実験機能を有効」をオンにします。
+設定画面で「Mermaid実験機能を有効」をオンにする。
 
 ### フローチャート
 
@@ -188,7 +188,7 @@ graph TD
 
 ## TikZによる描画
 
-TikZはLaTeXの強力な描画ライブラリです。プリアンブルに以下を追加して使用します。
+TikZはLaTeXの強力な描画ライブラリである。プリアンブルに以下を追加して使用する。
 
 ### プリアンブルの設定
 

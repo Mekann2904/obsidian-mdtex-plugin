@@ -2,7 +2,7 @@
 title: ドキュメントインデックス
 category: ドキュメント
 audience: 新規ユーザー, 既存ユーザー, 開発者
-last_updated: 2026-02-12
+last_updated: 2026-07-14
 tags: [インデックス, ドキュメント]
 related: [../README.md, docs/quickstart.md, docs/features.md]
 ---
@@ -13,7 +13,7 @@ related: [../README.md, docs/quickstart.md, docs/features.md]
 
 ## 概要
 
-MdTex Obsidian プラグインの完全なドキュメントです。このページからすべてのドキュメントにアクセスできます。
+MdTeX Obsidian プラグインの完全なドキュメントである。このページからすべてのドキュメントにアクセスできる。
 
 ---
 
@@ -27,7 +27,7 @@ MdTex Obsidian プラグインの完全なドキュメントです。このペ�
 
 ### チュートリアルとガイド
 
-- [チュートリアル](./tutorial.md) - ステップバイステップの実践ガイド
+- [チュートリアル](./tutorial.md) - 実践ガイド
 - [Markdownガイド](./markdown-guide.md) - Markdown記法の完全リファレンス
 - [高度な機能の使用法](./advanced.md) - 数式、図、Mermaidなどの高度な機能
 
@@ -53,6 +53,7 @@ MdTex Obsidian プラグインの完全なドキュメントです。このペ�
 
 ### 技術ガイド
 
+- [MdTeX CLI](./cli.md) - コマンドラインツール（CI、スクリプト、エージェント向け）
 - [テストガイド](./testing.md) - テストの実践と規約
 - [API リファレンス](./API.md) - パブリック API ドキュメント
 - [国際化](./i18n.md) - 翻訳の追加と保守
@@ -65,7 +66,7 @@ MdTex Obsidian プラグインの完全なドキュメントです。このペ�
 ### デプロイ
 
 - [デプロイガイド](./deployment.md) - デプロイとリリースプロセス
-- [リリースガイド](./release-guide.md) - リリースのステップバイステップ手順
+- [リリースガイド](./release-guide.md) - リリース手順
 
 ---
 
@@ -136,7 +137,7 @@ MdTex Obsidian プラグインの完全なドキュメントです。このペ�
 
 ---
 
-## ヘルプが必要ですか？
+## ヘルプが必要なとき
 
 - 一般的な問題は [トラブルシューティング](./troubleshooting.md) を確認
 - 同様の問題を探すために [GitHub Issues](https://github.com/Mekann2904/obsidian-mdtex-plugin/issues) を検索

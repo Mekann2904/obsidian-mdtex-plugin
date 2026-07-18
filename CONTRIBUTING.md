@@ -7,13 +7,13 @@ tags: [貢献, 開発, ガイドライン]
 related: [./ARCHITECTURE.md, docs/development.md, docs/testing.md]
 ---
 
-# MdTexプラグインへの貢献
+# MdTeXプラグインへの貢献
 
 [ドキュメントインデックス](docs/index.md) > CONTRIBUTING.md
 
 ## 概要
 
-MdTex Obsidianプラグインへの貢献に興味を持っていただきありがとうございます。このガイドでは、効果的に貢献する方法について説明します。コードの変更、バグ報告、機能リクエスト、ドキュメントの改善など、あらゆる形式の貢献を歓迎します。
+MdTeX Obsidianプラグインへの貢献を歓迎する。このガイドでは、効果的に貢献する方法について説明する。コードの変更、バグ報告、機能リクエスト、ドキュメントの改善など、あらゆる形式の貢献を受け付ける。
 
 ---
 
@@ -65,7 +65,7 @@ npm install
 npm run build
 ```
 
-これにより、TypeScriptコードがコンパイルされ、esbuildを使用してバンドルされます。
+これにより、TypeScriptコードがコンパイルされ、esbuildを使用してバンドルされる。
 
 ### 開発モード
 
@@ -82,7 +82,7 @@ npm run dev
    cp main.js manifest.json styles.css ~/.obsidian/plugins/obsidian-mdtex-plugin/
    ```
 
-2. Obsidianの設定のコミュニティプラグインでプラグインを有効化します
+2. Obsidianの設定のコミュニティプラグインでプラグインを有効化する
 
 ---
 
@@ -247,7 +247,7 @@ src/
 ```typescript
 // File: convertService.ts
 // Purpose: Pandocを使用してMarkdownをPDFに変換
-// Related: src/MdTexPlugin.ts, src/services/pandocCommandBuilder.ts
+// Related: src/MdTeXPlugin.ts, src/services/pandocCommandBuilder.ts
 
 /**
  * 現在のページを指定された形式に変換
@@ -305,15 +305,15 @@ export async function convertCurrentPage(
 
 ## ヘルプの入手
 
-- バグ報告や機能リクエストについてはIssueを開いてください
-- まず既存のドキュメントを確認してください
-- 実装に関する質問はDiscussionsをご利用ください
+- バグ報告や機能リクエストについてはIssueを開く
+- まず既存のドキュメントを確認する
+- 実装に関する質問はDiscussionsを利用する
 
 ---
 
 ## ライセンス
 
-貢献を行うことで、あなたの貢献がMITライセンスの下でライセンスされることに同意したものとみなされます。
+貢献を行うことで、あなたの貢献がMITライセンスの下でライセンスされることに同意したものとみなされる。
 
 ---
 
