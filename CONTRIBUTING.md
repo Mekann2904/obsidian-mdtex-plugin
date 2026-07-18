@@ -77,7 +77,7 @@ npm run dev
 
 ### Obsidianでのプラグインの読み込み
 
-1. シンボリックリンクを作成するか、プラグインファイルをObsidian vaultにコピーします：
+1. シンボリックリンクを作成するか、プラグインファイルをObsidian vaultにコピーする：
    ```bash
    cp main.js manifest.json styles.css ~/.obsidian/plugins/obsidian-mdtex-plugin/
    ```
@@ -269,7 +269,7 @@ export async function convertCurrentPage(
 
 ### ユーザードキュメント
 
-ユーザー向けドキュメントは `docs/` ディレクトリにあります：
+ユーザー向けドキュメントは `docs/` ディレクトリにある：
 
 - `quickstart.md` - はじめにガイド
 - `configuration.md` - 設定リファレンス
@@ -283,7 +283,7 @@ export async function convertCurrentPage(
 
 ### 開発者ドキュメント
 
-開発者ドキュメントには以下が含まれます：
+開発者ドキュメントには以下が含まれる：
 
 - このCONTRIBUTING.mdファイル
 - `ARCHITECTURE.md` - プロジェクトアーキテクチャ
@@ -292,7 +292,7 @@ export async function convertCurrentPage(
 
 ### コードコメント
 
-全ソースファイルにはヘッダーコメントを含める必要があります：
+全ソースファイルにはヘッダーコメントを含める必要がある：
 
 ```typescript
 // File: src/services/exampleService.ts

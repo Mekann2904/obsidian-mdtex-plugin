@@ -94,7 +94,7 @@ obsidian-mdtex-plugin/
 
 ### ファイルヘッダー
 
-全ソースファイルにはヘッダーコメントを含めます：
+全ソースファイルにはヘッダーコメントを含める：
 
 ```typescript
 // File: src/services/exampleService.ts

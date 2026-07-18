@@ -94,12 +94,12 @@ PDF生成後に一時ファイル（.tex、.temp.md）を削除するかどう�
 
 ### 文書テンプレート方式（ADR-007）
 
-文書の「枠」（`\documentclass`・タイトルブロック・プリアンブル・ページ体裁）をどう構築するかを選択する。この設定は本セクションの他項目の意味を決める「入口」である。
+文書の「枠」（`\documentclass`、タイトルブロック、プリアンブル、ページ体裁）をどう構築するかを選択する。この設定は本セクションの他項目の意味を決める「入口」である。
 
 | 方式 | 概要 | 対象 |
 |---|---|---|
-| **組み込み（`builtin`・既定）** | GUI 設定値（ドキュメントクラス・フォントサイズ・余白・プリアンブル等）から Pandoc の `-V` 変数を生成し、組み込みデフォルトテンプレに注入する | 初心者・既存ユーザー（現状完全維持） |
-| **defaults file（`defaults`・上級者向け）** | Pandoc の defaults file（`-d`）に枠の構築を委譲する | 学会公式テンプレ・縦書き・段組・複数ファイル構成を完全制御したい上級者 |
+| **組み込み（`builtin`、既定）** | GUI 設定値（ドキュメントクラス、フォントサイズ、余白、プリアンブル等）から Pandoc の `-V` 変数を生成し、組み込みデフォルトテンプレに注入する | 初心者、既存ユーザー（現状完全維持） |
+| **defaults file（`defaults`、上級者向け）** | Pandoc の defaults file（`-d`）に枠の構築を委譲する | 学会公式テンプレ、縦書き、段組、複数ファイル構成を完全制御したい上級者 |
 
 #### defaults 方式を選んだときの挙動
 
@@ -113,10 +113,10 @@ MdTeX は `-d <defaultsFilePath>` を渡し、以下を **defaults file 側で�
 
 一方、MdTeX 固有レイヤは方式に関わらず継続する。
 
-- Obsidian 記法の TS 前処理（`%% %%` コメント・WikiLink・トランスクルージョン・コールアウト等）
+- Obsidian 記法の TS 前処理（`%% %%` コメント、WikiLink、トランスクルージョン、コールアウト等）
 - Lua フィルタ（コールアウト / Mermaid 言語削除 / DOCX の LaTeX コマンド処理）
 - `--resource-path`、出力フォーマット（pdf/docx/latex）
-- `--include-in-header` に注入する MdTeX 固有の断片（Obsidian コールアウト定義・`--listings` 互換の codelisting 環境定義・ドラフトモードスニペット）
+- `--include-in-header` に注入する MdTeX 固有の断片（Obsidian コールアウト定義、`--listings` 互換の codelisting 環境定義、ドラフトモードスニペット）
 
 > **ガードレール**: `defaults` 方式で defaults file のパスが未指定のときは、変換前にエラー通知してブロックする。
 
@@ -126,7 +126,7 @@ Pandoc の defaults YAML ファイル（`-d` で渡す）へのパスを指定�
 
 #### defaults file の書き方
 
-defaults file は Pandoc の `-d` / `--defaults` で読む YAML で、テンプレート・プリアンブル・フィルタ・変数・メタデータなど Pandoc のほぼ全オプションを 1 ファイルに集約できる。
+defaults file は Pandoc の `-d` / `--defaults` で読む YAML で、テンプレート、プリアンブル、フィルタ、変数、メタデータなど Pandoc のほぼ全オプションを 1 ファイルに集約できる。
 
 ```yaml
 # 学会テンプレ（IEEEtran）の例
@@ -161,11 +161,11 @@ my-templates/
 
 > **本文フラグメント出力**: defaults file 内で `standalone: false` を指定すると、枠を含まない本文のみの出力が得られる。別の master LaTeX 文書から `\input` / `\include` で取り込む用途を想定する。
 
-> **注意**: MdTeX は常時 `--listings`、`--highlight-style=tango`、`--resource-path` を付与する（方式に関わらず）。defaults file 内の相対パス解決や、これら常時付与するオプション・フィルタ指定との相互作用に注意すること。
+> **注意**: MdTeX は常時 `--listings`、`--highlight-style=tango`、`--resource-path` を付与する（方式に関わらず）。defaults file 内の相対パス解決や、これら常時付与するオプション、フィルタ指定との相互作用に注意すること。
 
 ### LaTeXエンジン
 
-PDF生成に使用するLaTeXエンジンを指定する。**builtin 方式でのみ表示・使用される**。defaults 方式では defaults file の `pdf-engine` が使用される。
+PDF生成に使用するLaTeXエンジンを指定する。**builtin 方式でのみ表示、使用される**。defaults 方式では defaults file の `pdf-engine` が使用される。
 
 - **デフォルト**: `lualatex`
 - **選択肢**: `lualatex`、`xelatex`、`pdflatex`、`latexmk`
@@ -174,7 +174,7 @@ PDF生成に使用するLaTeXエンジンを指定する。**builtin 方式で�
 
 ### PDFエンジン追加オプション（ADR-009）
 
-PDFエンジン（latexmk 等）に追加オプションを渡す。**builtin 方式でのみ表示・使用される**。defaults 方式では defaults file の `pdf-engine-opts` が使用される。スペース区切りで複数指定でき、各トークンが Pandoc の `--pdf-engine-opt=<トークン>` になる。
+PDFエンジン（latexmk 等）に追加オプションを渡す。**builtin 方式でのみ表示、使用される**。defaults 方式では defaults file の `pdf-engine-opts` が使用される。スペース区切りで複数指定でき、各トークンが Pandoc の `--pdf-engine-opt=<トークン>` になる。
 
 - **デフォルト**: 空
 - **例**: `-lualatex`、`-lualatex -interaction=nonstopmode`
@@ -187,7 +187,7 @@ Markdown の引用記法（`@key` / `[@key]`）を LaTeX の引用コマンド�
 
 | 値 | Pandoc フラグ | 概要 |
 |---|---|---|
-| **なし（`none`・既定）** | （なし） | 変換しない。`@key` はそのまま残る |
+| **なし（`none`、既定）** | （なし） | 変換しない。`@key` はそのまま残る |
 | **natbib（`--natbib`）** | `--natbib` | 学会公式クラス（ACL / acmart / IEEEtran 等）と協調する。学会論文で参考文献を自動生成する場合はこれを選ぶ |
 | **citeproc（`--citeproc`）** | `--citeproc` | CSL ベースの引用処理。学会公式クラスではなく、 CSL スタイル + `.json`/`.bib` で参考文献体裁を制御したい場合 |
 
@@ -336,7 +336,7 @@ YAML形式でパレットに表示するコマンドを定義する。
 
 ### 使用方法
 
-これらの設定は Pandoc のメタデータ（pandoc-crossref の `figureTitle` / `figPrefix` / `tableTitle` / `tblPrefix` / `listingTitle` / `lstPrefix` / `eqnPrefix`）として渡される。Pandoc Crossref が有効な場合は、図・表・コード・数式のキャプション語と参照接頭辞がこのメタデータから適用される。
+これらの設定は Pandoc のメタデータ（pandoc-crossref の `figureTitle` / `figPrefix` / `tableTitle` / `tblPrefix` / `listingTitle` / `lstPrefix` / `eqnPrefix`）として渡される。Pandoc Crossref が有効な場合は、図、表、コード、数式のキャプション語と参照接頭辞がこのメタデータから適用される。
 
 ```markdown
 ![画像の説明](image.png){#fig:example}
@@ -370,7 +370,7 @@ eqnPrefix: 式
 
 ### Pandoc Crossrefを使う
 
-pandoc-crossrefフィルタを有効にする。図・表・数式の自動番号付けと参照を行う。
+pandoc-crossrefフィルタを有効にする。図、表、数式の自動番号付けと参照を行う。
 
 - **デフォルト**: 有効（`true`）
 - **依存関係**: pandoc-crossrefのインストールが必要
@@ -400,7 +400,7 @@ DOCX で `\centerline` / `\rightline` / `\kenten` 等を意図した見た目で
 手順:
 
 1. Pandoc の既定テンプレートを取り出す: `pandoc -o template.docx --print-default-data-file reference.docx`
-2. Word で `template.docx` を開き、上記のカスタム段落スタイルを作成・保存する
+2. Word で `template.docx` を開き、上記のカスタム段落スタイルを作成、保存する
 3. プロファイルの「Pandoc 追加引数」に `--reference-doc=template.docx` を指定する
 
 > `--reference-doc` は DOCX 以外の形式では自動で除外される。

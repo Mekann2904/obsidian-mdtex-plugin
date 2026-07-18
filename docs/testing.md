@@ -438,7 +438,7 @@ npm test -- --changed
 npm run test:coverage
 ```
 
-これにより以下が生成されます：
+これにより以下が生成される：
 - ターミナル出力とパーセンテージ
 - `coverage/index.html` - インタラクティブなHTMLレポート
 - `coverage/coverage-final.json` - 機械可読レポート

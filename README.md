@@ -30,7 +30,7 @@ MdTeXは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 - [設定ガイド](#設定ガイド)
 - [依存関係](#依存関係一覧)
 - [トラブルシューティング](#トラブルシューティング)
-- [MdTeX CLI（コマンドライン・自動化向け）](#mdtex-cli)
+- [MdTeX CLI（コマンドライン、自動化向け）](#mdtex-cli)
 
 ---
 
@@ -39,13 +39,13 @@ MdTeXは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 - **PDF変換**: MarkdownファイルをPandocとLuaLaTeXを使用して高品質なPDFに変換
 - **多言語対応**: 日本語を含む多言語ドキュメントの処理に最適化
 - **柔軟な出力形式**: PDF、LaTeXソース、Word(docx)への変換に対応
-- **プロファイル管理**: 複数の設定プロファイルを保存・切り替え可能
+- **プロファイル管理**: 複数の設定プロファイルを保存、切り替え可能
 - **LaTeXコマンドパレット**: よく使うLaTeXコマンドを簡単に挿入
 - **自動補完**: LaTeXコマンドのインライン補完とゴーストテキスト
 - **Lint統合**: markdownlint-cli2による自動整形機能
-- **クロスリファレンス**: pandoc-crossrefによる図・表・数式の自動参照
+- **クロスリファレンス**: pandoc-crossrefによる図、表、数式の自動参照
 - **Beamer対応**: プレゼンテーションPDFの生成に対応
-- **テンプレートパック**: 文書テンプレート（縦書き、学会論文等）をフォルダ単位で管理・選択
+- **テンプレートパック**: 文書テンプレート（縦書き、学会論文等）をフォルダ単位で管理、選択
 - **MdTeX CLI**: CI、スクリプト、LLM エージェント向けのコマンドラインツール
 
 ---
@@ -241,7 +241,7 @@ MdTeXは、[Pandoc](https://pandoc.org/) と [LuaLaTeX](https://www.latex-projec
 
 ## MdTeX CLI
 
-MdTeX は GUI（Obsidian プラグイン）に加え、`mdtex` コマンドラインツールを提供する。スクリプト・CI・LLM コーディングエージェントなど、GUI を介さずに MdTeX を観測・実行するために設計された「誠実な道具」である（cli-for-agents 準拠）。
+MdTeX は GUI（Obsidian プラグイン）に加え、`mdtex` コマンドラインツールを提供する。スクリプト、CI、LLM コーディングエージェントなど、GUI を介さずに MdTeX を観測、実行するために設計された「誠実な道具」である（cli-for-agents 準拠）。
 
 > **対象**: スクリプト / CI / LLM エージェント。通常の執筆には Obsidian プラグインを使う。
 
@@ -269,12 +269,12 @@ mdtex --version
 | `mdtex pack test <pack>` | サンプル原稿で PDF 生成テスト |
 | `mdtex convert <file.md>` | Markdown → PDF/LaTeX/DOCX 変換 |
 
-### エージェント・CI 向けの機能
+### エージェント、CI 向けの機能
 
 - **`--json`**: 構造化出力（status / data）。exit code（0=成功 / 1=警告 / 2=エラー）と整合する。
 - **`--dry-run`**: 実行せずにコマンドを表示（`convert` / `pack test`）。計画確認用。
 - **非対話**: 全入力はフラグ。プロンプトで停止しない（エージェントのデッドロック回避）。
-- **段階的 `--help`**: 各コマンド・サブコマンドの `--help` に examples を掲載。
+- **段階的 `--help`**: 各コマンド、サブコマンドの `--help` に examples を掲載。
 
 ```bash
 # パックを検証して JSON で受け取る

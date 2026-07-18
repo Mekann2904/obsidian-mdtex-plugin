@@ -3,11 +3,11 @@
 このフォルダには、MdTeX プラグインの **defaults 方式**（文書テンプレート方式 = `defaults`）で使う
 **テンプレートパック** を置く。
 
-既存のテンプレート（縦書き小説・学会論文等）を選んで PDF に出す方法はこのファイルに、
+既存のテンプレート（縦書き小説、学会論文等）を選んで PDF に出す方法はこのファイルに、
 **新しいテンプレートパックを自作する方法は [SKILL.md](./SKILL.md) に**まとめてある。
 
-> このフォルダは vault の中にあるため、Obsidian Sync / Git で同期・バックアップされ、
-> **プラグインの更新でも消えない**。安心して編集・自作するとよい。
+> このフォルダは vault の中にあるため、Obsidian Sync / Git で同期、バックアップされ、
+> **プラグインの更新でも消えない**。安心して編集、自作するとよい。
 
 ---
 
@@ -23,8 +23,8 @@ MdTeX Templates/
 ├── 縦書き二段組/              ← パック例（初回展開されたサンプル）
 │   ├── defaults.yaml          ← ★必須: パックの入口（Pandoc defaults file）
 │   ├── tate-twocolumn.tex     ←    任意: カスタム Pandoc テンプレート
-│   ├── preamble.tex           ←    任意: プリアンブル（章扉・表題ページ付き）
-│   ├── aozora-ruby.lua        ←    任意: ルビ変換・章扉記法などの Lua フィルタ
+│   ├── preamble.tex           ←    任意: プリアンブル（章扉、表題ページ付き）
+│   ├── aozora-ruby.lua        ←    任意: ルビ変換、章扉記法などの Lua フィルタ
 │   ├── chapter-bg.lua         ←    任意: 章扉背景画像の絶対パス解決 Lua フィルタ
 │   └── sample.md              ←    任意: すぐPDF出せる本文サンプル
 └── あなたのテンプレート/      ← 自作パック
@@ -46,7 +46,7 @@ MdTeX Templates/
 5. Markdown 本文を開いて PDF 変換を実行
 
 本文（`.md`）は通常の Markdown である。defaults 方式でも MdTeX 固有の機能
-（Obsidian 記法・callout・Mermaid・相互参照など）はそのまま使える。
+（Obsidian 記法、callout、Mermaid、相互参照など）はそのまま使える。
 
 ---
 
@@ -57,10 +57,10 @@ MdTeX Templates/
 2. その中に `defaults.yaml` を置く（最小はこれだけで認識される）
 3. 設定で **再スキャン** を押す
 
-詳しい作り方・検証手順・よくある落とし穴は **[SKILL.md](./SKILL.md)** を参照すること。
+詳しい作り方、検証手順、よくある落とし穴は **[SKILL.md](./SKILL.md)** を参照すること。
 
 > 【注意】defaults 方式では MdTeX の組み込みプリアンブルが入らない。
-> `\passthrough` 未定義・`\lstinline` 未定義・`longtable` エラー等が起きたら、
+> `\passthrough` 未定義、`\lstinline` 未定義、`longtable` エラー等が起きたら、
 > [SKILL.md の落とし穴表](./SKILL.md#落とし穴defaults-方式固有) を見て preamble を調整する。
 
 ---
@@ -69,13 +69,13 @@ MdTeX Templates/
 
 | パック | 用途 |
 |---|---|
-| `縦書き二段組` | 縦書き小説（ルビ・圏点・章扉・表題ページ付き）。青空文庫風ルビ記法 `｜親文字《よみ》` を `\ruby` に変換する Lua フィルタ同梱。章扉は `::: novel-chapter`、表題は `::: novel-title` 記法で出せる。装飾背景は既定で TikZ の薄墨＋淡円、`defaults.yaml` の `metadata: chapter-bg-image` で文字なし画像に切替可（chapter-bg.lua が絶対パス解決し、装飾と文字を分離する商業組版ワークフロー）。 |
-| `情報系論文風` | 情報処理学会・人工知能学会風の二段組論文（LuaLaTeX 前提）。和文タイトル・概要・キーワード・表・数式・コード。 |
-| `pLaTeX学会論文` | **pLaTeX 専用クラス**（情報処理学会 ipsj 等）の土台。ipsj.cls は手動配置（著作権）。partial 全除外の自前テンプレで、スペース入り画像・表・コードの pLaTeX 固有問題を解決する Lua フィルタ 3 種同梱。詳しくは [SKILL.md](./SKILL.md) の「pLaTeX 専用クラスを使う場合」。 |
+| `縦書き二段組` | 縦書き小説（ルビ、圏点、章扉、表題ページ付き）。青空文庫風ルビ記法 `｜親文字《よみ》` を `\ruby` に変換する Lua フィルタ同梱。章扉は `::: novel-chapter`、表題は `::: novel-title` 記法で出せる。装飾背景は既定で TikZ の薄墨＋淡円、`defaults.yaml` の `metadata: chapter-bg-image` で文字なし画像に切替可（chapter-bg.lua が絶対パス解決し、装飾と文字を分離する商業組版ワークフロー）。 |
+| `情報系論文風` | 情報処理学会、人工知能学会風の二段組論文（LuaLaTeX 前提）。和文タイトル、概要、キーワード、表、数式、コード。 |
+| `pLaTeX学会論文` | **pLaTeX 専用クラス**（情報処理学会 ipsj 等）の土台。ipsj.cls は手動配置（著作権）。partial 全除外の自前テンプレで、スペース入り画像、表、コードの pLaTeX 固有問題を解決する Lua フィルタ 3 種同梱。詳しくは [SKILL.md](./SKILL.md) の「pLaTeX 専用クラスを使う場合」。 |
 
 サンプルパックの中身を読むのが、構造を知る一番の近道である。
 
-> 各パックは `_mdtex.yaml` で**用途・前提ファイル・推奨設定**を自己記述する。設定画面でパックを選ぶと、その説明と不足ファイルの警告・推奨設定の適用が表示される。書き方は [SKILL.md](./SKILL.md) の「パックメタ」を参照。
+> 各パックは `_mdtex.yaml` で**用途、前提ファイル、推奨設定**を自己記述する。設定画面でパックを選ぶと、その説明と不足ファイルの警告、推奨設定の適用が表示される。書き方は [SKILL.md](./SKILL.md) の「パックメタ」を参照。
 
 ---
 

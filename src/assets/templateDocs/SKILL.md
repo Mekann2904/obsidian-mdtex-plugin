@@ -1,6 +1,6 @@
 ---
 name: create-mdtex-template-pack
-description: MdTeX Obsidian プラグイン用に、新しいテンプレートパック（文書テンプレート一式）を作成・検証する。縦書き小説・学会論文・レポート等の「文書の枠」を defaults.yaml + preamble + Lua フィルタで構築し、Pandoc 経由で実際に PDF 生成まで通す。新しいテンプレートを作る時にこのガイドを見れば一通り完結する。
+description: MdTeX Obsidian プラグイン用に、新しいテンプレートパック（文書テンプレート一式）を作成、検証する。縦書き小説、学会論文、レポート等の「文書の枠」を defaults.yaml + preamble + Lua フィルタで構築し、Pandoc 経由で実際に PDF 生成まで通す。新しいテンプレートを作る時にこのガイドを見れば一通り完結する。
 ---
 
 # MdTeX テンプレートパック作成ガイド
@@ -20,8 +20,8 @@ MdTeX Templates/                    ← このフォルダ
 ├── 縦書き二段組/                    ← パック例
 │   ├── defaults.yaml               ← ★必須: Pandoc defaults file（パックの入口）
 │   ├── tate-twocolumn.tex          ←    任意: カスタム Pandoc テンプレート
-│   ├── preamble.tex                ←    任意: プリアンブル（章扉・表題ページ付き）
-│   ├── aozora-ruby.lua             ←    任意: Lua フィルタ（ルビ・章扉記法）
+│   ├── preamble.tex                ←    任意: プリアンブル（章扉、表題ページ付き）
+│   ├── aozora-ruby.lua             ←    任意: Lua フィルタ（ルビ、章扉記法）
 │   ├── chapter-bg.lua             ←    任意: Lua フィルタ（章扉背景画像の絶対パス解決）
 │   └── sample.md                   ←    任意: すぐPDF出せる本文サンプル
 └── <あなたのパック>/                ← 自作パック
@@ -31,7 +31,7 @@ MdTeX Templates/                    ← このフォルダ
 - **`defaults.yaml` を含むフォルダだけがテンプレートパックとして認識される。**
   README.md / SKILL.md のように直下のファイルはパック扱いされない。
 - 補助ファイルは同じフォルダに置き、`${.}`（defaults.yaml 自身のディレクトリ）で参照する。
-  これでパック全体をフォルダ単位でコピー・Git 管理できる。
+  これでパック全体をフォルダ単位でコピー、Git 管理できる。
 - **defaults 方式では MdTeX の組み込みプリアンブル（`DEFAULT_LATEX_PREAMBLE`）が入らない。**
   これがすべての落とし穴の根本原因。後述の表を必ず確認すること。
 
@@ -50,8 +50,8 @@ MdTeX Templates/                    ← このフォルダ
 
 | 目的 | 土台にするパック |
 |---|---|
-| 縦書き・小説・和文組版 | `縦書き二段組` |
-| 二段組論文・レポート・学術（LuaLaTeX 前提） | `情報系論文風` |
+| 縦書き、小説、和文組版 | `縦書き二段組` |
+| 二段組論文、レポート、学術（LuaLaTeX 前提） | `情報系論文風` |
 | **pLaTeX 専用クラス（ipsj 等）** | `pLaTeX学会論文` |
 
 > **どの土台を選ぶか迷ったら**: 使いたいクラス（`.cls`/`.sty`）が LuaLaTeX で動くか
@@ -82,7 +82,7 @@ variables:
 
 ### 4. 本文（`.md`）は通常の Markdown で書く
 
-defaults 方式でも MdTeX 固有機能（Obsidian 記法・callout・Mermaid・pandoc-crossref）はそのまま使える。
+defaults 方式でも MdTeX 固有機能（Obsidian 記法、callout、Mermaid、pandoc-crossref）はそのまま使える。
 見出しは `#` `##` を使い、テンプレート側（preamble の `titlesec` 等）で見た目を整える。
 
 ### 5. 【必須】PDF 生成まで通して検証する
@@ -98,7 +98,7 @@ pandoc <本文>.md \
 ```
 
 - エラーが出たら下記の落とし穴表と照合し、preamble を直して再実行。
-- 成功したら生成 PDF の見た目（文字サイズ・余白・段組・見出し）を確認し、必要なら defaults/preamble を微調整。
+- 成功したら生成 PDF の見た目（文字サイズ、余白、段組、見出し）を確認し、必要なら defaults/preamble を微調整。
 
 ### 6. 設定で選ぶ
 
@@ -111,7 +111,7 @@ pandoc <本文>.md \
 
 ## パックメタ（自己記述化）
 
-パックフォルダに `_mdtex.yaml` を置くと、パックが**自分自身の説明・前提・推奨設定**を宣言できる。設定画面でパックを選んだとき、MdTeX がこのメタを読んで:
+パックフォルダに `_mdtex.yaml` を置くと、パックが**自分自身の説明、前提、推奨設定**を宣言できる。設定画面でパックを選んだとき、MdTeX がこのメタを読んで:
 
 - **title / description** を表示（フォルダ名だけだと分からない用途を明示）
 - **requires** のファイルがパックフォルダに無ければ**警告**（ipsj.cls 未配置等を実行前検知）
@@ -296,12 +296,12 @@ TEXINPUTS="MdTeX Templates/<パック>:" platex -interaction=nonstopmode -halt-o
   `｜親文字《よみ》` → `\ruby`、`::: novel-chapter` → 章扉マクロ `\novelchapter`。
 - **見出しは Markdown の `#`/`##` を使い、見た目は preamble の `titlesec` で整える。**
   本文に `\novelchapter{}` 等の LaTeX マクロを直接書かず、`::: novel-chapter` 記法を使う。
-  （章扉の「雨を大きく・の を小さく」のような1字ごとの微調整が必要な場合だけ、
+  （章扉の「雨を大きく、の を小さく」のような1字ごとの微調整が必要な場合だけ、
   `{=latex}` 生ブロックで TikZ 座標を直接書く。`縦書き二段組/sample.md` に両方の実例。）
 - **責務分離**: `defaults.yaml`（Pandoc 設定）/ `*.tex`（枠）/ `preamble.tex`（見た目）/ `*.lua`（記法拡張）。
 - builtin 方式の GUI 設定と混同しない。defaults 方式では
   documentclass / fontsize / geometry は **defaults.yaml 側** で管理する。
-- **章扉・表題は「装飾」と「文字」を分離する。** 装飾（薄墨・淡円・植物など）は
+- **章扉、表題は「装飾」と「文字」を分離する。** 装飾（薄墨、淡円、植物など）は
   `chapter-bg.pdf` 等の「文字なし画像/PDF」で作り、文字は LaTeX で組む。背景は
   `\AddToShipoutPictureBG*`（現ページ限定）で貼り、文字は絶対座標の TikZ ノードで載せる。
   `縦書き二段組/preamble.tex` の `\chapterbg` / `\novelchapter` / `\noveltitle` 参照。
@@ -314,14 +314,14 @@ TEXINPUTS="MdTeX Templates/<パック>:" platex -interaction=nonstopmode -halt-o
     pandoc の作業ディレクトリが元の .md の場所になるため、パックフォルダの画像が
     見つからず「File not found: using draft setting」でファイル名がテキスト描画される。
     chapter-bg.lua の絶対パス解決がこの落とし穴を潰す。
-  - ファイル名にスペース・全角文字は使わないこと（graphicx がトークン分割する）。
+  - ファイル名にスペース、全角文字は使わないこと（graphicx がトークン分割する）。
   - `${.}` は defaults file の `template:` / `include-in-header:` / `resource-path:` 等
     「ファイル参照」フィールドでのみ絶対パスに展開される。`variables:` の値では
     リテラルの `${.}` になるので、変数値経由では絶対パスを渡せない（Lua フィルタで処理）。
 - **学会論文クラスでは simple-table.lua を必ず入れる。** longtable は 2カラムで停止するが、
   Lua フィルタで `table`+`tabular` に変換すれば本体制御不要で解決する（上記「学会論文クラスを使う場合」参照）。
-- **画像・コード・表の LaTeX 変換は Pandoc（+ Lua フィルタ）に委譲する。** MdTeX 本体は
-  Markdown 前処理（`%%` 除去・`![[画像]]` → `![](path)`・transclusion）しか行わず、LaTeX 化は Pandoc が担う。
+- **画像、コード、表の LaTeX 変換は Pandoc（+ Lua フィルタ）に委譲する。** MdTeX 本体は
+  Markdown 前処理（`%%` 除去、`![[画像]]` → `![](path)`、transclusion）しか行わず、LaTeX 化は Pandoc が担う。
   したがって変換結果の調整は defaults.yaml の `filters:` / `template:` / `include-in-header:` で行う。
 - **pLaTeX 専用クラスを使うなら、最初から defaults 方式 + 自前テンプレートで始める。**
   builtin 方式では partial が pTeX 非互換パッケージをロードして必ず失敗する。`pLaTeX学会論文` パックを
